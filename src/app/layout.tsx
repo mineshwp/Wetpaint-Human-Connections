@@ -17,11 +17,6 @@ const dmSans = DM_Sans({
 export const metadata: Metadata = {
   title: "Human Connections — Wetpaint",
   description: "People & HR platform by Wetpaint Advertising",
-  icons: {
-    icon: "/cropped-wpw-01.png",
-    shortcut: "/cropped-wpw-01.png",
-    apple: "/cropped-wpw-01.png",
-  },
 };
 
 export default function RootLayout({
