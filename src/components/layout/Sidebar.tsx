@@ -14,9 +14,10 @@ interface SidebarProps {
   isOpen: boolean
   onClose: () => void
   roleBadge: string
+  isImpersonating?: boolean
 }
 
-export function Sidebar({ isOpen, onClose, roleBadge }: SidebarProps) {
+export function Sidebar({ isOpen, onClose, roleBadge, isImpersonating }: SidebarProps) {
   const pathname = usePathname()
 
   return (
@@ -62,7 +63,9 @@ export function Sidebar({ isOpen, onClose, roleBadge }: SidebarProps) {
         {/* Navigation */}
         <nav className="flex-1 overflow-y-auto px-3 py-4">
           <ul className="space-y-0.5">
-            {NAV_ITEMS.map((item) => {
+            {NAV_ITEMS.filter((item) =>
+              isImpersonating ? item.href !== "/employees" : true
+            ).map((item) => {
               const active = pathname.startsWith(item.href)
               const Icon = item.icon
               return (

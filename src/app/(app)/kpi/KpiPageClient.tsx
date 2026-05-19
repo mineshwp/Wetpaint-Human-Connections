@@ -104,15 +104,24 @@ function ScorerRow({ name, role, scoreObj, canEdit, item, onSave }: {
 
   return (
     <div className="border-b border-border last:border-b-0">
-      <div className="grid items-center gap-2 px-3 py-2.5" style={{ gridTemplateColumns: "1fr 60px 28px" }}>
-        <div className="flex items-center gap-2 min-w-0">
+      <div className="grid items-start gap-x-2 px-3 py-2.5" style={{ gridTemplateColumns: "minmax(120px,1fr) 64px minmax(100px,2fr) 20px" }}>
+        {/* Person */}
+        <div className="flex items-center gap-2 min-w-0 pt-0.5">
           <Avatar name={name} size="sm" />
           <div className="min-w-0">
             <div className="text-xs font-semibold truncate">{name}</div>
             <div className="text-[10px] text-muted-foreground">{role}</div>
           </div>
         </div>
-        {canEdit && !editing ? (
+
+        {/* Score */}
+        {canEdit && editing ? (
+          <input
+            type="number" min={item.min_score} max={item.max_score}
+            value={val} onChange={e => setVal(e.target.value)} autoFocus
+            className="w-full border border-primary rounded-md px-1.5 py-1 text-sm font-bold text-center bg-primary/5 text-primary focus:outline-none focus:ring-1 focus:ring-primary"
+          />
+        ) : canEdit ? (
           <button
             type="button" onClick={() => setEditing(true)}
             className={cn(
@@ -124,39 +133,48 @@ function ScorerRow({ name, role, scoreObj, canEdit, item, onSave }: {
           >
             {hasScore ? scoreObj!.score : "—"}
           </button>
-        ) : canEdit && editing ? (
-          <input
-            type="number" min={item.min_score} max={item.max_score}
-            value={val} onChange={e => setVal(e.target.value)} autoFocus
-            className="w-full border border-primary rounded-md px-1.5 py-1 text-sm font-bold text-center bg-primary/5 text-primary focus:outline-none focus:ring-1 focus:ring-primary"
-          />
         ) : (
-          <div className="text-sm font-bold text-center">
+          <div className="text-sm font-bold text-center pt-1">
             {hasScore ? scoreObj!.score : <span className="text-muted-foreground">—</span>}
           </div>
         )}
-        <div className="flex justify-center">
-          <div className={cn("w-2 h-2 rounded-full", hasScore ? "bg-emerald-500" : "bg-amber-300")} />
-        </div>
-      </div>
-      {editing && canEdit && (
-        <div className="px-3 pb-3 space-y-2">
+
+        {/* Comment */}
+        {canEdit && editing ? (
           <textarea
             rows={2} value={comm} onChange={e => setComm(e.target.value)}
             placeholder="Add a comment or evidence…"
-            className="w-full border border-border rounded-lg px-3 py-2 text-xs resize-none focus:outline-none focus:ring-1 focus:ring-primary bg-card"
+            className="w-full border border-border rounded-lg px-2 py-1.5 text-xs resize-none focus:outline-none focus:ring-1 focus:ring-primary bg-card"
           />
-          <div className="flex gap-2">
-            <Button size="sm" onClick={handleSave} disabled={saving} className="h-7 text-xs gap-1 px-3">
-              {saving ? <Loader2 size={10} className="animate-spin" /> : <Check size={10} />} Save
-            </Button>
-            <Button size="sm" variant="ghost"
-              onClick={() => { setEditing(false); setVal(scoreObj?.score?.toString() ?? ""); setComm(scoreObj?.comments ?? "") }}
-              className="h-7 text-xs px-3"
-            >
-              Cancel
-            </Button>
+        ) : (
+          <div
+            onClick={canEdit ? () => setEditing(true) : undefined}
+            className={cn("text-xs leading-relaxed pt-0.5", canEdit && "cursor-pointer")}
+          >
+            {scoreObj?.comments
+              ? <span className="text-foreground">{scoreObj.comments}</span>
+              : <span className="text-muted-foreground italic">{canEdit ? "Click to add…" : "—"}</span>
+            }
           </div>
+        )}
+
+        {/* Status dot */}
+        <div className="flex justify-center pt-2">
+          <div className={cn("w-2 h-2 rounded-full shrink-0", hasScore ? "bg-emerald-500" : "bg-amber-300")} />
+        </div>
+      </div>
+
+      {editing && canEdit && (
+        <div className="px-3 pb-3 flex gap-2">
+          <Button size="sm" onClick={handleSave} disabled={saving} className="h-7 text-xs gap-1 px-3">
+            {saving ? <Loader2 size={10} className="animate-spin" /> : <Check size={10} />} Save
+          </Button>
+          <Button size="sm" variant="ghost"
+            onClick={() => { setEditing(false); setVal(scoreObj?.score?.toString() ?? ""); setComm(scoreObj?.comments ?? "") }}
+            className="h-7 text-xs px-3"
+          >
+            Cancel
+          </Button>
         </div>
       )}
     </div>
@@ -188,17 +206,6 @@ function KpiCard({ item, itemIndex, sectionType, scores, invitees, isHR, current
   const avgScore = numericScores.length > 0
     ? numericScores.reduce((a, b) => a + b, 0) / numericScores.length
     : null
-
-  const comments: { name: string; score: number | null; comment: string }[] = []
-  if (sectionType === "hr") {
-    const sc = scoreMap.get(`${item.id}::hr`)
-    if (sc?.comments) comments.push({ name: "HR / Admin", score: sc.score, comment: sc.comments })
-  } else {
-    for (const inv of activeInvitees) {
-      const sc = scoreMap.get(`${item.id}::${inv.invitee_id}`)
-      if (sc?.comments) comments.push({ name: `${inv.invitee.first_name} ${inv.invitee.last_name}`, score: sc.score, comment: sc.comments })
-    }
-  }
 
   const scorerRows: { key: string; name: string; role: string; scoreObj: Score | undefined; canEdit: boolean }[] = []
   if (sectionType === "hr") {
@@ -238,46 +245,24 @@ function KpiCard({ item, itemIndex, sectionType, scores, invitees, isHR, current
         )}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[1.4fr_1fr] divide-y lg:divide-y-0 lg:divide-x divide-border">
+      <div className="grid grid-cols-1 divide-border">
         <div className="px-5 py-4 space-y-4">
           <div>
             <h4 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Description</h4>
             {item.description
-              ? <p className="text-sm text-muted-foreground leading-relaxed">{item.description}</p>
+              ? <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-line">{item.description}</p>
               : <p className="text-sm text-muted-foreground italic">No description provided.</p>
             }
           </div>
-          {comments.length > 0 && (
-            <div>
-              <h4 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Comments &amp; Evidence</h4>
-              <div className="flex flex-col gap-2">
-                {comments.map((c, i) => (
-                  <div key={i} className="flex gap-3 bg-muted/30 rounded-xl p-3">
-                    <Avatar name={c.name} size="sm" />
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2 mb-1 flex-wrap">
-                        <span className="text-xs font-semibold">{c.name}</span>
-                        {c.score !== null && c.score !== undefined && (
-                          <span className="text-[10px] font-bold bg-primary/10 text-primary rounded-full px-2 py-0.5">
-                            {c.score}/{item.max_score}
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-xs text-muted-foreground leading-relaxed">{c.comment}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
 
-        <div className="px-5 py-4 space-y-3">
-          <h4 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Scorers</h4>
+        <div className="px-5 pb-4 space-y-3">
+          <h4 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Scoring</h4>
           <div className="border border-border rounded-xl overflow-hidden">
-            <div className="grid items-center gap-2 px-3 py-2 bg-muted/30 border-b border-border" style={{ gridTemplateColumns: "1fr 60px 28px" }}>
+            <div className="grid items-center gap-x-2 px-3 py-2 bg-muted/30 border-b border-border" style={{ gridTemplateColumns: "minmax(120px,1fr) 64px minmax(100px,2fr) 20px" }}>
               <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Person</span>
               <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider text-center">Score</span>
+              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Comment</span>
               <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider text-center">✓</span>
             </div>
             {scorerRows.length === 0

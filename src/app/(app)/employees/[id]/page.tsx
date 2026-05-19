@@ -1,6 +1,8 @@
 import { notFound, redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { getUserRole, getEmployeeIdForUser, canAccessEmployee } from "@/lib/auth"
+import { getImpersonationContext } from "@/lib/impersonation"
+import { setImpersonation } from "@/app/(app)/actions"
 import { EmployeeDetailClient } from "./EmployeeDetailClient"
 import type {
   EmployeeFull,
@@ -39,21 +41,32 @@ export default async function EmployeeDetailPage({
   } = await supabase.auth.getUser()
   if (!user) redirect("/login")
 
-  const [role, myEmployeeId] = await Promise.all([
+  const [role, myEmployeeId, impersonating] = await Promise.all([
     getUserRole(supabase, user.id),
     getEmployeeIdForUser(supabase, user.id),
+    getImpersonationContext(),
   ])
 
   if (!role || role === "applicant") redirect("/login")
 
-  const allowed = await canAccessEmployee(supabase, user.id, role, id)
-  if (!allowed) notFound()
+  // When impersonating, enforce staff-level access: only the impersonated employee's own profile
+  if (impersonating) {
+    if (id !== impersonating.employeeId) notFound()
+  } else {
+    const allowed = await canAccessEmployee(supabase, user.id, role, id)
+    if (!allowed) notFound()
+  }
 
-  const isHR = role === "hr"
-  const isOwnProfile = myEmployeeId === id
+  // Effective role and employee context
+  const effectiveRole = impersonating ? "staff" : role
+  const effectiveEmployeeId = impersonating ? impersonating.employeeId : myEmployeeId
+
+  const isHR = effectiveRole === "hr"
+  const isOwnProfile = effectiveEmployeeId === id
   const canViewDocuments = isHR || isOwnProfile
   const canViewBanking = isHR
   const canViewNotes = isHR
+  const canImpersonate = role === "hr" && !impersonating
 
   // Fetch employee record
   const { data: row, error: empError } = await supabase
@@ -209,6 +222,8 @@ export default async function EmployeeDetailPage({
       canViewDocuments={canViewDocuments}
       canViewBanking={canViewBanking}
       canViewNotes={canViewNotes}
+      canImpersonate={canImpersonate}
+      setImpersonationAction={setImpersonation}
     />
   )
 }

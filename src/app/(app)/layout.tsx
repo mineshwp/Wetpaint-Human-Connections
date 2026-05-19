@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { getUserRole, getEmployeeIdForUser } from "@/lib/auth"
+import { getImpersonationContext } from "@/lib/impersonation"
 import { AppShell } from "@/components/layout/AppShell"
 import { signOut } from "./actions"
 import type { UserRole } from "@/lib/types"
@@ -24,9 +25,10 @@ export default async function AppLayout({
 
   if (!user) redirect("/login")
 
-  const [role, employeeId] = await Promise.all([
+  const [role, employeeId, impersonating] = await Promise.all([
     getUserRole(supabase, user.id),
     getEmployeeIdForUser(supabase, user.id),
+    getImpersonationContext(),
   ])
 
   let userName = user.email ?? "User"
@@ -54,6 +56,10 @@ export default async function AppLayout({
       userInitials={userInitials}
       userName={userName}
       roleBadge={roleBadge}
+      isHR={role === "hr"}
+      ownEmployeeId={employeeId}
+      ownEmployeeName={userName}
+      impersonating={impersonating}
       signOutAction={signOut}
     >
       {children}

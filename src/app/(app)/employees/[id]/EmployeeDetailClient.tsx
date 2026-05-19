@@ -760,6 +760,8 @@ interface Props {
   canViewDocuments: boolean
   canViewBanking: boolean
   canViewNotes: boolean
+  canImpersonate?: boolean
+  setImpersonationAction?: (formData: FormData) => Promise<void>
 }
 
 export function EmployeeDetailClient({
@@ -772,6 +774,8 @@ export function EmployeeDetailClient({
   canViewDocuments,
   canViewBanking,
   canViewNotes,
+  canImpersonate,
+  setImpersonationAction,
 }: Props) {
   const [tab, setTab] = useState<Tab>("personal")
 
@@ -958,6 +962,19 @@ export function EmployeeDetailClient({
                 <Printer size={14} />
                 Print
               </button>
+              {canImpersonate && setImpersonationAction && (
+                <form action={setImpersonationAction}>
+                  <input type="hidden" name="employeeId" value={emp.id} />
+                  <input type="hidden" name="employeeName" value={`${emp.firstName} ${emp.lastName}`} />
+                  <button
+                    type="submit"
+                    className="flex items-center gap-2 px-3 py-2 border border-amber-300 rounded-lg text-sm text-amber-700 hover:bg-amber-50 transition-colors"
+                  >
+                    <Eye size={14} />
+                    View as
+                  </button>
+                </form>
+              )}
             </div>
           )}
         </div>
