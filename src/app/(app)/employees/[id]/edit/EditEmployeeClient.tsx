@@ -136,6 +136,8 @@ export function EditEmployeeClient({ employee, departments, allEmployees }: Prop
     contractEndDate: employee.contractEndDate ?? "",
     probationEndDate: employee.probationEndDate ?? "",
     lastSalaryReviewDate: employee.lastSalaryReviewDate ?? "",
+    resignationDate: employee.resignationDate ?? "",
+    isArchived: employee.isArchived ?? false,
     bankName: employee.bankName ?? "",
     bankAccountNumber: employee.bankAccountNumber ?? "",
     bankBranchCode: employee.bankBranchCode ?? "",
@@ -182,6 +184,8 @@ export function EditEmployeeClient({ employee, departments, allEmployees }: Prop
           contract_end_date: form.contractEndDate,
           probation_end_date: form.probationEndDate,
           last_salary_review_date: form.lastSalaryReviewDate,
+          resignation_date: form.resignationDate,
+          is_archived: form.isArchived,
           bank_name: form.bankName,
           bank_account_number: form.bankAccountNumber,
           bank_branch_code: form.bankBranchCode,
@@ -369,12 +373,14 @@ export function EditEmployeeClient({ employee, departments, allEmployees }: Prop
                 <option value="on-leave">On Leave</option>
                 <option value="suspended">Suspended</option>
                 <option value="terminated">Terminated</option>
+                <option value="resigned">Resigned</option>
               </SelectField>
             </FormGroup>
             <FormGroup label="Contract Type">
               <SelectField value={form.contractType} onChange={set("contractType")}>
                 <option value="">— Select —</option>
                 <option value="permanent">Permanent</option>
+                <option value="temporary">Temporary</option>
                 <option value="contract">Contract</option>
               </SelectField>
             </FormGroup>
@@ -390,6 +396,32 @@ export function EditEmployeeClient({ employee, departments, allEmployees }: Prop
             <FormGroup label="Last Salary Review">
               <Input value={form.lastSalaryReviewDate} onChange={set("lastSalaryReviewDate")} type="date" />
             </FormGroup>
+            {form.status === "resigned" && (
+              <FormGroup label="Resignation Date">
+                <Input value={form.resignationDate} onChange={set("resignationDate")} type="date" />
+              </FormGroup>
+            )}
+          </div>
+        </SectionCard>
+
+        {/* Archive */}
+        <SectionCard title="Archive" subtitle="Archived employees are hidden from the main list but remain accessible">
+          <div className="flex items-start gap-3">
+            <input
+              id="is-archived"
+              type="checkbox"
+              checked={form.isArchived}
+              onChange={(e) =>
+                setForm((prev) => ({ ...prev, isArchived: e.target.checked }))
+              }
+              className="mt-0.5 h-4 w-4 rounded border-border accent-primary"
+            />
+            <label htmlFor="is-archived" className="text-sm text-foreground cursor-pointer">
+              Archive this employee
+              <span className="block text-xs text-muted-foreground mt-0.5">
+                They will no longer appear in the main employee list. Use the &ldquo;Archived&rdquo; toggle on the list page to access them.
+              </span>
+            </label>
           </div>
         </SectionCard>
 

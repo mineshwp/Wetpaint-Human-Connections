@@ -6,6 +6,7 @@ export type EmploymentStatus =
   | "onboarding"
   | "terminated"
   | "suspended"
+  | "resigned"
 
 export type Employee = {
   id: string
@@ -19,10 +20,12 @@ export type Employee = {
   startDate: string | null
   status: EmploymentStatus
   avatarInitials: string
+  isArchived: boolean
 }
 
 export type EmployeeFull = Employee & {
   employeeNumber: string | null
+  resignationDate: string | null
   profilePhotoUrl: string | null
   contractType: string | null
   contractEndDate: string | null

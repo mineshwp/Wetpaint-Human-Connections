@@ -35,6 +35,7 @@ export async function GET(
       next_of_kin_name, next_of_kin_phone, next_of_kin_relationship,
       vat_number, date_of_birth, identity_number, gender, race, disability, citizenship_status,
       bank_name, bank_account_number, bank_branch_code, bank_account_type, bank_verification_status,
+      is_archived, resignation_date,
       created_at, updated_at,
       departments:department_id ( id, name, colour ),
       manager:manager_id ( id, first_name, last_name, job_title )
@@ -54,6 +55,8 @@ export async function GET(
   const employee: EmployeeFull = {
     id: row.id,
     employeeNumber: row.employee_number ?? null,
+    resignationDate: row.resignation_date ?? null,
+    isArchived: row.is_archived ?? false,
     firstName: row.first_name,
     lastName: row.last_name,
     email: row.email,
@@ -143,8 +146,12 @@ export async function PATCH(
   ]
   const dateFields = [
     "start_date", "contract_end_date", "probation_end_date",
-    "last_salary_review_date", "date_of_birth",
+    "last_salary_review_date", "date_of_birth", "resignation_date",
   ]
+
+  if ("is_archived" in body) {
+    updates.is_archived = Boolean(body.is_archived)
+  }
 
   for (const field of textFields) {
     if (field in body) updates[field] = toNull(body[field])

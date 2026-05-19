@@ -85,6 +85,7 @@ const STATUS_META: Record<
   "on-leave": { label: "On Leave", fg: "text-amber-700", bg: "bg-amber-50 border-amber-200" },
   terminated: { label: "Terminated", fg: "text-gray-500", bg: "bg-gray-50 border-gray-200" },
   suspended: { label: "Suspended", fg: "text-red-700", bg: "bg-red-50 border-red-200" },
+  resigned: { label: "Resigned", fg: "text-purple-700", bg: "bg-purple-50 border-purple-200" },
 }
 
 function StatusBadge({ status }: { status: EmploymentStatus }) {
@@ -670,6 +671,7 @@ function buildPrintHTML(emp: EmployeeFull, leaveBalances: LeaveBalance[]): strin
     "on-leave": "background:#fef9c3;color:#854d0e",
     suspended: "background:#fee2e2;color:#991b1b",
     terminated: "background:#f3f4f6;color:#6b7280",
+    resigned: "background:#f3e8ff;color:#7e22ce",
   }
   const leaveRows =
     leaveBalances.length > 0

@@ -47,6 +47,7 @@ export default async function EditEmployeePage({
         next_of_kin_name, next_of_kin_phone, next_of_kin_relationship,
         vat_number, date_of_birth, identity_number, gender, race, disability, citizenship_status,
         bank_name, bank_account_number, bank_branch_code, bank_account_type, bank_verification_status,
+        is_archived, resignation_date,
         created_at, updated_at,
         departments:department_id ( id, name, colour ),
         manager:manager_id ( id, first_name, last_name, job_title )
@@ -71,6 +72,8 @@ export default async function EditEmployeePage({
   const employee: EmployeeFull = {
     id: row.id,
     employeeNumber: row.employee_number ?? null,
+    resignationDate: row.resignation_date ?? null,
+    isArchived: row.is_archived ?? false,
     firstName: row.first_name,
     lastName: row.last_name,
     email: row.email,
@@ -130,11 +133,13 @@ export default async function EditEmployeePage({
     jobTitle: r.job_title,
     departmentId: r.department_id ?? null,
     managerId: r.manager_id ?? null,
-    status: r.status,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    status: r.status as any,
     email: r.email,
     phone: r.phone ?? null,
     startDate: r.start_date ?? null,
     avatarInitials: r.avatar_initials ?? `${r.first_name[0] ?? ""}${r.last_name[0] ?? ""}`.toUpperCase(),
+    isArchived: false,
   }))
 
   return <EditEmployeeClient employee={employee} departments={departments} allEmployees={allEmployees} />

@@ -45,6 +45,11 @@ const STATUS_META: Record<
     fg: "text-red-700",
     bg: "bg-red-50 border-red-200",
   },
+  resigned: {
+    label: "Resigned",
+    fg: "text-purple-700",
+    bg: "bg-purple-50 border-purple-200",
+  },
 }
 
 function StatusBadge({ status }: { status: EmploymentStatus }) {
@@ -234,17 +239,21 @@ function EmployeeRow({
 
 interface Props {
   employees: Employee[]
+  archivedEmployees: Employee[]
   departments: Department[]
 }
 
-export function EmployeeListClient({ employees, departments }: Props) {
+export function EmployeeListClient({ employees, archivedEmployees, departments }: Props) {
   const [search, setSearch] = useState("")
   const [deptFilter, setDeptFilter] = useState("all")
   const [statusFilter, setStatusFilter] = useState("all")
   const [viewMode, setViewMode] = useState<"grid" | "list">("list")
+  const [showArchived, setShowArchived] = useState(false)
+
+  const pool = showArchived ? archivedEmployees : employees
 
   const filtered = useMemo(() => {
-    let list = employees
+    let list = pool
     if (search.trim()) {
       const q = search.toLowerCase()
       list = list.filter(
@@ -258,7 +267,7 @@ export function EmployeeListClient({ employees, departments }: Props) {
     if (statusFilter !== "all")
       list = list.filter((e) => e.status === statusFilter)
     return list
-  }, [employees, search, deptFilter, statusFilter])
+  }, [pool, search, deptFilter, statusFilter])
 
   const activeCount = employees.filter((e) => e.status === "active").length
   const onboardingCount = employees.filter((e) => e.status === "onboarding").length
@@ -302,6 +311,19 @@ export function EmployeeListClient({ employees, departments }: Props) {
         />
       </div>
 
+      {/* Archived toggle banner */}
+      {showArchived && (
+        <div className="mb-3 rounded-lg border border-purple-200 bg-purple-50 px-4 py-2 text-xs text-purple-700 font-medium flex items-center justify-between">
+          <span>Showing archived employees</span>
+          <button
+            onClick={() => { setShowArchived(false); setStatusFilter("all") }}
+            className="underline hover:no-underline"
+          >
+            Back to active
+          </button>
+        </div>
+      )}
+
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-3 mb-3">
         <div className="relative flex-1 min-w-[200px] max-w-xs">
@@ -339,7 +361,17 @@ export function EmployeeListClient({ employees, departments }: Props) {
           <option value="on-leave">On Leave</option>
           <option value="terminated">Terminated</option>
           <option value="suspended">Suspended</option>
+          <option value="resigned">Resigned</option>
         </select>
+
+        {!showArchived && archivedEmployees.length > 0 && (
+          <button
+            onClick={() => { setShowArchived(true); setStatusFilter("all") }}
+            className="h-9 rounded-lg border border-border bg-card px-3 text-sm text-muted-foreground hover:bg-muted transition-colors"
+          >
+            Archived ({archivedEmployees.length})
+          </button>
+        )}
 
         <div className="ml-auto flex items-center rounded-lg border border-border overflow-hidden">
           <button
