@@ -66,8 +66,7 @@ Rules:
 /employees                      → Employee list (HR/Admin + Manager)
 /employees/[id]                 → Employee detail view (HR/Admin + Manager)
 /employees/[id]/edit            → Edit employee (HR/Admin only)
-/kpi                            → KPI reviews list (HR/Admin)
-/kpi/[reviewId]                 → KPI review detail (HR/Admin + assigned invitees)
+/kpi                            → KPI reviews list + inline detail accordion (HR/Admin + assigned invitees)
 ```
 
 All routes under `/employees` and `/kpi` require authentication (handled by middleware).
@@ -295,10 +294,13 @@ Always return proper HTTP status codes: 400, 401, 403, 404, 500.
 | Employee edit (`/employees/[id]/edit`) | ✅ Done |
 | `PATCH /api/employees/[id]` | ✅ Done |
 | `GET /api/departments` | ✅ Done |
-| KPI reviews list (`/kpi`) | 🔲 Not started |
-| KPI review detail (`/kpi/[reviewId]`) | 🔲 Not started |
-| Remaining employee API routes (me, active) | 🔲 Not started |
-| KPI API routes | 🔲 Not started |
+| KPI reviews list (`/kpi`) | ✅ Done |
+| KPI review detail | ✅ Done — inline accordion on `/kpi` (no separate route needed) |
+| `GET /api/employees/me` | ✅ Done |
+| `GET /api/employees/active` | ✅ Done |
+| `POST /api/employees/[id]/invite` | ✅ Done |
+| All KPI API routes | ✅ Done |
+| Supabase KPI tables migration | ✅ Done |
 
 Update this table as features are completed.
 
