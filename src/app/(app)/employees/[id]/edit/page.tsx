@@ -2,7 +2,7 @@ import { notFound, redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { getUserRole } from "@/lib/auth"
 import { EditEmployeeClient } from "./EditEmployeeClient"
-import type { Department, EmployeeFull } from "@/lib/types"
+import type { Department, Employee, EmployeeFull } from "@/lib/types"
 
 export async function generateMetadata({
   params,
@@ -36,7 +36,7 @@ export default async function EditEmployeePage({
   const role = await getUserRole(supabase, user.id)
   if (role !== "hr") redirect(`/employees/${id}`)
 
-  const [empResult, deptResult] = await Promise.all([
+  const [empResult, deptResult, allEmpResult] = await Promise.all([
     supabase
       .from("employees")
       .select(`
@@ -54,6 +54,10 @@ export default async function EditEmployeePage({
       .eq("id", id)
       .single(),
     supabase.from("departments").select("id, name, colour").order("name"),
+    supabase
+      .from("employees")
+      .select("id, first_name, last_name, job_title, department_id, manager_id, status, email, phone, start_date, avatar_initials")
+      .order("last_name"),
   ])
 
   if (empResult.error || !empResult.data) notFound()
@@ -119,5 +123,19 @@ export default async function EditEmployeePage({
 
   const departments: Department[] = (deptResult.data ?? []) as Department[]
 
-  return <EditEmployeeClient employee={employee} departments={departments} />
+  const allEmployees: Employee[] = (allEmpResult.data ?? []).map((r) => ({
+    id: r.id,
+    firstName: r.first_name,
+    lastName: r.last_name,
+    jobTitle: r.job_title,
+    departmentId: r.department_id ?? null,
+    managerId: r.manager_id ?? null,
+    status: r.status,
+    email: r.email,
+    phone: r.phone ?? null,
+    startDate: r.start_date ?? null,
+    avatarInitials: r.avatar_initials ?? `${r.first_name[0] ?? ""}${r.last_name[0] ?? ""}`.toUpperCase(),
+  }))
+
+  return <EditEmployeeClient employee={employee} departments={departments} allEmployees={allEmployees} />
 }

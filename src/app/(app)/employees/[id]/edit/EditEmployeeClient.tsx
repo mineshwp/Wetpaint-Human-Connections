@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation"
 import { ChevronLeft, Loader2, Save } from "lucide-react"
 import Link from "next/link"
 import { PageHeader } from "@/components/layout/PageHeader"
-import type { Department, EmployeeFull } from "@/lib/types"
+import type { Department, Employee, EmployeeFull } from "@/lib/types"
 
 // ── Field primitives ──────────────────────────────────────────────────────────
 
@@ -99,9 +99,10 @@ function SectionCard({
 interface Props {
   employee: EmployeeFull
   departments: Department[]
+  allEmployees: Employee[]
 }
 
-export function EditEmployeeClient({ employee, departments }: Props) {
+export function EditEmployeeClient({ employee, departments, allEmployees }: Props) {
   const router = useRouter()
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -127,6 +128,8 @@ export function EditEmployeeClient({ employee, departments }: Props) {
     employeeNumber: employee.employeeNumber ?? "",
     jobTitle: employee.jobTitle ?? "",
     departmentId: employee.departmentId ?? "",
+    managerId: employee.managerId ?? "",
+    salaryBand: employee.salaryBand ?? "",
     status: employee.status ?? "active",
     contractType: employee.contractType ?? "",
     startDate: employee.startDate ?? "",
@@ -171,6 +174,8 @@ export function EditEmployeeClient({ employee, departments }: Props) {
           employee_number: form.employeeNumber,
           job_title: form.jobTitle,
           department_id: form.departmentId,
+          manager_id: form.managerId,
+          salary_band: form.salaryBand,
           status: form.status,
           contract_type: form.contractType,
           start_date: form.startDate,
@@ -341,6 +346,21 @@ export function EditEmployeeClient({ employee, departments }: Props) {
                   <option key={d.id} value={d.id}>{d.name}</option>
                 ))}
               </SelectField>
+            </FormGroup>
+            <FormGroup label="Manager">
+              <SelectField value={form.managerId} onChange={set("managerId")}>
+                <option value="">— No manager —</option>
+                {allEmployees
+                  .filter((e) => e.id !== employee.id)
+                  .map((e) => (
+                    <option key={e.id} value={e.id}>
+                      {e.firstName} {e.lastName} — {e.jobTitle}
+                    </option>
+                  ))}
+              </SelectField>
+            </FormGroup>
+            <FormGroup label="Salary Band">
+              <Input value={form.salaryBand} onChange={set("salaryBand")} placeholder="e.g. Band C" />
             </FormGroup>
             <FormGroup label="Status">
               <SelectField value={form.status} onChange={set("status")}>

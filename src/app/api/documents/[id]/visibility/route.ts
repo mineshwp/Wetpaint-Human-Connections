@@ -22,6 +22,16 @@ export async function PATCH(
     return NextResponse.json({ error: "hidden_from_employee must be a boolean" }, { status: 400 })
   }
 
+  const { data: existing } = await supabase
+    .from("documents")
+    .select("id")
+    .eq("id", id)
+    .single()
+
+  if (!existing) {
+    return NextResponse.json({ error: "Document not found" }, { status: 404 })
+  }
+
   const { error } = await supabase
     .from("documents")
     .update({ hidden_from_employee: body.hidden_from_employee })
