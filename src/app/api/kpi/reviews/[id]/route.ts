@@ -1,6 +1,35 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
-import { getUserRole } from "@/lib/auth"
+import { getUserRole, getEmployeeIdForUser } from "@/lib/auth"
+
+async function canAccessReview(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+  reviewId: string
+): Promise<boolean> {
+  const [role, myEmployeeId] = await Promise.all([
+    getUserRole(supabase, userId),
+    getEmployeeIdForUser(supabase, userId),
+  ])
+  if (role === "hr") return true
+  if (!myEmployeeId) return false
+
+  // Review owner or invitee
+  const { data: review } = await supabase
+    .from("kpi_reviews")
+    .select("employee_id")
+    .eq("id", reviewId)
+    .single()
+  if (review?.employee_id === myEmployeeId) return true
+
+  const { data: inv } = await supabase
+    .from("kpi_review_invitees")
+    .select("id")
+    .eq("review_id", reviewId)
+    .eq("invitee_id", myEmployeeId)
+    .single()
+  return !!inv
+}
 
 export async function GET(
   _req: NextRequest,
@@ -10,6 +39,9 @@ export async function GET(
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+
+  const allowed = await canAccessReview(supabase, user.id, id)
+  if (!allowed) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
 
   const { data, error } = await supabase
     .from("kpi_reviews")

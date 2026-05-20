@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import Link from "next/link"
 import { createBrowserClient } from "@supabase/ssr"
 import {
@@ -84,6 +84,16 @@ const CATEGORY_LABELS: Record<string, string> = {
   sick_note: "Sick Note",
   onboarding_doc: "Onboarding",
   other: "Other",
+}
+
+function escHtml(s: string | null | undefined): string {
+  if (!s) return ""
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;")
 }
 
 const TRAINING_CATEGORY_LABELS: Record<TrainingCategory, string> = {
@@ -670,6 +680,12 @@ function TrainingModal({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) { if (e.key === "Escape") onClose() }
+    document.addEventListener("keydown", onKey)
+    return () => document.removeEventListener("keydown", onKey)
+  }, [onClose])
+
   function set(key: keyof TrainingFormData, value: string) {
     setForm((prev) => ({ ...prev, [key]: value }))
   }
@@ -936,6 +952,7 @@ function TrainingKPITab({
   initialTraining: EmployeeTraining[]
   canEdit: boolean
 }) {
+  const [nowMs] = useState(() => Date.now())
   const [kpiExpanded, setKpiExpanded] = useState(false)
   const [training, setTraining] = useState(initialTraining)
   const [showModal, setShowModal] = useState(false)
@@ -1060,11 +1077,11 @@ function TrainingKPITab({
           <div className="divide-y divide-border">
             {training.map((t) => {
               const isExpired =
-                t.expiry_date && new Date(t.expiry_date) < new Date()
+                t.expiry_date && new Date(t.expiry_date).getTime() < nowMs
               const isExpiringSoon =
                 t.expiry_date &&
                 !isExpired &&
-                (new Date(t.expiry_date).getTime() - Date.now()) / 86_400_000 <= 30
+                (new Date(t.expiry_date).getTime() - nowMs) / 86_400_000 <= 30
 
               return (
                 <div key={t.id} className="px-5 py-4 flex gap-4 items-start">
@@ -1135,7 +1152,7 @@ function TrainingKPITab({
                         href={t.certificate_url ?? t.url ?? "#"}
                         target="_blank"
                         rel="noopener noreferrer"
-                        title={t.certificate_url ? "View certificate" : "Open course"}
+                        aria-label={t.certificate_url ? "View certificate" : "Open course"}
                         className="p-1.5 rounded-md hover:bg-muted transition-colors text-muted-foreground"
                       >
                         <ExternalLink size={14} />
@@ -1145,7 +1162,7 @@ function TrainingKPITab({
                       <>
                         <button
                           onClick={() => { setEditing(t); setShowModal(true) }}
-                          title="Edit"
+                          aria-label="Edit training record"
                           className="p-1.5 rounded-md hover:bg-muted transition-colors text-muted-foreground"
                         >
                           <Edit3 size={14} />
@@ -1153,7 +1170,7 @@ function TrainingKPITab({
                         <button
                           onClick={() => deleteTraining(t.id)}
                           disabled={deletingId === t.id}
-                          title="Delete"
+                          aria-label="Delete training record"
                           className="p-1.5 rounded-md hover:bg-red-50 transition-colors text-muted-foreground hover:text-red-600 disabled:opacity-50"
                         >
                           {deletingId === t.id ? (
@@ -1189,11 +1206,9 @@ function TrainingKPITab({
 function DocumentsTab({
   initialDocs,
   isHR,
-  employeeId,
 }: {
   initialDocs: EmployeeDocument[]
   isHR: boolean
-  employeeId: string
 }) {
   const [docs, setDocs] = useState(initialDocs)
   const [togglingId, setTogglingId] = useState<string | null>(null)
@@ -1449,12 +1464,12 @@ function buildPrintHTML(emp: EmployeeFull, leaveBalances: LeaveBalance[]): strin
 
   const f = (label: string, val: string | null | undefined) => `
     <div class="field">
-      <span class="fl">${label}</span>
-      <span class="${val ? "fv" : "fe"}">${val ?? "Not provided"}</span>
+      <span class="fl">${escHtml(label)}</span>
+      <span class="${val ? "fv" : "fe"}">${val ? escHtml(val) : "Not provided"}</span>
     </div>`
 
   return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"/>
-  <title>Employee Record — ${emp.firstName} ${emp.lastName}</title>
+  <title>Employee Record — ${escHtml(emp.firstName)} ${escHtml(emp.lastName)}</title>
   <style>
     *{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,sans-serif;font-size:11.5px;color:#111827;background:#fff}
     .page{max-width:210mm;margin:0 auto;padding:18mm 20mm}
@@ -1478,10 +1493,10 @@ function buildPrintHTML(emp: EmployeeFull, leaveBalances: LeaveBalance[]): strin
   </style></head><body><div class="page">
   <div class="header"><div><div class="co-name">Wetpaint Advertising (Pty) Ltd</div><div class="co-sub">Employee Record — HR Administration</div></div>
   <div class="confidential">Confidential<br/>HR Use Only<br/>Do Not Distribute</div></div>
-  <div class="banner"><div class="avatar">${emp.avatarInitials}</div><div>
-  <div class="emp-name">${emp.firstName} ${emp.lastName}</div>
-  <div class="emp-title">${emp.jobTitle}${emp.department ? ` · ${emp.department.name}` : ""}</div>
-  <div class="status" style="${statusColors[emp.status] ?? ""}">${emp.status.replace("-", " ")}</div>
+  <div class="banner"><div class="avatar">${escHtml(emp.avatarInitials)}</div><div>
+  <div class="emp-name">${escHtml(emp.firstName)} ${escHtml(emp.lastName)}</div>
+  <div class="emp-title">${escHtml(emp.jobTitle)}${emp.department ? ` · ${escHtml(emp.department.name)}` : ""}</div>
+  <div class="status" style="${escHtml(statusColors[emp.status])}">${escHtml(emp.status.replace("-", " "))}</div>
   </div></div>
   <div class="section"><div class="section-title">Personal Information</div><div class="two-col">
   <div>${f("First Name", emp.firstName)}${f("Surname", emp.lastName)}${f("Date of Birth", fmtDate(emp.dateOfBirth))}${f("Identity Number", emp.identityNumber)}${f("Gender", emp.gender)}</div>
@@ -1542,6 +1557,7 @@ export function EmployeeDetailClient({
   setImpersonationAction,
 }: Props) {
   const [tab, setTab] = useState<Tab>("personal")
+  const [nowMs] = useState(() => Date.now())
 
   const { pct: completeness, missing } = isHR
     ? profileCompleteness(emp)
@@ -1582,15 +1598,15 @@ export function EmployeeDetailClient({
     }, 300)
   }
 
-  const contractWarning = (() => {
+  const contractWarning = useMemo(() => {
     if (!emp.contractEndDate) return null
     const daysLeft = Math.round(
-      (new Date(emp.contractEndDate).getTime() - Date.now()) / 86_400_000
+      (new Date(emp.contractEndDate).getTime() - nowMs) / 86_400_000
     )
     if (daysLeft <= 0) return { type: "expired" as const, daysLeft }
     if (daysLeft <= 30) return { type: "expiring" as const, daysLeft }
     return null
-  })()
+  }, [emp.contractEndDate, nowMs])
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
@@ -1801,7 +1817,6 @@ export function EmployeeDetailClient({
         <DocumentsTab
           initialDocs={initialDocuments}
           isHR={isHR}
-          employeeId={emp.id}
         />
       )}
       {activeTab === "notes" && canViewNotes && (

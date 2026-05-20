@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { getUserRole } from "@/lib/auth"
 
 export async function POST(
@@ -23,7 +24,9 @@ export async function POST(
   if (empError || !emp) return NextResponse.json({ error: "Employee not found" }, { status: 404 })
   if (!emp.email) return NextResponse.json({ error: "Employee has no email address" }, { status: 400 })
 
-  const { error } = await supabase.auth.admin.inviteUserByEmail(emp.email, {
+  // Must use the service-role admin client — anon key does not have access to auth.admin
+  const adminClient = createAdminClient()
+  const { error } = await adminClient.auth.admin.inviteUserByEmail(emp.email, {
     data: { employee_id: employeeId },
   })
 

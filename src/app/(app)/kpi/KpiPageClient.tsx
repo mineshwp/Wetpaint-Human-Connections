@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useMemo } from "react"
 import {
   ChevronDown, Plus, Trash2, X, Check,
   Users, UserPlus, Send, Clock, CheckCircle2, XCircle,
@@ -661,6 +661,41 @@ function ReviewAccordion({ review, template, scores, allEmployees, currentEmploy
   )
 }
 
+// ─── Confirm Delete Modal ───────────────────────────────────────────────────────
+
+function ConfirmDeleteModal({ onConfirm, onCancel, deleting }: {
+  onConfirm: () => void; onCancel: () => void; deleting: boolean
+}) {
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) { if (e.key === "Escape") onCancel() }
+    document.addEventListener("keydown", onKey)
+    return () => document.removeEventListener("keydown", onKey)
+  }, [onCancel])
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onCancel}>
+      <div className="w-full max-w-sm rounded-2xl bg-card border border-border p-6 shadow-xl space-y-4" onClick={e => e.stopPropagation()}>
+        <div className="flex items-start gap-3">
+          <div className="w-9 h-9 rounded-full bg-destructive/10 flex items-center justify-center shrink-0">
+            <Trash2 size={16} className="text-destructive" />
+          </div>
+          <div>
+            <p className="font-bold text-sm">Delete KPI Review</p>
+            <p className="text-xs text-muted-foreground mt-1">This will permanently delete the review and all associated scores and invitees. This cannot be undone.</p>
+          </div>
+        </div>
+        <div className="flex gap-2 justify-end">
+          <Button size="sm" variant="outline" onClick={onCancel} disabled={deleting} className="h-8 text-xs">Cancel</Button>
+          <Button size="sm" onClick={onConfirm} disabled={deleting} className="h-8 text-xs gap-1 bg-destructive hover:bg-destructive/90 text-destructive-foreground">
+            {deleting ? <Loader2 size={10} className="animate-spin" /> : <Trash2 size={10} />}
+            Delete
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Create Review Modal ────────────────────────────────────────────────────────
 
 function CreateReviewModal({ employees, currentPeriod, onSave, onClose, saving }: {
@@ -670,13 +705,21 @@ function CreateReviewModal({ employees, currentPeriod, onSave, onClose, saving }
 }) {
   const [employeeId, setEmployeeId] = useState(employees[0]?.id ?? "")
   const [period, setPeriod]         = useState(currentPeriod)
-  const [title, setTitle]           = useState(`${currentPeriod} Performance Review`)
+  const [customTitle, setCustomTitle] = useState<string | null>(null)
   const [deadline, setDeadline]     = useState("")
 
-  useEffect(() => {
+  // Derive title from selected employee + period; allow manual override
+  const autoTitle = useMemo(() => {
     const sel = employees.find(e => e.id === employeeId)
-    if (sel) setTitle(`${sel.first_name} ${sel.last_name} — ${period} Review`)
+    return sel ? `${sel.first_name} ${sel.last_name} — ${period} Review` : `${period} Performance Review`
   }, [employeeId, period, employees])
+  const title = customTitle ?? autoTitle
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) { if (e.key === "Escape") onClose() }
+    document.addEventListener("keydown", onKey)
+    return () => document.removeEventListener("keydown", onKey)
+  }, [onClose])
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
@@ -701,7 +744,7 @@ function CreateReviewModal({ employees, currentPeriod, onSave, onClose, saving }
           </div>
           <div>
             <label className="text-xs font-semibold text-muted-foreground block mb-1.5">Title</label>
-            <input value={title} onChange={e => setTitle(e.target.value)}
+            <input value={title} onChange={e => setCustomTitle(e.target.value)}
               className="w-full rounded-xl border border-border bg-card px-3 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary" />
           </div>
           <div>
@@ -737,46 +780,103 @@ export function KpiPageClient({ isHR, currentEmployeeId }: { isHR: boolean; curr
   const [currentPeriod, setCurrentPeriod] = useState("Q2 2026")
   const [filterPeriod, setFilterPeriod]   = useState("all")
   const [toast, setToast]                 = useState<string | null>(null)
+  const [deleteTarget, setDeleteTarget]   = useState<string | null>(null)
+  const [deleting, setDeleting]           = useState(false)
 
   function showToast(msg: string) {
     setToast(msg)
     setTimeout(() => setToast(null), 3000)
   }
 
-  const loadAll = useCallback(async () => {
-    setLoading(true)
-    const [tRes, rRes, eRes, settRes] = await Promise.all([
-      fetch("/api/kpi/template"),
-      fetch("/api/kpi/reviews"),
-      isHR ? fetch("/api/employees/active") : Promise.resolve(null),
-      isHR ? fetch("/api/kpi/settings") : Promise.resolve(null),
-    ])
-    const [tData, rData, eData, settData] = await Promise.all([
-      tRes.ok ? tRes.json() : [],
-      rRes.ok ? rRes.json() : [],
-      eRes?.ok ? eRes!.json() : [],
-      settRes?.ok ? settRes!.json() : null,
-    ])
+  // Fetch all data including scores — inline async so the effect can cancel in-flight
+  useEffect(() => {
+    let cancelled = false
+    async function load() {
+      setLoading(true)
+      try {
+        const [tRes, rRes, eRes, settRes] = await Promise.all([
+          fetch("/api/kpi/template"),
+          fetch("/api/kpi/reviews"),
+          isHR ? fetch("/api/employees/active") : Promise.resolve(null),
+          isHR ? fetch("/api/kpi/settings") : Promise.resolve(null),
+        ])
+        const [tData, rData, eData, settData] = await Promise.all([
+          tRes.ok ? tRes.json() : { sections: [] },
+          rRes.ok ? rRes.json() : [],
+          eRes?.ok ? eRes!.json() : [],
+          settRes?.ok ? settRes!.json() : null,
+        ])
+        if (cancelled) return
 
-    setTemplate(tData)
-    setReviews(Array.isArray(rData) ? rData : [])
-    setAllEmployees(Array.isArray(eData) ? eData : [])
-    if (settData?.current_period) setCurrentPeriod(settData.current_period)
-    setLoading(false)
+        const revs: Review[] = Array.isArray(rData) ? rData : []
+        setTemplate(tData.sections ?? tData)
+        setReviews(revs)
+        setAllEmployees(Array.isArray(eData) ? eData : [])
+        if (settData?.current_period) setCurrentPeriod(settData.current_period)
+
+        if (revs.length > 0) {
+          const scoreResults = await Promise.all(
+            revs.map(r =>
+              fetch(`/api/kpi/reviews/${r.id}/scores`)
+                .then(res => res.ok ? res.json() : [])
+                .then((data: Score[]) => ({ id: r.id, data }))
+            )
+          )
+          if (cancelled) return
+          const map: Record<string, Score[]> = {}
+          scoreResults.forEach(({ id, data }) => { map[id] = data })
+          setScores(map)
+        }
+      } catch {
+        showToast("Failed to load data")
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    load()
+    return () => { cancelled = true }
   }, [isHR])
 
-  useEffect(() => { loadAll() }, [loadAll])
+  // Manual refresh — used by event handlers after mutations
+  async function loadAll() {
+    setLoading(true)
+    try {
+      const [tRes, rRes, eRes, settRes] = await Promise.all([
+        fetch("/api/kpi/template"),
+        fetch("/api/kpi/reviews"),
+        isHR ? fetch("/api/employees/active") : Promise.resolve(null),
+        isHR ? fetch("/api/kpi/settings") : Promise.resolve(null),
+      ])
+      const [tData, rData, eData, settData] = await Promise.all([
+        tRes.ok ? tRes.json() : { sections: [] },
+        rRes.ok ? rRes.json() : [],
+        eRes?.ok ? eRes!.json() : [],
+        settRes?.ok ? settRes!.json() : null,
+      ])
+      const revs: Review[] = Array.isArray(rData) ? rData : []
+      setTemplate(tData.sections ?? tData)
+      setReviews(revs)
+      setAllEmployees(Array.isArray(eData) ? eData : [])
+      if (settData?.current_period) setCurrentPeriod(settData.current_period)
 
-  useEffect(() => {
-    reviews.forEach(async (r) => {
-      if (scores[r.id] !== undefined) return
-      const res = await fetch(`/api/kpi/reviews/${r.id}/scores`)
-      if (res.ok) {
-        const data = await res.json()
-        setScores(prev => ({ ...prev, [r.id]: data }))
+      if (revs.length > 0) {
+        const scoreResults = await Promise.all(
+          revs.map(r =>
+            fetch(`/api/kpi/reviews/${r.id}/scores`)
+              .then(res => res.ok ? res.json() : [])
+              .then((data: Score[]) => ({ id: r.id, data }))
+          )
+        )
+        const map: Record<string, Score[]> = {}
+        scoreResults.forEach(({ id, data }) => { map[id] = data })
+        setScores(map)
       }
-    })
-  }, [reviews]) // eslint-disable-line react-hooks/exhaustive-deps
+    } catch {
+      showToast("Failed to refresh data")
+    } finally {
+      setLoading(false)
+    }
+  }
 
   async function handleScoreChange(reviewId: string, itemId: string, score: number | null, comments: string) {
     const res = await fetch(`/api/kpi/reviews/${reviewId}/scores`, {
@@ -790,7 +890,7 @@ export function KpiPageClient({ isHR, currentEmployeeId }: { isHR: boolean; curr
         return { ...prev, [reviewId]: [...list, updated] }
       })
     } else {
-      showToast("Failed to save score")
+      showToast("Failed to save score — please try again")
     }
   }
 
@@ -804,26 +904,44 @@ export function KpiPageClient({ isHR, currentEmployeeId }: { isHR: boolean; curr
   }
 
   async function handleRemoveInvitee(reviewId: string, inviteeId: string) {
-    await fetch(`/api/kpi/reviews/${reviewId}/invitees`, {
+    const res = await fetch(`/api/kpi/reviews/${reviewId}/invitees`, {
       method: "DELETE", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ invitee_id: inviteeId }),
     })
-    await loadAll()
+    if (res.ok) await loadAll()
+    else showToast("Failed to remove invitee")
   }
 
   async function handleStatusChange(reviewId: string, status: string) {
-    await fetch(`/api/kpi/reviews/${reviewId}`, {
+    const prev = reviews.find(r => r.id === reviewId)?.status
+    setReviews(rs => rs.map(r => r.id === reviewId ? { ...r, status: status as Review["status"] } : r))
+    const res = await fetch(`/api/kpi/reviews/${reviewId}`, {
       method: "PATCH", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status }),
     })
-    setReviews(prev => prev.map(r => r.id === reviewId ? { ...r, status: status as Review["status"] } : r))
+    if (!res.ok) {
+      // rollback
+      if (prev) setReviews(rs => rs.map(r => r.id === reviewId ? { ...r, status: prev } : r))
+      showToast("Failed to update status")
+    }
   }
 
   async function handleDeleteReview(reviewId: string) {
-    if (!confirm("Delete this KPI review? This cannot be undone.")) return
-    await fetch(`/api/kpi/reviews/${reviewId}`, { method: "DELETE" })
-    setReviews(prev => prev.filter(r => r.id !== reviewId))
-    showToast("Review deleted")
+    setDeleteTarget(reviewId)
+  }
+
+  async function confirmDelete() {
+    if (!deleteTarget) return
+    setDeleting(true)
+    const res = await fetch(`/api/kpi/reviews/${deleteTarget}`, { method: "DELETE" })
+    setDeleting(false)
+    setDeleteTarget(null)
+    if (res.ok) {
+      setReviews(prev => prev.filter(r => r.id !== deleteTarget))
+      showToast("Review deleted")
+    } else {
+      showToast("Failed to delete review")
+    }
   }
 
   async function handleAddItem(sectionId: string, data: { title: string; description: string; min_score: number; max_score: number }) {
@@ -1010,6 +1128,14 @@ export function KpiPageClient({ isHR, currentEmployeeId }: { isHR: boolean; curr
         <CreateReviewModal
           employees={allEmployees} currentPeriod={currentPeriod}
           onSave={handleCreate} onClose={() => setShowCreate(false)} saving={creating}
+        />
+      )}
+
+      {deleteTarget && (
+        <ConfirmDeleteModal
+          onConfirm={confirmDelete}
+          onCancel={() => setDeleteTarget(null)}
+          deleting={deleting}
         />
       )}
     </div>

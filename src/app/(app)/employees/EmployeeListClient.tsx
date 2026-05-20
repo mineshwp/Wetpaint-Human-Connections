@@ -256,18 +256,24 @@ export function EmployeeListClient({ employees, archivedEmployees, departments }
     let list = pool
     if (search.trim()) {
       const q = search.toLowerCase()
-      list = list.filter(
-        (e) =>
+      list = list.filter((e) => {
+        const dept = departments.find((d) => d.id === e.departmentId)
+        const manager = employees.find((m) => m.id === e.managerId)
+        return (
           `${e.firstName} ${e.lastName}`.toLowerCase().includes(q) ||
           e.jobTitle.toLowerCase().includes(q) ||
-          e.email.toLowerCase().includes(q)
-      )
+          e.email.toLowerCase().includes(q) ||
+          (e.phone ?? "").toLowerCase().includes(q) ||
+          (dept?.name ?? "").toLowerCase().includes(q) ||
+          (manager ? `${manager.firstName} ${manager.lastName}` : "").toLowerCase().includes(q)
+        )
+      })
     }
     if (deptFilter !== "all") list = list.filter((e) => e.departmentId === deptFilter)
     if (statusFilter !== "all")
       list = list.filter((e) => e.status === statusFilter)
     return list
-  }, [pool, search, deptFilter, statusFilter])
+  }, [pool, search, deptFilter, statusFilter, departments, employees])
 
   const activeCount = employees.filter((e) => e.status === "active").length
   const onboardingCount = employees.filter((e) => e.status === "onboarding").length
@@ -330,7 +336,7 @@ export function EmployeeListClient({ employees, archivedEmployees, departments }
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <input
             type="search"
-            placeholder="Search name, role, email…"
+            placeholder="Search name, role, email, phone, department…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="h-9 w-full rounded-lg border border-border bg-card pl-9 pr-3 text-sm placeholder:text-muted-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring/30"
