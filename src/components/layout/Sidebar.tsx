@@ -3,11 +3,11 @@
 import Link from "next/link"
 import Image from "next/image"
 import { usePathname } from "next/navigation"
-import { Users, BarChart3, X, LayoutDashboard } from "lucide-react"
+import { Users, BarChart3, X, LayoutGrid } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 const ALL_NAV_ITEMS = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, staffOnly: true },
+  { href: "/dashboard", label: "Dashboard", icon: LayoutGrid, staffOnly: true },
   { href: "/employees", label: "Employees", icon: Users, staffOnly: false },
   { href: "/kpi", label: "KPI Reviews", icon: BarChart3, staffOnly: false },
 ]
@@ -45,28 +45,28 @@ export function Sidebar({ isOpen, onClose, roleBadge, isImpersonating }: Sidebar
         )}
       >
         {/* Branding */}
-        <div className="flex shrink-0 flex-col gap-1 px-5 pt-4 pb-3 border-b border-border">
-          <div className="flex items-center justify-between">
+        <div className="flex h-16 shrink-0 items-center justify-between px-5 border-b border-border">
+          <div className="flex items-center gap-2.5">
             <Image
-              src="/wp-logo.png"
+              src="/cropped-wpw-01.png"
               alt="Wetpaint"
-              width={90}
-              height={30}
-              className="h-7 w-auto object-contain"
+              width={36}
+              height={36}
+              className="h-9 w-9 object-contain"
               priority
             />
-            <button
-              onClick={onClose}
-              className="lg:hidden rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-              aria-label="Close sidebar"
-            >
-              <X className="h-4 w-4" />
-            </button>
+            <div className="flex flex-col leading-none">
+              <span className="text-sm font-bold text-foreground">Human</span>
+              <span className="text-xs text-muted-foreground">Connections</span>
+            </div>
           </div>
-          <div className="flex flex-col leading-none">
-            <span className="text-sm font-bold text-foreground">Human</span>
-            <span className="text-xs text-muted-foreground">Connections</span>
-          </div>
+          <button
+            onClick={onClose}
+            className="lg:hidden rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+            aria-label="Close sidebar"
+          >
+            <X className="h-4 w-4" />
+          </button>
         </div>
 
         {/* Role badge — hidden in staff view */}

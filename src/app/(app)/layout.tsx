@@ -7,7 +7,7 @@ import { signOut } from "./actions"
 import type { UserRole } from "@/lib/types"
 
 const ROLE_LABELS: Record<UserRole, string> = {
-  hr: "HR Admin",
+  hr: "HR / Admin",
   manager: "Manager",
   staff: "Staff",
   applicant: "Applicant",
