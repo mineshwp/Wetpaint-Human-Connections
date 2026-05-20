@@ -10,6 +10,7 @@ import type {
   EmployeeDocument,
   HRNote,
   KpiSummary,
+  EmployeeTraining,
 } from "@/lib/types"
 
 export async function generateMetadata({
@@ -153,7 +154,7 @@ export default async function EmployeeDetailPage({
   const year = new Date().getFullYear()
 
   // Fetch sub-resources in parallel
-  const [leaveResult, docsResult, notesResult, kpiResult] = await Promise.all([
+  const [leaveResult, docsResult, notesResult, kpiResult, trainingResult] = await Promise.all([
     supabase
       .from("leave_balances")
       .select("leave_type, entitled, used, pending")
@@ -189,16 +190,18 @@ export default async function EmployeeDetailPage({
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle(),
+
+    supabase
+      .from("employee_training")
+      .select("*")
+      .eq("employee_id", id)
+      .order("date_completed", { ascending: false, nullsFirst: false }),
   ])
 
   const leaveBalances: LeaveBalance[] = leaveResult.data ?? []
-
-  // For HR: fetch all docs; for staff: only non-hidden
-  // The query above uses `.eq("hidden_from_employee", false)` for non-HR,
-  // but Supabase ignores `.eq(col, undefined)` so we re-filter here for safety.
   const documents: EmployeeDocument[] = (docsResult.data ?? []) as EmployeeDocument[]
-
   const hrNotes: HRNote[] = (notesResult.data ?? []) as HRNote[]
+  const training: EmployeeTraining[] = (trainingResult.data ?? []) as EmployeeTraining[]
 
   const kpiRow = kpiResult.data
   const kpiSummary: KpiSummary = kpiRow
@@ -218,7 +221,9 @@ export default async function EmployeeDetailPage({
       initialDocuments={documents}
       initialNotes={hrNotes}
       kpiSummary={kpiSummary}
+      initialTraining={training}
       isHR={isHR}
+      isOwnProfile={isOwnProfile}
       canViewDocuments={canViewDocuments}
       canViewBanking={canViewBanking}
       canViewNotes={canViewNotes}

@@ -301,6 +301,12 @@ Always return proper HTTP status codes: 400, 401, 403, 404, 500.
 | `POST /api/employees/[id]/invite` | ✅ Done |
 | All KPI API routes | ✅ Done |
 | Supabase KPI tables migration | ✅ Done |
+| Staff inline edit (contact + next of kin) | ✅ Done |
+| Training module (add/edit/delete, cert upload) | ✅ Done |
+| `GET/POST /api/employees/[id]/training` | ✅ Done |
+| `PATCH/DELETE /api/employees/[id]/training/[id]` | ✅ Done |
+| KPI inline accordion on Training & KPIs tab | ✅ Done |
+| Leave tab removed (future phase) | ✅ Done |
 
 Update this table as features are completed.
 

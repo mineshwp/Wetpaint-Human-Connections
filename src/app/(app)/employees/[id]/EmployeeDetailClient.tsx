@@ -1,7 +1,8 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
+import { createBrowserClient } from "@supabase/ssr"
 import {
   Mail,
   Phone,
@@ -19,6 +20,13 @@ import {
   Clock,
   Plus,
   AlertTriangle,
+  X,
+  ChevronDown,
+  ChevronUp,
+  Trash2,
+  ExternalLink,
+  Check,
+  Loader2,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type {
@@ -28,6 +36,8 @@ import type {
   HRNote,
   KpiSummary,
   EmploymentStatus,
+  EmployeeTraining,
+  TrainingCategory,
 } from "@/lib/types"
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -76,6 +86,15 @@ const CATEGORY_LABELS: Record<string, string> = {
   other: "Other",
 }
 
+const TRAINING_CATEGORY_LABELS: Record<TrainingCategory, string> = {
+  technical: "Technical",
+  compliance: "Compliance",
+  leadership: "Leadership",
+  safety: "Safety",
+  "soft-skills": "Soft Skills",
+  other: "Other",
+}
+
 const STATUS_META: Record<
   EmploymentStatus,
   { label: string; fg: string; bg: string }
@@ -91,13 +110,7 @@ const STATUS_META: Record<
 function StatusBadge({ status }: { status: EmploymentStatus }) {
   const m = STATUS_META[status]
   return (
-    <span
-      className={cn(
-        "rounded-full border px-3 py-1 text-xs font-semibold",
-        m.fg,
-        m.bg
-      )}
-    >
+    <span className={cn("rounded-full border px-3 py-1 text-xs font-semibold", m.fg, m.bg)}>
       {m.label}
     </span>
   )
@@ -110,18 +123,23 @@ function SectionCard({
   subtitle,
   children,
   padded = true,
+  action,
 }: {
   title?: string
   subtitle?: string
   children: React.ReactNode
   padded?: boolean
+  action?: React.ReactNode
 }) {
   return (
     <div className="rounded-xl border border-border bg-card">
-      {(title || subtitle) && (
-        <div className="px-5 py-4 border-b border-border">
-          {title && <p className="text-sm font-semibold text-foreground">{title}</p>}
-          {subtitle && <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p>}
+      {(title || subtitle || action) && (
+        <div className="px-5 py-4 border-b border-border flex items-center justify-between gap-3">
+          <div>
+            {title && <p className="text-sm font-semibold text-foreground">{title}</p>}
+            {subtitle && <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p>}
+          </div>
+          {action}
         </div>
       )}
       <div className={padded ? "p-5" : ""}>{children}</div>
@@ -187,64 +205,241 @@ function TabButton({
   )
 }
 
+// ─── Inline edit helpers ───────────────────────────────────────────────────────
+
+function EditableField({
+  label,
+  value,
+  field,
+  type = "text",
+  placeholder,
+}: {
+  label: string
+  value: string
+  field: string
+  type?: string
+  placeholder?: string
+}) {
+  return (
+    <div className="flex items-start gap-3 py-2 border-b border-border last:border-0">
+      <label className="text-sm text-muted-foreground w-40 shrink-0 pt-1.5">{label}</label>
+      <input
+        name={field}
+        type={type}
+        defaultValue={value}
+        placeholder={placeholder ?? label}
+        className="flex-1 text-sm border border-border rounded-md px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-ring/30 bg-background"
+      />
+    </div>
+  )
+}
+
 // ─── Tab 1: Personal & Employment ────────────────────────────────────────────
 
 function PersonalTab({
   emp,
   isHR,
+  isOwnProfile,
 }: {
   emp: EmployeeFull
   isHR: boolean
+  isOwnProfile: boolean
 }) {
+  const [editingContact, setEditingContact] = useState(false)
+  const [editingNok, setEditingNok] = useState(false)
+  const [saving, setSaving] = useState<"contact" | "nok" | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [localEmp, setLocalEmp] = useState(emp)
+
+  const canEditOwn = isOwnProfile && !isHR
+
+  async function saveSection(
+    section: "contact" | "nok",
+    formData: FormData
+  ) {
+    setSaving(section)
+    setError(null)
+    const body: Record<string, string> = {}
+    formData.forEach((v, k) => { body[k] = v.toString() })
+
+    const res = await fetch(`/api/employees/${emp.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    })
+    setSaving(null)
+    if (!res.ok) {
+      setError("Failed to save changes.")
+      return
+    }
+    if (section === "contact") {
+      setLocalEmp((prev) => ({
+        ...prev,
+        phone: body.phone || null,
+        alternatePhone: body.alternate_phone || null,
+        personalEmail: body.personal_email || null,
+      }))
+      setEditingContact(false)
+    } else {
+      setLocalEmp((prev) => ({
+        ...prev,
+        nextOfKinName: body.next_of_kin_name || null,
+        nextOfKinPhone: body.next_of_kin_phone || null,
+        nextOfKinRelationship: body.next_of_kin_relationship || null,
+      }))
+      setEditingNok(false)
+    }
+  }
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <SectionCard title="Personal Information" subtitle="Identity & EE data">
-        <FieldRow label="First Name" value={emp.firstName} />
-        <FieldRow label="Surname" value={emp.lastName} />
-        <FieldRow label="Gender" value={emp.gender} />
-        {isHR && <FieldRow label="Date of Birth" value={fmtDate(emp.dateOfBirth)} />}
-        {isHR && <FieldRow label="Identity Number" value={emp.identityNumber} sensitive />}
-        {isHR && <FieldRow label="Race (EE)" value={emp.race} />}
-        {isHR && <FieldRow label="Disability" value={emp.disability} />}
-        {isHR && <FieldRow label="Citizenship" value={emp.citizenshipStatus} />}
-        {isHR && <FieldRow label="VAT / Tax Ref" value={emp.vatNumber} />}
+        <FieldRow label="First Name" value={localEmp.firstName} />
+        <FieldRow label="Surname" value={localEmp.lastName} />
+        <FieldRow label="Gender" value={localEmp.gender} />
+        {isHR && <FieldRow label="Date of Birth" value={fmtDate(localEmp.dateOfBirth)} />}
+        {isHR && <FieldRow label="Identity Number" value={localEmp.identityNumber} sensitive />}
+        {isHR && <FieldRow label="Race (EE)" value={localEmp.race} />}
+        {isHR && <FieldRow label="Disability" value={localEmp.disability} />}
+        {isHR && <FieldRow label="Citizenship" value={localEmp.citizenshipStatus} />}
+        {isHR && <FieldRow label="VAT / Tax Ref" value={localEmp.vatNumber} />}
       </SectionCard>
 
-      <SectionCard title="Contact Details" subtitle="Phone, email & address">
-        <FieldRow label="Cell Phone" value={emp.phone} />
-        <FieldRow label="Alternate Number" value={emp.alternatePhone} />
-        <FieldRow label="Personal Email" value={emp.personalEmail} />
-        <FieldRow label="Work Email" value={emp.workEmail ?? emp.email} />
-        {isHR && <FieldRow label="Home Address" value={emp.homeAddress} />}
+      <SectionCard
+        title="Contact Details"
+        subtitle="Phone, email & address"
+        action={
+          canEditOwn && !editingContact ? (
+            <button
+              onClick={() => setEditingContact(true)}
+              className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-md border border-border hover:bg-muted transition-colors text-muted-foreground"
+            >
+              <Edit3 size={12} />
+              Edit
+            </button>
+          ) : undefined
+        }
+      >
+        {error && editingContact && (
+          <p className="text-xs text-red-600 mb-3">{error}</p>
+        )}
+        {editingContact ? (
+          <form
+            onSubmit={(e) => {
+              e.preventDefault()
+              saveSection("contact", new FormData(e.currentTarget))
+            }}
+          >
+            <EditableField label="Cell Phone" value={localEmp.phone ?? ""} field="phone" type="tel" />
+            <EditableField label="Alternate Number" value={localEmp.alternatePhone ?? ""} field="alternate_phone" type="tel" />
+            <EditableField label="Personal Email" value={localEmp.personalEmail ?? ""} field="personal_email" type="email" />
+            <div className="flex justify-end gap-2 pt-3">
+              <button
+                type="button"
+                onClick={() => setEditingContact(false)}
+                className="px-3 py-1.5 text-sm border border-border rounded-lg hover:bg-muted transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={saving === "contact"}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-white rounded-lg disabled:opacity-50 transition-opacity"
+                style={{ background: "var(--brand-primary)" }}
+              >
+                {saving === "contact" ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
+                Save
+              </button>
+            </div>
+          </form>
+        ) : (
+          <>
+            <FieldRow label="Cell Phone" value={localEmp.phone} />
+            <FieldRow label="Alternate Number" value={localEmp.alternatePhone} />
+            <FieldRow label="Personal Email" value={localEmp.personalEmail} />
+            <FieldRow label="Work Email" value={localEmp.workEmail ?? localEmp.email} />
+            {isHR && <FieldRow label="Home Address" value={localEmp.homeAddress} />}
+          </>
+        )}
       </SectionCard>
 
-      <SectionCard title="Next of Kin" subtitle="Emergency contact">
-        <FieldRow label="Name" value={emp.nextOfKinName} />
-        <FieldRow label="Contact Number" value={emp.nextOfKinPhone} />
-        <FieldRow label="Relationship" value={emp.nextOfKinRelationship} />
+      <SectionCard
+        title="Next of Kin"
+        subtitle="Emergency contact"
+        action={
+          canEditOwn && !editingNok ? (
+            <button
+              onClick={() => setEditingNok(true)}
+              className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-md border border-border hover:bg-muted transition-colors text-muted-foreground"
+            >
+              <Edit3 size={12} />
+              Edit
+            </button>
+          ) : undefined
+        }
+      >
+        {error && editingNok && (
+          <p className="text-xs text-red-600 mb-3">{error}</p>
+        )}
+        {editingNok ? (
+          <form
+            onSubmit={(e) => {
+              e.preventDefault()
+              saveSection("nok", new FormData(e.currentTarget))
+            }}
+          >
+            <EditableField label="Name" value={localEmp.nextOfKinName ?? ""} field="next_of_kin_name" placeholder="Full name" />
+            <EditableField label="Contact Number" value={localEmp.nextOfKinPhone ?? ""} field="next_of_kin_phone" type="tel" />
+            <EditableField label="Relationship" value={localEmp.nextOfKinRelationship ?? ""} field="next_of_kin_relationship" placeholder="e.g. Spouse, Parent" />
+            <div className="flex justify-end gap-2 pt-3">
+              <button
+                type="button"
+                onClick={() => setEditingNok(false)}
+                className="px-3 py-1.5 text-sm border border-border rounded-lg hover:bg-muted transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={saving === "nok"}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-white rounded-lg disabled:opacity-50 transition-opacity"
+                style={{ background: "var(--brand-primary)" }}
+              >
+                {saving === "nok" ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
+                Save
+              </button>
+            </div>
+          </form>
+        ) : (
+          <>
+            <FieldRow label="Name" value={localEmp.nextOfKinName} />
+            <FieldRow label="Contact Number" value={localEmp.nextOfKinPhone} />
+            <FieldRow label="Relationship" value={localEmp.nextOfKinRelationship} />
+          </>
+        )}
       </SectionCard>
 
       <SectionCard title="Employment Details" subtitle="Role, contract & reporting">
-        <FieldRow label="Staff Number" value={emp.employeeNumber} />
-        <FieldRow label="Job Title" value={emp.jobTitle} />
-        <FieldRow label="Department" value={emp.department?.name} />
+        <FieldRow label="Staff Number" value={localEmp.employeeNumber} />
+        <FieldRow label="Job Title" value={localEmp.jobTitle} />
+        <FieldRow label="Department" value={localEmp.department?.name} />
         <FieldRow
           label="Contract Type"
           value={
-            emp.contractType
-              ? emp.contractType.charAt(0).toUpperCase() + emp.contractType.slice(1)
+            localEmp.contractType
+              ? localEmp.contractType.charAt(0).toUpperCase() + localEmp.contractType.slice(1)
               : null
           }
         />
-        <FieldRow label="Start Date" value={fmtDate(emp.startDate)} />
-        {emp.contractEndDate && (
-          <FieldRow label="Contract End" value={fmtDate(emp.contractEndDate)} />
+        <FieldRow label="Start Date" value={fmtDate(localEmp.startDate)} />
+        {localEmp.contractEndDate && (
+          <FieldRow label="Contract End" value={fmtDate(localEmp.contractEndDate)} />
         )}
-        {emp.probationEndDate && (
-          <FieldRow label="Probation End" value={fmtDate(emp.probationEndDate)} />
+        {localEmp.probationEndDate && (
+          <FieldRow label="Probation End" value={fmtDate(localEmp.probationEndDate)} />
         )}
-        {isHR && emp.lastSalaryReviewDate && (
-          <FieldRow label="Last Pay Review" value={fmtDate(emp.lastSalaryReviewDate)} />
+        {isHR && localEmp.lastSalaryReviewDate && (
+          <FieldRow label="Last Pay Review" value={fmtDate(localEmp.lastSalaryReviewDate)} />
         )}
       </SectionCard>
     </div>
@@ -280,92 +475,511 @@ function BankingTab({ emp }: { emp: EmployeeFull }) {
   )
 }
 
-// ─── Tab 3: Leave ─────────────────────────────────────────────────────────────
+// ─── KPI inline detail ────────────────────────────────────────────────────────
 
-const LEAVE_LABELS: Record<string, string> = {
-  annual: "Annual Leave",
-  sick: "Sick Leave",
-  family: "Family Responsibility",
-  study: "Study Leave",
-  unpaid: "Unpaid Leave",
-  recess: "Recess Leave",
-  other: "Other",
+type KpiSection = {
+  id: string
+  title: string
+  type: string
+  position: number
+  kpi_template_items: {
+    id: string
+    title: string
+    description: string | null
+    min_score: number
+    max_score: number
+    position: number
+  }[]
 }
 
-function LeaveTab({ balances }: { balances: LeaveBalance[] }) {
-  if (balances.length === 0) {
+type KpiScore = {
+  id: string
+  item_id: string
+  scorer_id: string | null
+  score: number | null
+  comments: string | null
+}
+
+function KpiDetailPanel({ reviewId }: { reviewId: string }) {
+  const [sections, setSections] = useState<KpiSection[]>([])
+  const [scores, setScores] = useState<KpiScore[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    async function load() {
+      setLoading(true)
+      setError(null)
+      try {
+        const [tplRes, scoresRes] = await Promise.all([
+          fetch("/api/kpi/template"),
+          fetch(`/api/kpi/reviews/${reviewId}/scores`),
+        ])
+        if (!tplRes.ok || !scoresRes.ok) throw new Error("Failed to load")
+        const [tpl, sc] = await Promise.all([tplRes.json(), scoresRes.json()])
+        setSections(tpl.sections ?? tpl ?? [])
+        setScores(sc ?? [])
+      } catch {
+        setError("Could not load KPI details.")
+      } finally {
+        setLoading(false)
+      }
+    }
+    load()
+  }, [reviewId])
+
+  if (loading) {
     return (
-      <SectionCard>
-        <div className="text-center py-12">
-          <Calendar size={40} className="mx-auto mb-3 text-muted-foreground" />
-          <p className="text-sm text-muted-foreground">
-            No leave balances found for this employee.
-          </p>
-        </div>
-      </SectionCard>
+      <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
+        <Loader2 size={14} className="animate-spin" />
+        Loading KPI details…
+      </div>
     )
   }
 
+  if (error) {
+    return <p className="text-sm text-red-600 py-4">{error}</p>
+  }
+
+  function avgScore(itemId: string) {
+    const itemScores = scores.filter((s) => s.item_id === itemId && s.score !== null)
+    if (itemScores.length === 0) return null
+    return itemScores.reduce((sum, s) => sum + (s.score ?? 0), 0) / itemScores.length
+  }
+
+  function sectionTotal(sec: KpiSection) {
+    return sec.kpi_template_items.reduce((sum, item) => {
+      const avg = avgScore(item.id)
+      return sum + (avg ?? 0)
+    }, 0)
+  }
+
+  const overallTotal = sections.reduce((sum, sec) => sum + sectionTotal(sec), 0)
+
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-      {balances.map((b) => {
-        const remaining = b.entitled - b.used - b.pending
-        const pct =
-          b.entitled > 0
-            ? Math.round(((b.entitled - b.used) / b.entitled) * 100)
-            : 0
-        return (
-          <SectionCard key={b.leave_type} title={LEAVE_LABELS[b.leave_type] ?? b.leave_type}>
-            <div className="flex justify-between text-sm mb-2">
-              <span className="text-muted-foreground">Remaining</span>
-              <span className="font-semibold">{remaining.toFixed(1)} days</span>
-            </div>
-            <div className="w-full bg-muted rounded-full h-2 mb-3">
-              <div
-                className="h-2 rounded-full bg-emerald-500"
-                style={{ width: `${Math.max(0, Math.min(100, pct))}%` }}
-              />
-            </div>
-            <div className="space-y-1 text-xs text-muted-foreground">
-              <div className="flex justify-between">
-                <span>Entitled</span>
-                <span>{b.entitled} days</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Used</span>
-                <span>{b.used} days</span>
-              </div>
-              {b.pending > 0 && (
-                <div className="flex justify-between">
-                  <span>Pending</span>
-                  <span>{b.pending} days</span>
-                </div>
-              )}
-            </div>
-          </SectionCard>
-        )
-      })}
+    <div className="mt-4 space-y-4">
+      {sections.map((sec) => (
+        <div key={sec.id} className="rounded-lg border border-border overflow-hidden">
+          <div className="px-4 py-2.5 bg-muted/40 flex items-center justify-between">
+            <p className="text-xs font-semibold text-foreground uppercase tracking-wide">
+              {sec.title}
+            </p>
+            <p className="text-xs font-semibold text-muted-foreground">
+              Section total: {sectionTotal(sec).toFixed(1)}
+            </p>
+          </div>
+          <div className="divide-y divide-border">
+            {sec.kpi_template_items
+              .sort((a, b) => a.position - b.position)
+              .map((item) => {
+                const avg = avgScore(item.id)
+                return (
+                  <div key={item.id} className="px-4 py-3 flex items-center justify-between gap-4">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-foreground">{item.title}</p>
+                      {item.description && (
+                        <p className="text-xs text-muted-foreground mt-0.5">{item.description}</p>
+                      )}
+                    </div>
+                    <div className="text-right shrink-0">
+                      {avg !== null ? (
+                        <span className="text-sm font-semibold text-foreground">
+                          {avg.toFixed(1)}
+                          <span className="text-xs text-muted-foreground font-normal ml-0.5">
+                            /{item.max_score}
+                          </span>
+                        </span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground italic">Not scored</span>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+          </div>
+        </div>
+      ))}
+      {sections.length > 0 && (
+        <div className="flex justify-end">
+          <div className="rounded-lg border border-border px-4 py-2.5 text-sm">
+            <span className="text-muted-foreground">Overall score: </span>
+            <span className="font-bold text-foreground">{overallTotal.toFixed(1)}</span>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
 
-// ─── Tab 4: Training & KPIs ───────────────────────────────────────────────────
+// ─── Training add/edit modal ──────────────────────────────────────────────────
+
+type TrainingFormData = {
+  name: string
+  type: "online" | "in-person"
+  provider: string
+  category: string
+  url: string
+  venue: string
+  date_completed: string
+  expiry_date: string
+  duration_hours: string
+  notes: string
+}
+
+const BLANK_FORM: TrainingFormData = {
+  name: "",
+  type: "in-person",
+  provider: "",
+  category: "",
+  url: "",
+  venue: "",
+  date_completed: "",
+  expiry_date: "",
+  duration_hours: "",
+  notes: "",
+}
+
+function TrainingModal({
+  employeeId,
+  editing,
+  onClose,
+  onSaved,
+}: {
+  employeeId: string
+  editing: EmployeeTraining | null
+  onClose: () => void
+  onSaved: (record: EmployeeTraining) => void
+}) {
+  const [form, setForm] = useState<TrainingFormData>(
+    editing
+      ? {
+          name: editing.name,
+          type: editing.type,
+          provider: editing.provider ?? "",
+          category: editing.category ?? "",
+          url: editing.url ?? "",
+          venue: editing.venue ?? "",
+          date_completed: editing.date_completed ?? "",
+          expiry_date: editing.expiry_date ?? "",
+          duration_hours: editing.duration_hours?.toString() ?? "",
+          notes: editing.notes ?? "",
+        }
+      : BLANK_FORM
+  )
+  const [certFile, setCertFile] = useState<File | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  function set(key: keyof TrainingFormData, value: string) {
+    setForm((prev) => ({ ...prev, [key]: value }))
+  }
+
+  async function uploadCert(file: File): Promise<string | null> {
+    const supabase = createBrowserClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    )
+    const ext = file.name.split(".").pop()
+    const path = `${employeeId}/${Date.now()}.${ext}`
+    const { error } = await supabase.storage
+      .from("training-certificates")
+      .upload(path, file, { upsert: false })
+    if (error) return null
+    const { data } = supabase.storage.from("training-certificates").getPublicUrl(path)
+    return data.publicUrl
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!form.name.trim()) {
+      setError("Training name is required.")
+      return
+    }
+    setSaving(true)
+    setError(null)
+
+    let certUrl = editing?.certificate_url ?? null
+    if (certFile) {
+      certUrl = await uploadCert(certFile)
+      if (!certUrl) {
+        setError("Certificate upload failed. Try again.")
+        setSaving(false)
+        return
+      }
+    }
+
+    const body = {
+      ...form,
+      duration_hours: form.duration_hours ? Number(form.duration_hours) : null,
+      certificate_url: certUrl,
+    }
+
+    const url = editing
+      ? `/api/employees/${employeeId}/training/${editing.id}`
+      : `/api/employees/${employeeId}/training`
+    const method = editing ? "PATCH" : "POST"
+
+    const res = await fetch(url, {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    })
+
+    setSaving(false)
+    if (!res.ok) {
+      setError("Failed to save. Please try again.")
+      return
+    }
+    const saved = await res.json()
+    onSaved(saved)
+    onClose()
+  }
+
+  const labelClass = "block text-xs font-medium text-muted-foreground mb-1"
+  const inputClass =
+    "w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-ring/30 bg-background"
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="bg-card rounded-xl border border-border shadow-xl w-full max-w-xl max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+          <p className="text-sm font-semibold">{editing ? "Edit Training" : "Add Training"}</p>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
+            <X size={18} />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-5 space-y-4">
+          {error && (
+            <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
+              {error}
+            </div>
+          )}
+
+          <div>
+            <label className={labelClass}>Training Name *</label>
+            <input
+              className={inputClass}
+              value={form.name}
+              onChange={(e) => set("name", e.target.value)}
+              placeholder="e.g. First Aid Level 1"
+              required
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={labelClass}>Type *</label>
+              <select
+                className={inputClass}
+                value={form.type}
+                onChange={(e) => set("type", e.target.value as "online" | "in-person")}
+              >
+                <option value="in-person">In-person</option>
+                <option value="online">Online</option>
+              </select>
+            </div>
+            <div>
+              <label className={labelClass}>Category</label>
+              <select
+                className={inputClass}
+                value={form.category}
+                onChange={(e) => set("category", e.target.value)}
+              >
+                <option value="">— Select —</option>
+                {(Object.keys(TRAINING_CATEGORY_LABELS) as TrainingCategory[]).map((k) => (
+                  <option key={k} value={k}>
+                    {TRAINING_CATEGORY_LABELS[k]}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className={labelClass}>Provider / Institution</label>
+            <input
+              className={inputClass}
+              value={form.provider}
+              onChange={(e) => set("provider", e.target.value)}
+              placeholder="e.g. Coursera, UNISA, Red Cross"
+            />
+          </div>
+
+          {form.type === "online" ? (
+            <div>
+              <label className={labelClass}>Course URL</label>
+              <input
+                className={inputClass}
+                type="url"
+                value={form.url}
+                onChange={(e) => set("url", e.target.value)}
+                placeholder="https://…"
+              />
+            </div>
+          ) : (
+            <div>
+              <label className={labelClass}>Venue</label>
+              <input
+                className={inputClass}
+                value={form.venue}
+                onChange={(e) => set("venue", e.target.value)}
+                placeholder="e.g. Cape Town Training Centre"
+              />
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={labelClass}>Date Completed</label>
+              <input
+                className={inputClass}
+                type="date"
+                value={form.date_completed}
+                onChange={(e) => set("date_completed", e.target.value)}
+              />
+            </div>
+            <div>
+              <label className={labelClass}>Expiry Date</label>
+              <input
+                className={inputClass}
+                type="date"
+                value={form.expiry_date}
+                onChange={(e) => set("expiry_date", e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className={labelClass}>Duration (hours)</label>
+            <input
+              className={inputClass}
+              type="number"
+              min="0"
+              step="0.5"
+              value={form.duration_hours}
+              onChange={(e) => set("duration_hours", e.target.value)}
+              placeholder="e.g. 8"
+            />
+          </div>
+
+          <div>
+            <label className={labelClass}>Certificate</label>
+            <input
+              type="file"
+              accept=".pdf,.jpg,.jpeg,.png,.webp"
+              onChange={(e) => setCertFile(e.target.files?.[0] ?? null)}
+              className="w-full text-sm text-muted-foreground file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border file:border-border file:text-xs file:font-medium file:bg-muted file:text-foreground hover:file:bg-muted/80 cursor-pointer"
+            />
+            {editing?.certificate_url && !certFile && (
+              <p className="text-xs text-muted-foreground mt-1">
+                Certificate on file.{" "}
+                <a
+                  href={editing.certificate_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline"
+                  style={{ color: "var(--brand-primary)" }}
+                >
+                  View
+                </a>
+                {" — "}upload a new file to replace.
+              </p>
+            )}
+          </div>
+
+          <div>
+            <label className={labelClass}>Notes</label>
+            <textarea
+              className={cn(inputClass, "resize-none")}
+              rows={3}
+              value={form.notes}
+              onChange={(e) => set("notes", e.target.value)}
+              placeholder="Any additional context…"
+            />
+          </div>
+
+          <div className="flex justify-end gap-2 pt-1">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 text-sm border border-border rounded-lg hover:bg-muted transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="flex items-center gap-2 px-4 py-2 text-sm text-white rounded-lg disabled:opacity-50 transition-opacity"
+              style={{ background: "var(--brand-primary)" }}
+            >
+              {saving && <Loader2 size={13} className="animate-spin" />}
+              {saving ? "Saving…" : editing ? "Save Changes" : "Add Training"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+// ─── Tab 3: Training & KPIs ───────────────────────────────────────────────────
 
 function TrainingKPITab({
   kpi,
   employeeId,
+  initialTraining,
+  canEdit,
 }: {
   kpi: KpiSummary
   employeeId: string
+  initialTraining: EmployeeTraining[]
+  canEdit: boolean
 }) {
+  const [kpiExpanded, setKpiExpanded] = useState(false)
+  const [training, setTraining] = useState(initialTraining)
+  const [showModal, setShowModal] = useState(false)
+  const [editing, setEditing] = useState<EmployeeTraining | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+
   const STATUS_COLOR: Record<string, string> = {
     draft: "text-gray-500 bg-gray-50 border-gray-200",
     active: "text-blue-700 bg-blue-50 border-blue-200",
     completed: "text-emerald-700 bg-emerald-50 border-emerald-200",
   }
 
+  function handleSaved(record: EmployeeTraining) {
+    setTraining((prev) => {
+      const exists = prev.find((t) => t.id === record.id)
+      if (exists) return prev.map((t) => (t.id === record.id ? record : t))
+      return [record, ...prev]
+    })
+    setEditing(null)
+  }
+
+  async function deleteTraining(id: string) {
+    setDeletingId(id)
+    const res = await fetch(`/api/employees/${employeeId}/training/${id}`, {
+      method: "DELETE",
+    })
+    setDeletingId(null)
+    if (res.ok) {
+      setTraining((prev) => prev.filter((t) => t.id !== id))
+    }
+  }
+
+  const categoryBadgeColors: Record<string, string> = {
+    technical: "text-blue-700 bg-blue-50 border-blue-200",
+    compliance: "text-amber-700 bg-amber-50 border-amber-200",
+    leadership: "text-violet-700 bg-violet-50 border-violet-200",
+    safety: "text-red-700 bg-red-50 border-red-200",
+    "soft-skills": "text-emerald-700 bg-emerald-50 border-emerald-200",
+    other: "text-gray-600 bg-gray-50 border-gray-200",
+  }
+
   return (
     <div className="space-y-6">
+      {/* KPI section */}
       {kpi ? (
         <SectionCard title={`KPI — ${kpi.period}`} subtitle={kpi.title}>
           <div className="flex flex-wrap items-center gap-4 mb-4">
@@ -384,13 +998,15 @@ function TrainingKPITab({
               </span>
             )}
           </div>
-          <Link
-            href={`/kpi/${kpi.reviewId}`}
-            className="text-sm font-medium hover:underline"
+          <button
+            onClick={() => setKpiExpanded((v) => !v)}
+            className="flex items-center gap-1.5 text-sm font-medium hover:underline"
             style={{ color: "var(--brand-primary)" }}
           >
-            View full KPI review →
-          </Link>
+            {kpiExpanded ? "Hide KPI details" : "View KPI details"}
+            {kpiExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+          </button>
+          {kpiExpanded && <KpiDetailPanel reviewId={kpi.reviewId} />}
         </SectionCard>
       ) : (
         <SectionCard>
@@ -408,17 +1024,167 @@ function TrainingKPITab({
         </SectionCard>
       )}
 
-      <SectionCard title="Training" subtitle="Courses and certifications">
-        <div className="text-center py-8">
-          <BookOpen size={36} className="mx-auto mb-3 text-muted-foreground" />
-          <p className="text-sm text-muted-foreground">Training module coming soon.</p>
-        </div>
+      {/* Training section */}
+      <SectionCard
+        title="Training"
+        subtitle="Courses and certifications"
+        action={
+          canEdit ? (
+            <button
+              onClick={() => { setEditing(null); setShowModal(true) }}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-white rounded-lg transition-opacity hover:opacity-90"
+              style={{ background: "var(--brand-primary)" }}
+            >
+              <Plus size={14} />
+              Add
+            </button>
+          ) : undefined
+        }
+        padded={training.length === 0}
+      >
+        {training.length === 0 ? (
+          <div className="text-center py-8">
+            <BookOpen size={36} className="mx-auto mb-3 text-muted-foreground" />
+            <p className="text-sm text-muted-foreground">No training records yet.</p>
+            {canEdit && (
+              <button
+                onClick={() => { setEditing(null); setShowModal(true) }}
+                className="text-sm font-medium hover:underline mt-2 inline-block"
+                style={{ color: "var(--brand-primary)" }}
+              >
+                Add first training record →
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="divide-y divide-border">
+            {training.map((t) => {
+              const isExpired =
+                t.expiry_date && new Date(t.expiry_date) < new Date()
+              const isExpiringSoon =
+                t.expiry_date &&
+                !isExpired &&
+                (new Date(t.expiry_date).getTime() - Date.now()) / 86_400_000 <= 30
+
+              return (
+                <div key={t.id} className="px-5 py-4 flex gap-4 items-start">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex flex-wrap items-center gap-2 mb-1">
+                      <p className="text-sm font-semibold text-foreground">{t.name}</p>
+                      <span
+                        className={cn(
+                          "rounded-full border px-2 py-0.5 text-[10px] font-semibold",
+                          t.type === "online"
+                            ? "text-blue-700 bg-blue-50 border-blue-200"
+                            : "text-gray-600 bg-gray-50 border-gray-200"
+                        )}
+                      >
+                        {t.type === "online" ? "Online" : "In-person"}
+                      </span>
+                      {t.category && (
+                        <span
+                          className={cn(
+                            "rounded-full border px-2 py-0.5 text-[10px] font-semibold",
+                            categoryBadgeColors[t.category] ?? "text-gray-600 bg-gray-50 border-gray-200"
+                          )}
+                        >
+                          {TRAINING_CATEGORY_LABELS[t.category as TrainingCategory] ?? t.category}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground mt-1">
+                      {t.provider && <span>{t.provider}</span>}
+                      {t.date_completed && (
+                        <span className="flex items-center gap-1">
+                          <Calendar size={10} />
+                          Completed {fmtDate(t.date_completed)}
+                        </span>
+                      )}
+                      {t.duration_hours && (
+                        <span className="flex items-center gap-1">
+                          <Clock size={10} />
+                          {t.duration_hours}h
+                        </span>
+                      )}
+                      {t.expiry_date && (
+                        <span
+                          className={cn(
+                            "flex items-center gap-1",
+                            isExpired
+                              ? "text-red-600 font-medium"
+                              : isExpiringSoon
+                              ? "text-amber-600 font-medium"
+                              : ""
+                          )}
+                        >
+                          {isExpired ? "⚠ Expired " : isExpiringSoon ? "⚠ Expires " : "Expires "}
+                          {fmtDate(t.expiry_date)}
+                        </span>
+                      )}
+                    </div>
+
+                    {t.notes && (
+                      <p className="text-xs text-muted-foreground mt-1.5 italic">{t.notes}</p>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-1 shrink-0">
+                    {(t.url || t.certificate_url) && (
+                      <a
+                        href={t.certificate_url ?? t.url ?? "#"}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title={t.certificate_url ? "View certificate" : "Open course"}
+                        className="p-1.5 rounded-md hover:bg-muted transition-colors text-muted-foreground"
+                      >
+                        <ExternalLink size={14} />
+                      </a>
+                    )}
+                    {canEdit && (
+                      <>
+                        <button
+                          onClick={() => { setEditing(t); setShowModal(true) }}
+                          title="Edit"
+                          className="p-1.5 rounded-md hover:bg-muted transition-colors text-muted-foreground"
+                        >
+                          <Edit3 size={14} />
+                        </button>
+                        <button
+                          onClick={() => deleteTraining(t.id)}
+                          disabled={deletingId === t.id}
+                          title="Delete"
+                          className="p-1.5 rounded-md hover:bg-red-50 transition-colors text-muted-foreground hover:text-red-600 disabled:opacity-50"
+                        >
+                          {deletingId === t.id ? (
+                            <Loader2 size={14} className="animate-spin" />
+                          ) : (
+                            <Trash2 size={14} />
+                          )}
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
       </SectionCard>
+
+      {showModal && (
+        <TrainingModal
+          employeeId={employeeId}
+          editing={editing}
+          onClose={() => { setShowModal(false); setEditing(null) }}
+          onSaved={handleSaved}
+        />
+      )}
     </div>
   )
 }
 
-// ─── Tab 5: Documents ─────────────────────────────────────────────────────────
+// ─── Tab 4: Documents ─────────────────────────────────────────────────────────
 
 function DocumentsTab({
   initialDocs,
@@ -474,22 +1240,12 @@ function DocumentsTab({
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border bg-muted/40">
-                  <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground">
-                    Document
-                  </th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground">
-                    Category
-                  </th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground hidden sm:table-cell">
-                    Uploaded
-                  </th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground hidden md:table-cell">
-                    Size
-                  </th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground">Document</th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground">Category</th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground hidden sm:table-cell">Uploaded</th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground hidden md:table-cell">Size</th>
                   {isHR && (
-                    <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground">
-                      Staff Visibility
-                    </th>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground">Staff Visibility</th>
                   )}
                   <th className="px-4 py-3" />
                 </tr>
@@ -517,9 +1273,7 @@ function DocumentsTab({
                     {isHR && (
                       <td className="px-4 py-3">
                         <button
-                          onClick={() =>
-                            toggleVisibility(doc.id, doc.hidden_from_employee)
-                          }
+                          onClick={() => toggleVisibility(doc.id, doc.hidden_from_employee)}
                           disabled={togglingId === doc.id}
                           className={cn(
                             "flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-md border transition-colors disabled:opacity-50",
@@ -528,11 +1282,7 @@ function DocumentsTab({
                               : "bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100"
                           )}
                         >
-                          {doc.hidden_from_employee ? (
-                            <EyeOff size={12} />
-                          ) : (
-                            <Eye size={12} />
-                          )}
+                          {doc.hidden_from_employee ? <EyeOff size={12} /> : <Eye size={12} />}
                           {doc.hidden_from_employee ? "Hidden" : "Visible"}
                         </button>
                       </td>
@@ -560,7 +1310,7 @@ function DocumentsTab({
   )
 }
 
-// ─── Tab 6: HR Notes ──────────────────────────────────────────────────────────
+// ─── Tab 5: HR Notes ──────────────────────────────────────────────────────────
 
 function HRNotesTab({
   initialNotes,
@@ -659,6 +1409,16 @@ function profileCompleteness(emp: EmployeeFull): { pct: number; missing: string[
 
 // ─── Print ────────────────────────────────────────────────────────────────────
 
+const LEAVE_LABELS: Record<string, string> = {
+  annual: "Annual Leave",
+  sick: "Sick Leave",
+  family: "Family Responsibility",
+  study: "Study Leave",
+  unpaid: "Unpaid Leave",
+  recess: "Recess Leave",
+  other: "Other",
+}
+
 function buildPrintHTML(emp: EmployeeFull, leaveBalances: LeaveBalance[]): string {
   const now = new Date().toLocaleDateString("en-ZA", {
     day: "numeric",
@@ -748,7 +1508,7 @@ function buildPrintHTML(emp: EmployeeFull, leaveBalances: LeaveBalance[]): strin
 
 // ─── Main export ──────────────────────────────────────────────────────────────
 
-type Tab = "personal" | "banking" | "leave" | "training" | "documents" | "notes"
+type Tab = "personal" | "banking" | "training" | "documents" | "notes"
 
 interface Props {
   employee: EmployeeFull
@@ -756,7 +1516,9 @@ interface Props {
   initialDocuments: EmployeeDocument[]
   initialNotes: HRNote[]
   kpiSummary: KpiSummary
+  initialTraining: EmployeeTraining[]
   isHR: boolean
+  isOwnProfile: boolean
   canViewDocuments: boolean
   canViewBanking: boolean
   canViewNotes: boolean
@@ -770,7 +1532,9 @@ export function EmployeeDetailClient({
   initialDocuments,
   initialNotes,
   kpiSummary,
+  initialTraining,
   isHR,
+  isOwnProfile,
   canViewDocuments,
   canViewBanking,
   canViewNotes,
@@ -791,7 +1555,6 @@ export function EmployeeDetailClient({
   const tabs: { key: Tab; label: string }[] = [
     { key: "personal", label: "Personal & Employment" },
     ...(canViewBanking ? [{ key: "banking" as Tab, label: "Banking & Payroll" }] : []),
-    { key: "leave", label: "Leave" },
     { key: "training", label: "Training & KPIs" },
     ...(canViewDocuments
       ? [
@@ -804,7 +1567,6 @@ export function EmployeeDetailClient({
     ...(canViewNotes ? [{ key: "notes" as Tab, label: "HR Notes" }] : []),
   ]
 
-  // Ensure active tab is always valid
   const activeTab = tabs.some((t) => t.key === tab) ? tab : "personal"
 
   function handlePrint() {
@@ -820,18 +1582,13 @@ export function EmployeeDetailClient({
     }, 300)
   }
 
-  // Contract expiry check
   const contractWarning = (() => {
     if (!emp.contractEndDate) return null
     const daysLeft = Math.round(
       (new Date(emp.contractEndDate).getTime() - Date.now()) / 86_400_000
     )
-    if (daysLeft <= 0) {
-      return { type: "expired" as const, daysLeft }
-    }
-    if (daysLeft <= 30) {
-      return { type: "expiring" as const, daysLeft }
-    }
+    if (daysLeft <= 0) return { type: "expired" as const, daysLeft }
+    if (daysLeft <= 30) return { type: "expiring" as const, daysLeft }
     return null
   })()
 
@@ -849,7 +1606,6 @@ export function EmployeeDetailClient({
       {/* ── Profile header ──────────────────────────────────────────────── */}
       <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
         <div className="flex flex-col sm:flex-row gap-5 items-start">
-          {/* Avatar */}
           <div
             className="w-20 h-20 rounded-full flex items-center justify-center text-white text-2xl font-bold shrink-0 shadow-md"
             style={{ background: "var(--brand-primary)" }}
@@ -857,7 +1613,6 @@ export function EmployeeDetailClient({
             {emp.avatarInitials}
           </div>
 
-          {/* Core info */}
           <div className="flex-1 min-w-0">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
@@ -877,7 +1632,6 @@ export function EmployeeDetailClient({
               <StatusBadge status={emp.status} />
             </div>
 
-            {/* Quick info row */}
             <div className="flex flex-wrap gap-x-5 gap-y-1.5 mt-3 text-sm text-muted-foreground">
               <span className="flex items-center gap-1.5">
                 <Mail size={13} />
@@ -903,7 +1657,6 @@ export function EmployeeDetailClient({
               )}
             </div>
 
-            {/* Profile completeness — HR only */}
             {isHR && (
               <div className="mt-4">
                 <div className="flex items-center justify-between text-xs mb-1">
@@ -936,8 +1689,7 @@ export function EmployeeDetailClient({
                 </div>
                 {missing.length > 0 && (
                   <p className="text-xs text-muted-foreground mt-1">
-                    Missing:{" "}
-                    {missing.slice(0, 3).join(", ")}
+                    Missing: {missing.slice(0, 3).join(", ")}
                     {missing.length > 3 ? ` +${missing.length - 3} more` : ""}
                   </p>
                 )}
@@ -945,7 +1697,6 @@ export function EmployeeDetailClient({
             )}
           </div>
 
-          {/* Action buttons — HR only */}
           {isHR && (
             <div className="flex flex-col sm:flex-row gap-2 shrink-0">
               <Link
@@ -979,7 +1730,6 @@ export function EmployeeDetailClient({
           )}
         </div>
 
-        {/* Contract warning */}
         {contractWarning && (
           <div
             className={cn(
@@ -1035,11 +1785,17 @@ export function EmployeeDetailClient({
       </div>
 
       {/* ── Tab content ───────────────────────────────────────────────────── */}
-      {activeTab === "personal" && <PersonalTab emp={emp} isHR={isHR} />}
+      {activeTab === "personal" && (
+        <PersonalTab emp={emp} isHR={isHR} isOwnProfile={isOwnProfile} />
+      )}
       {activeTab === "banking" && canViewBanking && <BankingTab emp={emp} />}
-      {activeTab === "leave" && <LeaveTab balances={leaveBalances} />}
       {activeTab === "training" && (
-        <TrainingKPITab kpi={kpiSummary} employeeId={emp.id} />
+        <TrainingKPITab
+          kpi={kpiSummary}
+          employeeId={emp.id}
+          initialTraining={initialTraining}
+          canEdit={isHR || isOwnProfile}
+        />
       )}
       {activeTab === "documents" && canViewDocuments && (
         <DocumentsTab

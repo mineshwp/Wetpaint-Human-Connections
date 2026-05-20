@@ -121,43 +121,55 @@ export async function PATCH(
   } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-  const role = await getUserRole(supabase, user.id)
-  if (role !== "hr") return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  const [role, myEmployeeId] = await Promise.all([
+    getUserRole(supabase, user.id),
+    getEmployeeIdForUser(supabase, user.id),
+  ])
 
   const { id } = await params
+  const isHR = role === "hr"
+  const isOwnProfile = myEmployeeId === id
+
+  if (!isHR && !isOwnProfile) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  }
 
   const body = await req.json()
-
-  // Convert empty strings to null
   const toNull = (v: unknown) => (v === "" ? null : v)
-
   const updates: Record<string, unknown> = {}
 
-  const textFields = [
-    "first_name", "last_name", "phone", "alternate_phone",
-    "personal_email", "work_email", "home_address",
-    "next_of_kin_name", "next_of_kin_phone", "next_of_kin_relationship",
-    "employee_number", "job_title", "department_id", "manager_id",
-    "contract_type", "gender", "race", "disability", "citizenship_status",
-    "vat_number", "identity_number", "status",
-    "bank_name", "bank_account_number", "bank_branch_code",
-    "bank_account_type", "bank_verification_status",
-    "salary_band",
-  ]
-  const dateFields = [
-    "start_date", "contract_end_date", "probation_end_date",
-    "last_salary_review_date", "date_of_birth", "resignation_date",
-  ]
-
-  if ("is_archived" in body) {
-    updates.is_archived = Boolean(body.is_archived)
-  }
-
-  for (const field of textFields) {
-    if (field in body) updates[field] = toNull(body[field])
-  }
-  for (const field of dateFields) {
-    if (field in body) updates[field] = toNull(body[field])
+  if (isHR) {
+    const textFields = [
+      "first_name", "last_name", "phone", "alternate_phone",
+      "personal_email", "work_email", "home_address",
+      "next_of_kin_name", "next_of_kin_phone", "next_of_kin_relationship",
+      "employee_number", "job_title", "department_id", "manager_id",
+      "contract_type", "gender", "race", "disability", "citizenship_status",
+      "vat_number", "identity_number", "status",
+      "bank_name", "bank_account_number", "bank_branch_code",
+      "bank_account_type", "bank_verification_status",
+      "salary_band",
+    ]
+    const dateFields = [
+      "start_date", "contract_end_date", "probation_end_date",
+      "last_salary_review_date", "date_of_birth", "resignation_date",
+    ]
+    if ("is_archived" in body) updates.is_archived = Boolean(body.is_archived)
+    for (const field of textFields) {
+      if (field in body) updates[field] = toNull(body[field])
+    }
+    for (const field of dateFields) {
+      if (field in body) updates[field] = toNull(body[field])
+    }
+  } else {
+    // Staff: only contact details (no work email) and next of kin
+    const allowedFields = [
+      "phone", "alternate_phone", "personal_email",
+      "next_of_kin_name", "next_of_kin_phone", "next_of_kin_relationship",
+    ]
+    for (const field of allowedFields) {
+      if (field in body) updates[field] = toNull(body[field])
+    }
   }
 
   // Recompute avatar_initials when name changes

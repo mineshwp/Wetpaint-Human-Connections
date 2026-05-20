@@ -96,3 +96,30 @@ export type KpiSummary = {
   status: string
   deadline: string | null
 } | null
+
+export type TrainingType = "online" | "in-person"
+export type TrainingCategory =
+  | "technical"
+  | "compliance"
+  | "leadership"
+  | "safety"
+  | "soft-skills"
+  | "other"
+
+export type EmployeeTraining = {
+  id: string
+  employee_id: string
+  name: string
+  type: TrainingType
+  provider: string | null
+  category: TrainingCategory | null
+  url: string | null
+  venue: string | null
+  date_completed: string | null
+  expiry_date: string | null
+  duration_hours: number | null
+  certificate_url: string | null
+  notes: string | null
+  created_at: string
+  updated_at: string
+}
