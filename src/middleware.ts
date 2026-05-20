@@ -27,13 +27,23 @@ export async function middleware(request: NextRequest) {
 
   const { pathname } = request.nextUrl
 
-  const publicPaths = ['/login', '/auth/callback']
+  const publicPaths = ['/login', '/auth/callback', '/api/auth/signout-domain-error']
   const isPublic = publicPaths.some((p) => pathname.startsWith(p))
 
   if (!user && !isPublic) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     return NextResponse.redirect(url)
+  }
+
+  // Block non-wetpaint.co.za accounts from accessing protected routes
+  if (user && !isPublic) {
+    const email = user.email ?? ''
+    if (!email.endsWith('@wetpaint.co.za')) {
+      const url = request.nextUrl.clone()
+      url.pathname = '/api/auth/signout-domain-error'
+      return NextResponse.redirect(url)
+    }
   }
 
   return supabaseResponse

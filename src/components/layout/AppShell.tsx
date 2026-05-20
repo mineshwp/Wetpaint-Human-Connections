@@ -55,6 +55,7 @@ export function AppShell({
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
         roleBadge={roleBadge}
+        isHR={isHR}
         isImpersonating={!!impersonating}
       />
 

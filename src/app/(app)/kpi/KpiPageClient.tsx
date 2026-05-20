@@ -5,7 +5,7 @@ import {
   ChevronDown, Plus, Trash2, X, Check,
   Users, UserPlus, Send, Clock, CheckCircle2, XCircle,
   Loader2, BarChart3, FileText, Target, Heart, Building2,
-  Upload, Search,
+  Upload, Search, Pencil,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -217,11 +217,18 @@ function ScorerRow({ name, role, scoreObj, canEdit, item, onSave }: {
 
 // ─── KPI Card ───────────────────────────────────────────────────────────────────
 
-function KpiCard({ item, itemIndex, sectionType, scores, invitees, isHR, currentEmployeeId, onScoreChange }: {
+function KpiCard({ item, itemIndex, sectionType, scores, invitees, isHR, currentEmployeeId, onScoreChange, onEditItem }: {
   item: TemplateItem; itemIndex: number; sectionType: "invitee" | "hr"
   scores: Score[]; invitees: ReviewInvitee[]; isHR: boolean; currentEmployeeId: string | null
   onScoreChange: (itemId: string, score: number | null, comments: string) => Promise<void>
+  onEditItem?: (itemId: string, data: { title: string; description: string; max_score: number }) => Promise<void>
 }) {
+  const [editMode, setEditMode]     = useState(false)
+  const [editTitle, setEditTitle]   = useState(item.title)
+  const [editDesc, setEditDesc]     = useState(item.description ?? "")
+  const [editMax, setEditMax]       = useState(item.max_score)
+  const [editSaving, setEditSaving] = useState(false)
+
   const scoreMap = new Map<string, Score>()
   for (const s of scores) scoreMap.set(`${s.item_id}::${s.scorer_id ?? "hr"}`, s)
 
@@ -256,37 +263,91 @@ function KpiCard({ item, itemIndex, sectionType, scores, invitees, isHR, current
     }
   }
 
+  async function handleEditSave() {
+    if (!onEditItem || !editTitle.trim()) return
+    setEditSaving(true)
+    await onEditItem(item.id, { title: editTitle.trim(), description: editDesc, max_score: editMax })
+    setEditSaving(false)
+    setEditMode(false)
+  }
+
   return (
     <article className="border border-border rounded-xl overflow-hidden bg-card transition-shadow hover:shadow-sm">
       <div className="flex justify-between items-start px-5 py-4 bg-muted/20 border-b border-border gap-4">
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 mb-1">
             <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
             <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-              KPI {itemIndex + 1} · Max {item.max_score}
+              KPI {itemIndex + 1} · Max {editMode ? editMax : item.max_score}
             </span>
           </div>
-          <h3 className="font-semibold text-[15px] text-foreground leading-snug">{item.title}</h3>
+          {editMode ? (
+            <input
+              autoFocus
+              value={editTitle}
+              onChange={e => setEditTitle(e.target.value)}
+              className="w-full rounded-lg border border-primary bg-card px-3 py-1.5 text-[15px] font-semibold focus:outline-none focus:ring-1 focus:ring-primary"
+            />
+          ) : (
+            <h3 className="font-semibold text-[15px] text-foreground leading-snug">{item.title}</h3>
+          )}
         </div>
-        {avgScore !== null && (
-          <div className="text-right shrink-0">
-            <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Avg Score</div>
-            <div className="text-2xl font-bold leading-none text-foreground">
-              {avgScore % 1 === 0 ? avgScore : avgScore.toFixed(1)}
-              <span className="text-muted-foreground font-medium text-sm"> / {item.max_score}</span>
+        <div className="flex items-center gap-2 shrink-0">
+          {isHR && !editMode && (
+            <button
+              type="button"
+              onClick={() => { setEditTitle(item.title); setEditDesc(item.description ?? ""); setEditMax(item.max_score); setEditMode(true) }}
+              className="w-7 h-7 rounded-lg border border-border flex items-center justify-center text-muted-foreground hover:text-primary hover:border-primary/60 transition-colors"
+            >
+              <Pencil size={12} />
+            </button>
+          )}
+          {avgScore !== null && !editMode && (
+            <div className="text-right">
+              <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Avg Score</div>
+              <div className="text-2xl font-bold leading-none text-foreground">
+                {avgScore % 1 === 0 ? avgScore : avgScore.toFixed(1)}
+                <span className="text-muted-foreground font-medium text-sm"> / {item.max_score}</span>
+              </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
       <div className="grid grid-cols-1 divide-border">
-        <div className="px-5 py-4 space-y-4">
+        <div className="px-5 py-4 space-y-3">
           <div>
             <h4 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Description</h4>
-            {item.description
-              ? <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-line">{item.description}</p>
-              : <p className="text-sm text-muted-foreground italic">No description provided.</p>
-            }
+            {editMode ? (
+              <textarea
+                rows={5}
+                value={editDesc}
+                onChange={e => setEditDesc(e.target.value)}
+                className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-primary"
+              />
+            ) : item.description ? (
+              <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-line">{item.description}</p>
+            ) : (
+              <p className="text-sm text-muted-foreground italic">No description provided.</p>
+            )}
           </div>
+          {editMode && (
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-medium text-muted-foreground block mb-1">Max Score</label>
+                <input
+                  type="number" min={1} value={editMax}
+                  onChange={e => setEditMax(Number(e.target.value))}
+                  className="w-24 rounded-lg border border-border bg-card px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+              </div>
+              <div className="flex gap-2">
+                <Button size="sm" onClick={handleEditSave} disabled={!editTitle.trim() || editSaving} className="h-7 text-xs gap-1">
+                  {editSaving ? <Loader2 size={10} className="animate-spin" /> : <Check size={10} />} Save
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setEditMode(false)} className="h-7 text-xs">Cancel</Button>
+              </div>
+            </div>
+          )}
         </div>
         <div className="px-5 pb-4 space-y-3">
           <h4 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Scoring</h4>
@@ -330,11 +391,12 @@ function KpiCard({ item, itemIndex, sectionType, scores, invitees, isHR, current
 
 // ─── Section Accordion ──────────────────────────────────────────────────────────
 
-function SectionAccordion({ section, sectionIndex, scores, invitees, isHR, currentEmployeeId, onScoreChange, onAddItem, defaultOpen }: {
+function SectionAccordion({ section, sectionIndex, scores, invitees, isHR, currentEmployeeId, onScoreChange, onAddItem, onEditItem, defaultOpen }: {
   section: TemplateSection; sectionIndex: number; scores: Score[]; invitees: ReviewInvitee[]
   isHR: boolean; currentEmployeeId: string | null
   onScoreChange: (itemId: string, score: number | null, comments: string) => Promise<void>
   onAddItem?: (sectionId: string, data: { title: string; description: string; min_score: number; max_score: number }) => Promise<void>
+  onEditItem?: (itemId: string, data: { title: string; description: string; max_score: number }) => Promise<void>
   defaultOpen?: boolean
 }) {
   const [open, setOpen]           = useState(defaultOpen ?? sectionIndex === 0)
@@ -420,7 +482,7 @@ function SectionAccordion({ section, sectionIndex, scores, invitees, isHR, curre
               <KpiCard
                 key={item.id} item={item} itemIndex={idx} sectionType={section.type}
                 scores={scores} invitees={invitees} isHR={isHR} currentEmployeeId={currentEmployeeId}
-                onScoreChange={onScoreChange}
+                onScoreChange={onScoreChange} onEditItem={onEditItem}
               />
             ))
           )}
@@ -646,7 +708,7 @@ function CreateReviewModal({ employees, currentPeriod, preselectedEmployeeId, pr
 
 // ─── Quarter Panel (within staff row) ──────────────────────────────────────────
 
-function QuarterPanel({ review, template, scores, allEmployees, currentEmployeeId, isHR, onScoreChange, onAddInvitee, onRemoveInvitee, onStatusChange, onDelete, onAddItem }: {
+function QuarterPanel({ review, template, scores, allEmployees, currentEmployeeId, isHR, onScoreChange, onAddInvitee, onRemoveInvitee, onStatusChange, onDelete, onAddItem, onEditItem }: {
   review: Review; template: TemplateSection[]; scores: Score[]
   allEmployees: Employee[]; currentEmployeeId: string | null; isHR: boolean
   onScoreChange: (reviewId: string, itemId: string, score: number | null, comments: string) => Promise<void>
@@ -655,6 +717,7 @@ function QuarterPanel({ review, template, scores, allEmployees, currentEmployeeI
   onStatusChange: (reviewId: string, status: string) => Promise<void>
   onDelete: (reviewId: string) => void
   onAddItem?: (sectionId: string, data: { title: string; description: string; min_score: number; max_score: number }) => Promise<void>
+  onEditItem?: (itemId: string, data: { title: string; description: string; max_score: number }) => Promise<void>
 }) {
   const invitees       = review.kpi_review_invitees ?? []
   const reviewTemplate = templateForReview(template, scores)
@@ -743,7 +806,7 @@ function QuarterPanel({ review, template, scores, allEmployees, currentEmployeeI
             scores={scores} invitees={review.kpi_review_invitees ?? []}
             isHR={isHR} currentEmployeeId={currentEmployeeId}
             onScoreChange={(itemId, score, comments) => onScoreChange(review.id, itemId, score, comments)}
-            onAddItem={onAddItem} defaultOpen={idx === 0}
+            onAddItem={onAddItem} onEditItem={onEditItem} defaultOpen={idx === 0}
           />
         ))}
       </div>
@@ -753,7 +816,7 @@ function QuarterPanel({ review, template, scores, allEmployees, currentEmployeeI
 
 // ─── Staff Row (HR admin view) ──────────────────────────────────────────────────
 
-function StaffRow({ employee, reviews, scores, template, allEmployees, currentEmployeeId, onScoreChange, onAddInvitee, onRemoveInvitee, onStatusChange, onDelete, onAddItem, onCreateReview, initialOpenQuarter }: {
+function StaffRow({ employee, reviews, scores, template, allEmployees, currentEmployeeId, onScoreChange, onAddInvitee, onRemoveInvitee, onStatusChange, onDelete, onAddItem, onEditItem, onCreateReview, initialOpenQuarter }: {
   employee: Employee
   reviews: Review[]
   scores: Record<string, Score[]>
@@ -766,6 +829,7 @@ function StaffRow({ employee, reviews, scores, template, allEmployees, currentEm
   onStatusChange: (reviewId: string, status: string) => Promise<void>
   onDelete: (reviewId: string) => void
   onAddItem?: (sectionId: string, data: { title: string; description: string; min_score: number; max_score: number }) => Promise<void>
+  onEditItem?: (itemId: string, data: { title: string; description: string; max_score: number }) => Promise<void>
   onCreateReview: (employeeId: string, quarter: Quarter) => void
   initialOpenQuarter?: Quarter
 }) {
@@ -904,6 +968,7 @@ function StaffRow({ employee, reviews, scores, template, allEmployees, currentEm
               onStatusChange={onStatusChange}
               onDelete={onDelete}
               onAddItem={onAddItem}
+              onEditItem={onEditItem}
             />
           ) : (
             <div className="flex flex-col items-center justify-center py-10 text-muted-foreground gap-3">
@@ -922,7 +987,7 @@ function StaffRow({ employee, reviews, scores, template, allEmployees, currentEm
 
 // ─── HR Admin View ──────────────────────────────────────────────────────────────
 
-function HRAdminView({ template, reviews, scores, allEmployees, currentEmployeeId, onScoreChange, onAddInvitee, onRemoveInvitee, onStatusChange, onDelete, onAddItem, onShowCreate, onImport }: {
+function HRAdminView({ template, reviews, scores, allEmployees, currentEmployeeId, onScoreChange, onAddInvitee, onRemoveInvitee, onStatusChange, onDelete, onAddItem, onEditItem, onShowCreate, onImport }: {
   template: TemplateSection[]
   reviews: Review[]
   scores: Record<string, Score[]>
@@ -934,6 +999,7 @@ function HRAdminView({ template, reviews, scores, allEmployees, currentEmployeeI
   onStatusChange: (reviewId: string, status: string) => Promise<void>
   onDelete: (reviewId: string) => void
   onAddItem?: (sectionId: string, data: { title: string; description: string; min_score: number; max_score: number }) => Promise<void>
+  onEditItem?: (itemId: string, data: { title: string; description: string; max_score: number }) => Promise<void>
   onShowCreate: (employeeId?: string, quarter?: Quarter) => void
   onImport: () => Promise<void>
 }) {
@@ -1096,6 +1162,7 @@ function HRAdminView({ template, reviews, scores, allEmployees, currentEmployeeI
               onStatusChange={onStatusChange}
               onDelete={onDelete}
               onAddItem={onAddItem}
+              onEditItem={onEditItem}
               onCreateReview={(empId, quarter) => onShowCreate(empId, quarter)}
             />
           ))}
@@ -1336,6 +1403,15 @@ export function KpiPageClient({ isHR, currentEmployeeId }: { isHR: boolean; curr
     else showToast("Failed to add KPI item")
   }
 
+  async function handleEditItem(itemId: string, data: { title: string; description: string; max_score: number }) {
+    const res = await fetch(`/api/kpi/template/items/${itemId}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    })
+    if (res.ok) { showToast("KPI item updated"); await loadAll() }
+    else showToast("Failed to update KPI item")
+  }
+
   async function handleCreate(d: { employee_id: string; period: string; title: string; deadline: string }) {
     setCreating(true)
     const res = await fetch("/api/kpi/reviews", {
@@ -1430,6 +1506,7 @@ export function KpiPageClient({ isHR, currentEmployeeId }: { isHR: boolean; curr
               onStatusChange={handleStatusChange}
               onDelete={handleDeleteReview}
               onAddItem={handleAddItem}
+              onEditItem={handleEditItem}
               onShowCreate={handleShowCreate}
               onImport={handleImport}
             />

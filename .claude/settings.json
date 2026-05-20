@@ -8,10 +8,16 @@
       "Bash(git commit -m ' *)",
       "mcp__vercel__get_deployment_build_logs",
       "mcp__vercel__web_fetch_vercel_url",
-      "Bash(rm /Users/mineshsingh/Documents/Wetpaint/SAAS/wetpaint-human-connections/.git/index.lock && git add -A)"
+      "Bash(rm /Users/mineshsingh/Documents/Wetpaint/SAAS/wetpaint-human-connections/.git/index.lock && git add -A)",
+      "Bash(rm -f /Users/mineshsingh/Documents/Wetpaint/SAAS/wetpaint-human-connections/.git/HEAD.lock /Users/mineshsingh/Documents/Wetpaint/SAAS/wetpaint-human-connections/.git/index.lock)",
+      "Bash(mkdir -p /Users/mineshsingh/Documents/Wetpaint/SAAS/wetpaint-human-connections/src/app/api/kpi/template/items/\\\\[id\\\\])",
+      "mcp__vercel__deploy_to_vercel",
+      "Bash(mkdir -p /Users/mineshsingh/Documents/Wetpaint/SAAS/wetpaint-human-connections/src/app/api/settings/admins/\\\\[userId\\\\])"
     ],
     "additionalDirectories": [
-      "/Users/mineshsingh/Documents/Wetpaint/SAAS/wetpaint-human-connections/.git"
+      "/Users/mineshsingh/Documents/Wetpaint/SAAS/wetpaint-human-connections/.git",
+      "/Users/mineshsingh/Documents/Wetpaint/SAAS/wetpaint-human-connections/src/app/api/kpi/template/items",
+      "/Users/mineshsingh/Documents/Wetpaint/SAAS/wetpaint-human-connections/src/app/api/settings/admins"
     ]
   }
 }

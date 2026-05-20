@@ -2,7 +2,7 @@
 
 import Image from "next/image"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { useState, useEffect, useRef, useCallback, FormEvent, Suspense } from "react"
 import { Eye, EyeOff, LogIn, AlertCircle } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
@@ -123,11 +123,16 @@ function LoginForm() {
     return () => window.removeEventListener("mousemove", onMove)
   }, [])
 
+  const searchParams = useSearchParams()
+  const isDomainError = searchParams.get("error") === "unauthorized_domain"
+
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [showPwd, setShowPwd] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(
+    isDomainError ? "Access is restricted to @wetpaint.co.za email addresses." : null
+  )
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
