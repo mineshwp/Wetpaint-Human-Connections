@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
   const { data: emp, error: empError } = await supabase
     .from("employees")
     .select("id, first_name, last_name, email")
-    .eq("email", normalised)
+    .ilike("email", normalised)
     .single()
 
   if (empError || !emp) {
