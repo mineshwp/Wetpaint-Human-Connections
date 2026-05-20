@@ -1126,7 +1126,7 @@ function MyAssignmentsView({ reviews, scores, template, currentEmployeeId, isHR,
       {myAssignments.length === 0 ? (
         <div className="flex flex-col items-center justify-center h-48 text-muted-foreground gap-3">
           <FileText size={36} className="opacity-30" />
-          <p className="text-sm">{isHR ? "You have no pending scoring assignments." : "No KPI reviews found yet."}</p>
+          <p className="text-sm">No KPI reviews found yet.</p>
         </div>
       ) : myAssignments.map(review => {
         const myInv = review.kpi_review_invitees.find(i => i.invitee_id === currentEmployeeId)
@@ -1361,7 +1361,7 @@ export function KpiPageClient({ isHR, currentEmployeeId }: { isHR: boolean; curr
 
   const tabs: { id: Tab; label: string; icon: React.ElementType }[] = [
     ...(isHR ? [{ id: "reviews" as Tab, label: "All Reviews", icon: BarChart3 }] : []),
-    { id: "myassignments" as Tab, label: isHR ? "My Assignments" : "My Reviews", icon: FileText },
+    { id: "myassignments" as Tab, label: "My Reviews", icon: FileText },
   ]
 
   return (
