@@ -1,31 +1,36 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { getUserRole, getEmployeeIdForUser } from "@/lib/auth"
+import { getImpersonationContext } from "@/lib/impersonation"
 
 async function canAccessReview(
   supabase: Awaited<ReturnType<typeof createClient>>,
   userId: string,
   reviewId: string
 ): Promise<boolean> {
-  const [role, myEmployeeId] = await Promise.all([
+  const [role, myEmployeeId, impersonating] = await Promise.all([
     getUserRole(supabase, userId),
     getEmployeeIdForUser(supabase, userId),
+    getImpersonationContext(),
   ])
-  if (role === "hr") return true
-  if (!myEmployeeId) return false
+  const effectiveRole = role === "hr" && impersonating ? "staff" : role
+  const effectiveEmployeeId = role === "hr" && impersonating ? impersonating.employeeId : myEmployeeId
+
+  if (effectiveRole === "hr") return true
+  if (!effectiveEmployeeId) return false
 
   const { data: review } = await supabase
     .from("kpi_reviews")
     .select("employee_id")
     .eq("id", reviewId)
     .single()
-  if (review?.employee_id === myEmployeeId) return true
+  if (review?.employee_id === effectiveEmployeeId) return true
 
   const { data: inv } = await supabase
     .from("kpi_review_invitees")
     .select("id")
     .eq("review_id", reviewId)
-    .eq("invitee_id", myEmployeeId)
+    .eq("invitee_id", effectiveEmployeeId)
     .single()
   return !!inv
 }
@@ -61,10 +66,13 @@ export async function PUT(
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-  const [role, myEmployeeId] = await Promise.all([
+  const [role, myEmployeeId, impersonating] = await Promise.all([
     getUserRole(supabase, user.id),
     getEmployeeIdForUser(supabase, user.id),
+    getImpersonationContext(),
   ])
+  const effectiveRole = role === "hr" && impersonating ? "staff" : role
+  const effectiveEmployeeId = role === "hr" && impersonating ? impersonating.employeeId : myEmployeeId
 
   const body = await req.json()
   const { item_id, score, comments } = body
@@ -74,18 +82,18 @@ export async function PUT(
   // HR scores with scorer_id = null; invitees score with their own employee id
   let scorerId: string | null = null
 
-  if (role !== "hr") {
-    if (!myEmployeeId) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  if (effectiveRole !== "hr") {
+    if (!effectiveEmployeeId) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     // Verify this person is an accepted invitee on this review
     const { data: inv } = await supabase
       .from("kpi_review_invitees")
       .select("id")
       .eq("review_id", reviewId)
-      .eq("invitee_id", myEmployeeId)
+      .eq("invitee_id", effectiveEmployeeId)
       .in("status", ["accepted", "completed"])
       .single()
     if (!inv) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-    scorerId = myEmployeeId
+    scorerId = effectiveEmployeeId
   }
 
   const upsertData = {

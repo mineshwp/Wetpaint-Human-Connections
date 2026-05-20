@@ -510,6 +510,20 @@ type KpiScore = {
   comments: string | null
 }
 
+function templateForKpiReview(sections: KpiSection[], scores: KpiScore[]) {
+  const scoredItemIds = new Set(scores.map((score) => score.item_id))
+
+  return sections.map((section) => {
+    const items = section.kpi_template_items ?? []
+    const scoredItems = items.filter((item) => scoredItemIds.has(item.id))
+
+    return {
+      ...section,
+      kpi_template_items: section.position === 1 && scoredItems.length > 0 ? scoredItems : items,
+    }
+  })
+}
+
 function KpiDetailPanel({ reviewId }: { reviewId: string }) {
   const [sections, setSections] = useState<KpiSection[]>([])
   const [scores, setScores] = useState<KpiScore[]>([])
@@ -527,8 +541,9 @@ function KpiDetailPanel({ reviewId }: { reviewId: string }) {
         ])
         if (!tplRes.ok || !scoresRes.ok) throw new Error("Failed to load")
         const [tpl, sc] = await Promise.all([tplRes.json(), scoresRes.json()])
-        setSections(tpl.sections ?? tpl ?? [])
-        setScores(sc ?? [])
+        const nextScores = sc ?? []
+        setSections(templateForKpiReview(tpl.sections ?? tpl ?? [], nextScores))
+        setScores(nextScores)
       } catch {
         setError("Could not load KPI details.")
       } finally {

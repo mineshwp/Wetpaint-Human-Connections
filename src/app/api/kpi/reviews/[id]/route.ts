@@ -1,18 +1,23 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { getUserRole, getEmployeeIdForUser } from "@/lib/auth"
+import { getImpersonationContext } from "@/lib/impersonation"
 
 async function canAccessReview(
   supabase: Awaited<ReturnType<typeof createClient>>,
   userId: string,
   reviewId: string
 ): Promise<boolean> {
-  const [role, myEmployeeId] = await Promise.all([
+  const [role, myEmployeeId, impersonating] = await Promise.all([
     getUserRole(supabase, userId),
     getEmployeeIdForUser(supabase, userId),
+    getImpersonationContext(),
   ])
-  if (role === "hr") return true
-  if (!myEmployeeId) return false
+  const effectiveRole = role === "hr" && impersonating ? "staff" : role
+  const effectiveEmployeeId = role === "hr" && impersonating ? impersonating.employeeId : myEmployeeId
+
+  if (effectiveRole === "hr") return true
+  if (!effectiveEmployeeId) return false
 
   // Review owner or invitee
   const { data: review } = await supabase
@@ -20,13 +25,13 @@ async function canAccessReview(
     .select("employee_id")
     .eq("id", reviewId)
     .single()
-  if (review?.employee_id === myEmployeeId) return true
+  if (review?.employee_id === effectiveEmployeeId) return true
 
   const { data: inv } = await supabase
     .from("kpi_review_invitees")
     .select("id")
     .eq("review_id", reviewId)
-    .eq("invitee_id", myEmployeeId)
+    .eq("invitee_id", effectiveEmployeeId)
     .single()
   return !!inv
 }

@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s 'https://api.vercel.com/v6/deployments?projectId=prj_SYkJaR7c7gqW9TGsBC4xtXhoJouA&limit=3' -H 'Authorization: Bearer __CMDSUB_OUTPUT__')",
+      "Bash(python3 -c ' *)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(list\\(d.keys\\(\\)\\)\\)\")",
+      "Bash(vercel --prod --yes)",
+      "Bash(git commit -m ' *)",
+      "mcp__vercel__get_deployment_build_logs",
+      "mcp__vercel__web_fetch_vercel_url"
+    ]
+  }
+}

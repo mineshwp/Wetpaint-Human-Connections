@@ -1,10 +1,11 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useCallback } from "react"
 import {
   ChevronDown, Plus, Trash2, X, Check,
   Users, UserPlus, Send, Clock, CheckCircle2, XCircle,
-  Loader2, BarChart3, FileText,
+  Loader2, BarChart3, FileText, Target, Heart, Building2,
+  Upload, Search,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -36,6 +37,7 @@ interface Score {
 }
 interface Employee {
   id: string; first_name: string; last_name: string; job_title: string; email?: string
+  department?: { name: string } | null
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────────
@@ -47,15 +49,42 @@ const INVITEE_STATUS: Record<string, { label: string; cls: string; icon: React.E
   completed: { label: "Completed", cls: "bg-emerald-50 text-emerald-700 border-emerald-200", icon: CheckCircle2 },
 }
 
-const REVIEW_STATUS_CLS: Record<string, string> = {
-  draft:     "bg-muted text-muted-foreground border-border",
-  active:    "bg-blue-50 text-blue-700 border-blue-200",
-  completed: "bg-emerald-50 text-emerald-700 border-emerald-200",
-}
-
 const AVATAR_COLORS = [
   "#3B82F6","#10B981","#F59E0B","#8B5CF6","#EC4899","#14B8A6","#F97316","#6366F1",
 ]
+
+// Section styling config
+const SECTION_CONFIG: Record<number, { icon: React.ElementType; colorClass: string; label: string }> = {
+  1: { icon: Target,    colorClass: "text-blue-600",  label: "KPI Focus Areas: Personal & Department" },
+  2: { icon: Heart,     colorClass: "text-pink-500",  label: "Our Values: Tribe Contract" },
+  3: { icon: Building2, colorClass: "text-amber-600", label: "HR Areas: Tribe Contract" },
+}
+
+// Status display mapping: DB value → display label
+const STATUS_DISPLAY: Record<string, { label: string; chipCls: string }> = {
+  draft:     { label: "Draft",     chipCls: "bg-amber-50 text-amber-700 border-amber-200" },
+  active:    { label: "Published", chipCls: "bg-emerald-50 text-emerald-700 border-emerald-200" },
+  completed: { label: "Completed", chipCls: "bg-emerald-50 text-emerald-700 border-emerald-200" },
+}
+
+// Quarter helpers
+const QUARTERS = [1, 2, 3, 4] as const
+type Quarter = typeof QUARTERS[number]
+
+const QUARTER_LABELS: Record<Quarter, string> = {
+  1: "Q1 · Jan–Mar", 2: "Q2 · Apr–Jun", 3: "Q3 · Jul–Sep", 4: "Q4 · Oct–Dec"
+}
+
+function periodToQuarter(period: string): Quarter | null {
+  // "Q1 2026", "Quarter 1 - 2026", "Quarter 1 2026"
+  const m = period.match(/[Qq](?:uarter\s*)?(\d)/i)
+  if (m) return parseInt(m[1]) as Quarter
+  return null
+}
+
+function quarterToPeriod(q: Quarter): string {
+  return `Q${q} 2026`
+}
 
 function InviteeStatusBadge({ status }: { status: string }) {
   const m = INVITEE_STATUS[status] ?? INVITEE_STATUS.pending
@@ -83,6 +112,19 @@ function Avatar({ name, size = "md" }: { name: string; size?: "sm" | "md" | "lg"
   )
 }
 
+function templateForReview(template: TemplateSection[], scores: Score[]) {
+  const scoredItemIds = new Set(scores.map(s => s.item_id))
+  return template.map(section => {
+    const items = section.kpi_template_items ?? []
+    const scoredItems = items.filter(item => scoredItemIds.has(item.id))
+    const isPersonalSection = section.position === 1
+    return {
+      ...section,
+      kpi_template_items: isPersonalSection && scoredItems.length > 0 ? scoredItems : items,
+    }
+  })
+}
+
 // ─── Scorer Row ─────────────────────────────────────────────────────────────────
 
 function ScorerRow({ name, role, scoreObj, canEdit, item, onSave }: {
@@ -105,7 +147,6 @@ function ScorerRow({ name, role, scoreObj, canEdit, item, onSave }: {
   return (
     <div className="border-b border-border last:border-b-0">
       <div className="grid items-start gap-x-2 px-3 py-2.5" style={{ gridTemplateColumns: "minmax(120px,1fr) 64px minmax(100px,2fr) 20px" }}>
-        {/* Person */}
         <div className="flex items-center gap-2 min-w-0 pt-0.5">
           <Avatar name={name} size="sm" />
           <div className="min-w-0">
@@ -113,8 +154,6 @@ function ScorerRow({ name, role, scoreObj, canEdit, item, onSave }: {
             <div className="text-[10px] text-muted-foreground">{role}</div>
           </div>
         </div>
-
-        {/* Score */}
         {canEdit && editing ? (
           <input
             type="number" min={item.min_score} max={item.max_score}
@@ -138,8 +177,6 @@ function ScorerRow({ name, role, scoreObj, canEdit, item, onSave }: {
             {hasScore ? scoreObj!.score : <span className="text-muted-foreground">—</span>}
           </div>
         )}
-
-        {/* Comment */}
         {canEdit && editing ? (
           <textarea
             rows={2} value={comm} onChange={e => setComm(e.target.value)}
@@ -157,13 +194,10 @@ function ScorerRow({ name, role, scoreObj, canEdit, item, onSave }: {
             }
           </div>
         )}
-
-        {/* Status dot */}
         <div className="flex justify-center pt-2">
           <div className={cn("w-2 h-2 rounded-full shrink-0", hasScore ? "bg-emerald-500" : "bg-amber-300")} />
         </div>
       </div>
-
       {editing && canEdit && (
         <div className="px-3 pb-3 flex gap-2">
           <Button size="sm" onClick={handleSave} disabled={saving} className="h-7 text-xs gap-1 px-3">
@@ -244,7 +278,6 @@ function KpiCard({ item, itemIndex, sectionType, scores, invitees, isHR, current
           </div>
         )}
       </div>
-
       <div className="grid grid-cols-1 divide-border">
         <div className="px-5 py-4 space-y-4">
           <div>
@@ -255,7 +288,6 @@ function KpiCard({ item, itemIndex, sectionType, scores, invitees, isHR, current
             }
           </div>
         </div>
-
         <div className="px-5 pb-4 space-y-3">
           <h4 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Scoring</h4>
           <div className="border border-border rounded-xl overflow-hidden">
@@ -305,12 +337,12 @@ function SectionAccordion({ section, sectionIndex, scores, invitees, isHR, curre
   onAddItem?: (sectionId: string, data: { title: string; description: string; min_score: number; max_score: number }) => Promise<void>
   defaultOpen?: boolean
 }) {
-  const [open, setOpen]             = useState(defaultOpen ?? sectionIndex === 0)
-  const [showAdd, setShowAdd]       = useState(false)
-  const [newTitle, setNewTitle]     = useState("")
-  const [newDesc, setNewDesc]       = useState("")
-  const [newMax, setNewMax]         = useState(10)
-  const [addSaving, setAddSaving]   = useState(false)
+  const [open, setOpen]           = useState(defaultOpen ?? sectionIndex === 0)
+  const [showAdd, setShowAdd]     = useState(false)
+  const [newTitle, setNewTitle]   = useState("")
+  const [newDesc, setNewDesc]     = useState("")
+  const [newMax, setNewMax]       = useState(10)
+  const [addSaving, setAddSaving] = useState(false)
 
   const items = section.kpi_template_items ?? []
   const sectionMax = items.reduce((a, i) => a + i.max_score, 0)
@@ -333,26 +365,30 @@ function SectionAccordion({ section, sectionIndex, scores, invitees, isHR, curre
   })()
 
   const progressPct = sectionMax > 0 ? Math.min(100, (sectionCurrent / sectionMax) * 100) : 0
+  const cfg = SECTION_CONFIG[section.position] ?? { icon: BarChart3, colorClass: "text-primary", label: section.title }
+  const SectionIcon = cfg.icon
+
+  const scorerNames = invitees
+    .filter(i => i.status === "accepted" || i.status === "completed")
+    .map(i => i.invitee.first_name)
+    .join(", ")
 
   return (
     <div className={cn("rounded-xl border bg-card overflow-hidden transition-all", open ? "border-border shadow-md" : "border-border shadow-sm")}>
       <button
         type="button" onClick={() => setOpen(o => !o)}
-        className={cn("w-full grid items-center gap-4 px-5 py-4 text-left transition-colors", open ? "border-b border-border" : "hover:bg-muted/20")}
-        style={{ gridTemplateColumns: "48px 1fr auto auto auto" }}
+        className={cn("w-full flex items-center gap-3 px-5 py-4 text-left transition-colors", open ? "border-b border-border" : "hover:bg-muted/20")}
       >
-        <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center font-bold text-[15px] shrink-0 transition-all", open ? "bg-primary text-primary-foreground shadow-sm" : "bg-muted text-muted-foreground")}>
-          {sectionIndex + 1}
-        </div>
-        <div className="min-w-0">
-          <p className="font-bold text-[15px] text-foreground leading-snug">{section.title}</p>
+        <SectionIcon size={18} className={cn("shrink-0", cfg.colorClass)} />
+        <div className="flex-1 min-w-0">
+          <p className="font-bold text-[14px] text-foreground leading-snug">{cfg.label}</p>
           <p className="text-xs text-muted-foreground mt-0.5">
-            {items.length} KPI{items.length !== 1 ? "s" : ""} · Max score {sectionMax}
-            {section.type === "hr" ? " · Scored by HR" : " · Scored by peers & manager"}
+            {items.length} item{items.length !== 1 ? "s" : ""} · max {sectionMax} pts
+            {section.type === "hr" ? " · Scored by HR" : scorerNames ? ` · ${scorerNames}` : " · Scored by peers"}
           </p>
         </div>
         <div className="flex items-center gap-3 shrink-0" onClick={e => e.stopPropagation()}>
-          <div className="w-28 h-2 bg-muted rounded-full overflow-hidden hidden sm:block">
+          <div className="w-24 h-1.5 bg-muted rounded-full overflow-hidden hidden sm:block">
             <div className="h-full bg-primary rounded-full transition-all duration-300" style={{ width: `${progressPct}%` }} />
           </div>
           <span className="text-sm font-bold text-foreground min-w-[52px] text-right">
@@ -360,12 +396,12 @@ function SectionAccordion({ section, sectionIndex, scores, invitees, isHR, curre
           </span>
         </div>
         {isHR && (
-          <Button size="sm" onClick={e => { e.stopPropagation(); setOpen(true); setShowAdd(true) }} className="h-8 text-xs gap-1.5 shrink-0 hidden sm:inline-flex">
-            <Plus size={12} /> Add KPI
+          <Button size="sm" onClick={e => { e.stopPropagation(); setOpen(true); setShowAdd(true) }} className="h-7 text-xs gap-1.5 shrink-0 hidden sm:inline-flex">
+            <Plus size={11} /> Add KPI
           </Button>
         )}
-        <div className={cn("w-8 h-8 rounded-full border border-border flex items-center justify-center text-muted-foreground transition-transform shrink-0", !open && "-rotate-90")}>
-          <ChevronDown size={15} />
+        <div className={cn("w-7 h-7 rounded-full border border-border flex items-center justify-center text-muted-foreground transition-transform shrink-0", !open && "-rotate-90")}>
+          <ChevronDown size={14} />
         </div>
       </button>
 
@@ -505,162 +541,6 @@ function InviteePanel({ review, allEmployees, onAddInvitee, onRemoveInvitee }: {
   )
 }
 
-// ─── Review Accordion ───────────────────────────────────────────────────────────
-
-function ReviewAccordion({ review, template, scores, allEmployees, currentEmployeeId, isHR, onScoreChange, onAddInvitee, onRemoveInvitee, onStatusChange, onDelete, onAddItem }: {
-  review: Review; template: TemplateSection[]; scores: Score[]
-  allEmployees: Employee[]; currentEmployeeId: string | null; isHR: boolean
-  onScoreChange: (reviewId: string, itemId: string, score: number | null, comments: string) => Promise<void>
-  onAddInvitee: (reviewId: string, ids: string[]) => Promise<void>
-  onRemoveInvitee: (reviewId: string, id: string) => Promise<void>
-  onStatusChange: (reviewId: string, status: string) => Promise<void>
-  onDelete: (reviewId: string) => void
-  onAddItem?: (sectionId: string, data: { title: string; description: string; min_score: number; max_score: number }) => Promise<void>
-}) {
-  const [open, setOpen]   = useState(false)
-  const emp               = review.employee
-  const invitees          = review.kpi_review_invitees ?? []
-  const completedCnt      = invitees.filter(i => i.status === "completed").length
-
-  const overallMax = template.reduce((a, s) => a + s.kpi_template_items.reduce((b, i) => b + i.max_score, 0), 0)
-  const scoreMap = new Map<string, Score>()
-  for (const s of scores) scoreMap.set(`${s.item_id}::${s.scorer_id ?? "hr"}`, s)
-  const overallCurrent = template.reduce((total, section) => {
-    const items = section.kpi_template_items ?? []
-    if (section.type === "hr") return total + items.reduce((a, item) => a + (scoreMap.get(`${item.id}::hr`)?.score ?? 0), 0)
-    const invIds = [...new Set(scores.filter(s => s.scorer_id !== null).map(s => s.scorer_id!))]
-    if (invIds.length === 0) return total
-    return total + items.reduce((a, item) => {
-      const vals = invIds.map(id => scoreMap.get(`${item.id}::${id}`)?.score).filter((v): v is number => v != null)
-      return a + (vals.length > 0 ? vals.reduce((x, y) => x + y, 0) / vals.length : 0)
-    }, 0)
-  }, 0)
-
-  return (
-    <div className={cn("rounded-2xl border bg-card overflow-hidden transition-all", open ? "border-border shadow-lg" : "border-border shadow-sm")}>
-      <button type="button" onClick={() => setOpen(o => !o)}
-        className={cn("w-full flex items-center justify-between px-5 py-4 text-left transition-colors", open ? "border-b border-border" : "hover:bg-muted/20")}
-      >
-        <div className="flex items-center gap-3">
-          <Avatar name={`${emp.first_name} ${emp.last_name}`} size="lg" />
-          <div>
-            <p className="font-bold text-base">{emp.first_name} {emp.last_name}</p>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              {emp.job_title} · {emp.department?.name ?? "—"} · {review.period}
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2.5 shrink-0">
-          <span className={cn("inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold capitalize", REVIEW_STATUS_CLS[review.status])}>
-            {review.status}
-          </span>
-          {invitees.length > 0 && (
-            <span className="text-xs text-muted-foreground flex items-center gap-1">
-              <Users size={12} /> {completedCnt}/{invitees.length}
-            </span>
-          )}
-          {review.deadline && (
-            <span className="text-xs text-muted-foreground flex items-center gap-1">
-              <Clock size={12} />
-              {new Date(review.deadline).toLocaleDateString("en-ZA", { day: "2-digit", month: "short" })}
-            </span>
-          )}
-          <div className={cn("w-8 h-8 rounded-full border border-border flex items-center justify-center text-muted-foreground transition-transform", !open && "-rotate-90")}>
-            <ChevronDown size={15} />
-          </div>
-        </div>
-      </button>
-
-      {open && (
-        <div className="px-5 py-5 space-y-4">
-          {isHR && (
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">Status:</span>
-                <select value={review.status} onChange={e => onStatusChange(review.id, e.target.value)}
-                  className="text-xs rounded-lg border border-border bg-card px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary"
-                >
-                  <option value="draft">Draft</option>
-                  <option value="active">Active</option>
-                  <option value="completed">Completed</option>
-                </select>
-              </div>
-              <button type="button" onClick={() => onDelete(review.id)} className="flex items-center gap-1 text-xs text-destructive hover:opacity-70 transition-opacity">
-                <Trash2 size={12} /> Delete review
-              </button>
-            </div>
-          )}
-
-          {/* Context strip */}
-          <div className="flex flex-wrap items-center gap-4 bg-card border border-border rounded-xl px-4 py-3 shadow-sm">
-            <div className="flex items-center gap-3 flex-1 min-w-0">
-              <Avatar name={`${emp.first_name} ${emp.last_name}`} size="lg" />
-              <div className="min-w-0">
-                <div className="font-semibold text-sm">{emp.first_name} {emp.last_name}</div>
-                <div className="text-xs text-muted-foreground">{emp.job_title} · {emp.department?.name ?? "—"}</div>
-              </div>
-            </div>
-            <div className="hidden sm:block w-px h-9 bg-border" />
-            <div className="flex flex-col gap-0.5">
-              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Cycle</span>
-              <span className="text-sm font-bold">{review.period}</span>
-            </div>
-            {overallMax > 0 && (
-              <>
-                <div className="hidden sm:block w-px h-9 bg-border" />
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Overall</span>
-                  <span className="text-sm font-bold">{Math.round(overallCurrent)}<span className="text-muted-foreground font-medium text-xs"> / {overallMax}</span></span>
-                </div>
-              </>
-            )}
-            {review.deadline && (
-              <>
-                <div className="hidden sm:block w-px h-9 bg-border" />
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Deadline</span>
-                  <span className="text-sm font-bold">{new Date(review.deadline).toLocaleDateString("en-ZA", { day: "2-digit", month: "short", year: "numeric" })}</span>
-                </div>
-              </>
-            )}
-            <div className="hidden sm:block w-px h-9 bg-border" />
-            <div className="flex flex-col gap-0.5">
-              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Status</span>
-              <span className={cn("inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full border capitalize", REVIEW_STATUS_CLS[review.status])}>
-                {review.status}
-              </span>
-            </div>
-          </div>
-
-          {isHR && (
-            <InviteePanel review={review} allEmployees={allEmployees} onAddInvitee={onAddInvitee} onRemoveInvitee={onRemoveInvitee} />
-          )}
-
-          <div className="flex flex-col gap-3">
-            {template.length === 0
-              ? (
-                <div className="flex flex-col items-center justify-center py-12 text-muted-foreground gap-3">
-                  <BarChart3 size={32} className="opacity-30" />
-                  <p className="text-sm">No KPI template configured yet.</p>
-                </div>
-              )
-              : template.map((section, idx) => (
-                  <SectionAccordion
-                    key={section.id} section={section} sectionIndex={idx}
-                    scores={scores} invitees={review.kpi_review_invitees ?? []}
-                    isHR={isHR} currentEmployeeId={currentEmployeeId}
-                    onScoreChange={(itemId, score, comments) => onScoreChange(review.id, itemId, score, comments)}
-                    onAddItem={onAddItem} defaultOpen={idx === 0}
-                  />
-                ))
-            }
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
 // ─── Confirm Delete Modal ───────────────────────────────────────────────────────
 
 function ConfirmDeleteModal({ onConfirm, onCancel, deleting }: {
@@ -698,17 +578,17 @@ function ConfirmDeleteModal({ onConfirm, onCancel, deleting }: {
 
 // ─── Create Review Modal ────────────────────────────────────────────────────────
 
-function CreateReviewModal({ employees, currentPeriod, onSave, onClose, saving }: {
+function CreateReviewModal({ employees, currentPeriod, preselectedEmployeeId, preselectedQuarter, onSave, onClose, saving }: {
   employees: Employee[]; currentPeriod: string
+  preselectedEmployeeId?: string; preselectedQuarter?: Quarter
   onSave: (d: { employee_id: string; period: string; title: string; deadline: string }) => Promise<void>
   onClose: () => void; saving: boolean
 }) {
-  const [employeeId, setEmployeeId] = useState(employees[0]?.id ?? "")
-  const [period, setPeriod]         = useState(currentPeriod)
+  const [employeeId, setEmployeeId] = useState(preselectedEmployeeId ?? employees[0]?.id ?? "")
+  const [period, setPeriod]         = useState(preselectedQuarter ? quarterToPeriod(preselectedQuarter) : currentPeriod)
   const [customTitle, setCustomTitle] = useState<string | null>(null)
   const [deadline, setDeadline]     = useState("")
 
-  // Derive title from selected employee + period; allow manual override
   const autoTitle = useMemo(() => {
     const sel = employees.find(e => e.id === employeeId)
     return sel ? `${sel.first_name} ${sel.last_name} — ${period} Review` : `${period} Performance Review`
@@ -764,6 +644,552 @@ function CreateReviewModal({ employees, currentPeriod, onSave, onClose, saving }
   )
 }
 
+// ─── Quarter Panel (within staff row) ──────────────────────────────────────────
+
+function QuarterPanel({ review, template, scores, allEmployees, currentEmployeeId, isHR, onScoreChange, onAddInvitee, onRemoveInvitee, onStatusChange, onDelete, onAddItem }: {
+  review: Review; template: TemplateSection[]; scores: Score[]
+  allEmployees: Employee[]; currentEmployeeId: string | null; isHR: boolean
+  onScoreChange: (reviewId: string, itemId: string, score: number | null, comments: string) => Promise<void>
+  onAddInvitee: (reviewId: string, ids: string[]) => Promise<void>
+  onRemoveInvitee: (reviewId: string, id: string) => Promise<void>
+  onStatusChange: (reviewId: string, status: string) => Promise<void>
+  onDelete: (reviewId: string) => void
+  onAddItem?: (sectionId: string, data: { title: string; description: string; min_score: number; max_score: number }) => Promise<void>
+}) {
+  const invitees       = review.kpi_review_invitees ?? []
+  const reviewTemplate = templateForReview(template, scores)
+
+  const overallMax = reviewTemplate.reduce((a, s) => a + s.kpi_template_items.reduce((b, i) => b + i.max_score, 0), 0)
+  const scoreMap = new Map<string, Score>()
+  for (const s of scores) scoreMap.set(`${s.item_id}::${s.scorer_id ?? "hr"}`, s)
+  const overallCurrent = reviewTemplate.reduce((total, section) => {
+    const items = section.kpi_template_items ?? []
+    if (section.type === "hr") return total + items.reduce((a, item) => a + (scoreMap.get(`${item.id}::hr`)?.score ?? 0), 0)
+    const invIds = [...new Set(scores.filter(s => s.scorer_id !== null).map(s => s.scorer_id!))]
+    if (invIds.length === 0) return total
+    return total + items.reduce((a, item) => {
+      const vals = invIds.map(id => scoreMap.get(`${item.id}::${id}`)?.score).filter((v): v is number => v != null)
+      return a + (vals.length > 0 ? vals.reduce((x, y) => x + y, 0) / vals.length : 0)
+    }, 0)
+  }, 0)
+
+  const statusInfo = STATUS_DISPLAY[review.status] ?? STATUS_DISPLAY.draft
+  const inviteeNames = invitees.map(i => `${i.invitee.first_name} ${i.invitee.last_name}`).join(", ")
+
+  return (
+    <div className="space-y-4">
+      {/* Review meta strip */}
+      <div className="flex flex-wrap items-center gap-3 bg-card border border-border rounded-xl px-4 py-3 shadow-sm">
+        {inviteeNames && (
+          <div className="flex flex-col gap-0.5">
+            <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Scorers</span>
+            <span className="text-xs font-medium">{inviteeNames}</span>
+          </div>
+        )}
+        {overallMax > 0 && (
+          <>
+            {inviteeNames && <div className="hidden sm:block w-px h-8 bg-border" />}
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Total Score</span>
+              <span className="text-sm font-bold">{Math.round(overallCurrent)}<span className="text-muted-foreground font-medium text-xs"> / {overallMax}</span></span>
+            </div>
+          </>
+        )}
+        <div className="hidden sm:block w-px h-8 bg-border" />
+        <div className="flex flex-col gap-0.5">
+          <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Status</span>
+          <span className={cn("inline-flex items-center text-xs font-semibold px-2 py-0.5 rounded-full border", statusInfo.chipCls)}>
+            {statusInfo.label}
+          </span>
+        </div>
+        {isHR && (
+          <>
+            <div className="hidden sm:block w-px h-8 bg-border" />
+            <div className="flex items-center gap-2 ml-auto">
+              <select
+                value={review.status}
+                onChange={e => onStatusChange(review.id, e.target.value)}
+                className="text-xs rounded-lg border border-border bg-card px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary"
+              >
+                <option value="draft">Set Draft</option>
+                <option value="active">Publish</option>
+                <option value="completed">Complete</option>
+              </select>
+              <button
+                type="button"
+                onClick={() => onDelete(review.id)}
+                className="flex items-center gap-1 text-xs text-destructive hover:opacity-70 transition-opacity px-2 py-1.5 rounded-lg border border-destructive/30 hover:bg-destructive/5"
+              >
+                <Trash2 size={11} /> Delete
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+
+      {isHR && (
+        <InviteePanel review={review} allEmployees={allEmployees} onAddInvitee={onAddInvitee} onRemoveInvitee={onRemoveInvitee} />
+      )}
+
+      <div className="flex flex-col gap-3">
+        {reviewTemplate.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-10 text-muted-foreground gap-3">
+            <BarChart3 size={28} className="opacity-30" />
+            <p className="text-sm">No KPI template configured yet.</p>
+          </div>
+        ) : reviewTemplate.map((section, idx) => (
+          <SectionAccordion
+            key={section.id} section={section} sectionIndex={idx}
+            scores={scores} invitees={review.kpi_review_invitees ?? []}
+            isHR={isHR} currentEmployeeId={currentEmployeeId}
+            onScoreChange={(itemId, score, comments) => onScoreChange(review.id, itemId, score, comments)}
+            onAddItem={onAddItem} defaultOpen={idx === 0}
+          />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ─── Staff Row (HR admin view) ──────────────────────────────────────────────────
+
+function StaffRow({ employee, reviews, scores, template, allEmployees, currentEmployeeId, onScoreChange, onAddInvitee, onRemoveInvitee, onStatusChange, onDelete, onAddItem, onCreateReview, initialOpenQuarter }: {
+  employee: Employee
+  reviews: Review[]
+  scores: Record<string, Score[]>
+  template: TemplateSection[]
+  allEmployees: Employee[]
+  currentEmployeeId: string | null
+  onScoreChange: (reviewId: string, itemId: string, score: number | null, comments: string) => Promise<void>
+  onAddInvitee: (reviewId: string, ids: string[]) => Promise<void>
+  onRemoveInvitee: (reviewId: string, id: string) => Promise<void>
+  onStatusChange: (reviewId: string, status: string) => Promise<void>
+  onDelete: (reviewId: string) => void
+  onAddItem?: (sectionId: string, data: { title: string; description: string; min_score: number; max_score: number }) => Promise<void>
+  onCreateReview: (employeeId: string, quarter: Quarter) => void
+  initialOpenQuarter?: Quarter
+}) {
+  // Map each quarter to a review (if exists)
+  const reviewByQuarter = useMemo(() => {
+    const map: Partial<Record<Quarter, Review>> = {}
+    for (const r of reviews) {
+      const q = periodToQuarter(r.period)
+      if (q) map[q] = r
+    }
+    return map
+  }, [reviews])
+
+  const name = `${employee.first_name} ${employee.last_name}`
+  const deptName = (employee as { department?: { name: string } | null }).department?.name ?? ""
+
+  // Determine which quarter tabs to show: quarters with reviews + one next empty quarter
+  const visibleQuarters = useMemo<Quarter[]>(() => {
+    const withReview = QUARTERS.filter(q => reviewByQuarter[q])
+    const nextEmpty = QUARTERS.find(q => !reviewByQuarter[q])
+    const all = nextEmpty ? [...withReview, nextEmpty] : withReview
+    return all.sort((a, b) => a - b) as Quarter[]
+  }, [reviewByQuarter])
+
+  const [expanded, setExpanded]       = useState(false)
+  const [activeQuarter, setActiveQuarter] = useState<Quarter>(initialOpenQuarter ?? visibleQuarters[0] ?? 1)
+
+  function openQuarter(q: Quarter) {
+    setActiveQuarter(q)
+    setExpanded(true)
+  }
+
+  const activeReview = reviewByQuarter[activeQuarter]
+
+  return (
+    <div className="border-b border-border last:border-b-0">
+      {/* Main row */}
+      <div
+        className="flex items-center gap-3 px-4 py-3 hover:bg-muted/20 transition-colors cursor-pointer"
+        onClick={() => setExpanded(o => !o)}
+      >
+        <Avatar name={name} size="md" />
+        <div className="flex-1 min-w-0">
+          <div className="font-semibold text-sm text-foreground">{name}</div>
+          <div className="text-xs text-muted-foreground mt-0.5">
+            {employee.job_title}{deptName ? ` · ${deptName}` : ""}
+          </div>
+        </div>
+
+        {/* Quarter chips */}
+        <div className="flex items-center gap-1.5 flex-wrap justify-end" onClick={e => e.stopPropagation()}>
+          {QUARTERS.map(q => {
+            const review = reviewByQuarter[q]
+            if (review) {
+              const statusInfo = STATUS_DISPLAY[review.status] ?? STATUS_DISPLAY.draft
+              const reviewScores = scores[review.id] ?? []
+              const totalMax = template.reduce((a, s) => a + s.kpi_template_items.reduce((b, i) => b + i.max_score, 0), 0)
+              const scoreMap = new Map<string, Score>()
+              for (const s of reviewScores) scoreMap.set(`${s.item_id}::${s.scorer_id ?? "hr"}`, s)
+              const current = reviewScores.reduce((a, s) => a + (s.score ?? 0), 0)
+              return (
+                <button
+                  key={q}
+                  type="button"
+                  onClick={() => openQuarter(q)}
+                  className={cn(
+                    "inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-semibold transition-all hover:shadow-sm",
+                    statusInfo.chipCls
+                  )}
+                >
+                  Q{q} · {totalMax > 0 ? `${Math.round(current)}/${totalMax}` : "—"} · {statusInfo.label}
+                </button>
+              )
+            } else {
+              // No review — show faded dashed chip
+              return (
+                <button
+                  key={q}
+                  type="button"
+                  onClick={() => { setActiveQuarter(q); setExpanded(true) }}
+                  className="inline-flex items-center rounded-full border border-dashed border-border px-2.5 py-0.5 text-[11px] font-medium text-muted-foreground hover:border-primary/50 hover:text-primary transition-all"
+                >
+                  Q{q}
+                </button>
+              )
+            }
+          })}
+        </div>
+
+        <div className={cn("w-7 h-7 rounded-full border border-border flex items-center justify-center text-muted-foreground transition-transform shrink-0 ml-1", expanded ? "" : "-rotate-90")}>
+          <ChevronDown size={14} />
+        </div>
+      </div>
+
+      {/* Expanded content */}
+      {expanded && (
+        <div className="px-4 pb-5 pt-0 bg-muted/10">
+          {/* Quarter tab bar */}
+          <div className="flex items-center gap-0 border-b border-border mb-4 pt-1">
+            {visibleQuarters.map(q => (
+              <button
+                key={q}
+                type="button"
+                onClick={() => setActiveQuarter(q)}
+                className={cn(
+                  "px-3 py-2 text-xs font-semibold border-b-2 -mb-px transition-colors whitespace-nowrap",
+                  activeQuarter === q
+                    ? "border-primary text-primary"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                )}
+              >
+                {QUARTER_LABELS[q]}
+                {reviewByQuarter[q] && (
+                  <span className={cn(
+                    "ml-1.5 inline-flex items-center rounded-full border px-1.5 py-0 text-[10px] font-medium",
+                    STATUS_DISPLAY[reviewByQuarter[q]!.status]?.chipCls ?? ""
+                  )}>
+                    {STATUS_DISPLAY[reviewByQuarter[q]!.status]?.label}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+
+          {activeReview ? (
+            <QuarterPanel
+              review={activeReview}
+              template={template}
+              scores={scores[activeReview.id] ?? []}
+              allEmployees={allEmployees}
+              currentEmployeeId={currentEmployeeId}
+              isHR={true}
+              onScoreChange={onScoreChange}
+              onAddInvitee={onAddInvitee}
+              onRemoveInvitee={onRemoveInvitee}
+              onStatusChange={onStatusChange}
+              onDelete={onDelete}
+              onAddItem={onAddItem}
+            />
+          ) : (
+            <div className="flex flex-col items-center justify-center py-10 text-muted-foreground gap-3">
+              <BarChart3 size={28} className="opacity-30" />
+              <p className="text-sm font-medium">No Q{activeQuarter} review set up yet</p>
+              <Button size="sm" onClick={() => onCreateReview(employee.id, activeQuarter)} className="gap-1.5 h-8 text-xs">
+                <Plus size={13} /> Set up Q{activeQuarter}
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── HR Admin View ──────────────────────────────────────────────────────────────
+
+function HRAdminView({ template, reviews, scores, allEmployees, currentEmployeeId, onScoreChange, onAddInvitee, onRemoveInvitee, onStatusChange, onDelete, onAddItem, onShowCreate, onImport }: {
+  template: TemplateSection[]
+  reviews: Review[]
+  scores: Record<string, Score[]>
+  allEmployees: Employee[]
+  currentEmployeeId: string | null
+  onScoreChange: (reviewId: string, itemId: string, score: number | null, comments: string) => Promise<void>
+  onAddInvitee: (reviewId: string, ids: string[]) => Promise<void>
+  onRemoveInvitee: (reviewId: string, id: string) => Promise<void>
+  onStatusChange: (reviewId: string, status: string) => Promise<void>
+  onDelete: (reviewId: string) => void
+  onAddItem?: (sectionId: string, data: { title: string; description: string; min_score: number; max_score: number }) => Promise<void>
+  onShowCreate: (employeeId?: string, quarter?: Quarter) => void
+  onImport: () => Promise<void>
+}) {
+  const [searchQ, setSearchQ]         = useState("")
+  const [deptFilter, setDeptFilter]   = useState("all")
+  const [statusFilter, setStatusFilter] = useState("all")
+  const [importing, setImporting]     = useState(false)
+
+  // Build a map: employee_id → reviews[]
+  const reviewsByEmployee = useMemo(() => {
+    const map: Record<string, Review[]> = {}
+    for (const r of reviews) {
+      if (!map[r.employee_id]) map[r.employee_id] = []
+      map[r.employee_id].push(r)
+    }
+    return map
+  }, [reviews])
+
+  // Stat cards
+  const totalStaff = allEmployees.length
+  const q1Reviews = reviews.filter(r => periodToQuarter(r.period) === 1)
+  const q1Published = q1Reviews.filter(r => r.status === "active" || r.status === "completed").length
+  const q1Draft = q1Reviews.filter(r => r.status === "draft").length
+  const employeesWithQ1 = new Set(q1Reviews.map(r => r.employee_id))
+  const notStarted = allEmployees.filter(e => !employeesWithQ1.has(e.id)).length
+
+  // Departments for filter
+  const departments = useMemo(() => {
+    const depts = new Set<string>()
+    for (const e of allEmployees) {
+      const d = (e as { department?: { name: string } | null }).department?.name
+      if (d) depts.add(d)
+    }
+    return Array.from(depts).sort()
+  }, [allEmployees])
+
+  // Filtered staff list
+  const filteredEmployees = useMemo(() => {
+    return allEmployees.filter(emp => {
+      const deptName = (emp as { department?: { name: string } | null }).department?.name ?? ""
+      if (deptFilter !== "all" && deptName !== deptFilter) return false
+
+      if (statusFilter !== "all") {
+        const empReviews = reviewsByEmployee[emp.id] ?? []
+        const q1 = empReviews.find(r => periodToQuarter(r.period) === 1)
+        if (statusFilter === "published" && q1?.status !== "active") return false
+        if (statusFilter === "draft" && q1?.status !== "draft") return false
+        if (statusFilter === "notstarted" && q1) return false
+      }
+
+      if (searchQ) {
+        const q = searchQ.toLowerCase()
+        const fullName = `${emp.first_name} ${emp.last_name}`.toLowerCase()
+        const deptName2 = (emp as { department?: { name: string } | null }).department?.name?.toLowerCase() ?? ""
+        if (!fullName.includes(q) && !emp.job_title?.toLowerCase().includes(q) && !deptName2.includes(q)) return false
+      }
+
+      return true
+    })
+  }, [allEmployees, deptFilter, statusFilter, searchQ, reviewsByEmployee])
+
+  async function handleImport() {
+    setImporting(true)
+    await onImport()
+    setImporting(false)
+  }
+
+  return (
+    <div className="space-y-5">
+      {/* Page header */}
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">KPI Reviews — 2026</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            {totalStaff} staff member{totalStaff !== 1 ? "s" : ""} · Q1 in progress
+          </p>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <Button size="sm" variant="outline" onClick={handleImport} disabled={importing} className="gap-1.5 h-9 text-xs">
+            {importing ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />}
+            Import from Excel
+          </Button>
+          <Button size="sm" onClick={() => onShowCreate()} className="gap-1.5 h-9 text-xs">
+            <Plus size={13} /> New Review
+          </Button>
+        </div>
+      </div>
+
+      {/* Stat cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="rounded-xl border border-border bg-card px-4 py-3">
+          <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Total Staff</div>
+          <div className="text-2xl font-bold">{totalStaff}</div>
+        </div>
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+          <div className="text-[10px] font-semibold text-emerald-700 uppercase tracking-wider mb-1">Q1 Published</div>
+          <div className="text-2xl font-bold text-emerald-700">{q1Published}</div>
+        </div>
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+          <div className="text-[10px] font-semibold text-amber-700 uppercase tracking-wider mb-1">Q1 Draft</div>
+          <div className="text-2xl font-bold text-amber-700">{q1Draft}</div>
+        </div>
+        <div className="rounded-xl border border-border bg-card px-4 py-3">
+          <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Not Started</div>
+          <div className="text-2xl font-bold text-muted-foreground">{notStarted}</div>
+        </div>
+      </div>
+
+      {/* Filter bar */}
+      <div className="flex flex-col sm:flex-row gap-2">
+        <div className="relative flex-1">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <input
+            value={searchQ}
+            onChange={e => setSearchQ(e.target.value)}
+            placeholder="Search name, title, department…"
+            className="w-full rounded-xl border border-border bg-card pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+          />
+        </div>
+        <select
+          value={deptFilter}
+          onChange={e => setDeptFilter(e.target.value)}
+          className="rounded-xl border border-border bg-card px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary sm:w-48"
+        >
+          <option value="all">All departments</option>
+          {departments.map(d => <option key={d} value={d}>{d}</option>)}
+        </select>
+        <select
+          value={statusFilter}
+          onChange={e => setStatusFilter(e.target.value)}
+          className="rounded-xl border border-border bg-card px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary sm:w-44"
+        >
+          <option value="all">All status</option>
+          <option value="published">Published</option>
+          <option value="draft">Draft</option>
+          <option value="notstarted">Not started</option>
+        </select>
+      </div>
+
+      {/* Staff list */}
+      {filteredEmployees.length === 0 ? (
+        <div className="flex flex-col items-center justify-center h-40 text-muted-foreground gap-3 border border-dashed border-border rounded-2xl">
+          <Users size={28} className="opacity-30" />
+          <p className="text-sm">No staff match your filters.</p>
+        </div>
+      ) : (
+        <div className="rounded-2xl border border-border bg-card overflow-hidden shadow-sm">
+          {filteredEmployees.map(emp => (
+            <StaffRow
+              key={emp.id}
+              employee={emp}
+              reviews={reviewsByEmployee[emp.id] ?? []}
+              scores={scores}
+              template={template}
+              allEmployees={allEmployees}
+              currentEmployeeId={currentEmployeeId}
+              onScoreChange={onScoreChange}
+              onAddInvitee={onAddInvitee}
+              onRemoveInvitee={onRemoveInvitee}
+              onStatusChange={onStatusChange}
+              onDelete={onDelete}
+              onAddItem={onAddItem}
+              onCreateReview={(empId, quarter) => onShowCreate(empId, quarter)}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── My Assignments tab (non-HR / HR-as-invitee) ────────────────────────────────
+
+function MyAssignmentsView({ reviews, scores, template, currentEmployeeId, isHR, onScoreChange, loadAll, showToast }: {
+  reviews: Review[]
+  scores: Record<string, Score[]>
+  template: TemplateSection[]
+  currentEmployeeId: string | null
+  isHR: boolean
+  onScoreChange: (reviewId: string, itemId: string, score: number | null, comments: string) => Promise<void>
+  loadAll: () => Promise<void>
+  showToast: (msg: string) => void
+}) {
+  const myAssignments = isHR
+    ? reviews.filter(r => r.kpi_review_invitees?.some(i => i.invitee_id === currentEmployeeId))
+    : reviews
+
+  return (
+    <div className="space-y-4">
+      {myAssignments.length === 0 ? (
+        <div className="flex flex-col items-center justify-center h-48 text-muted-foreground gap-3">
+          <FileText size={36} className="opacity-30" />
+          <p className="text-sm">{isHR ? "You have no pending scoring assignments." : "No KPI reviews found yet."}</p>
+        </div>
+      ) : myAssignments.map(review => {
+        const myInv = review.kpi_review_invitees.find(i => i.invitee_id === currentEmployeeId)
+        return (
+          <div key={review.id} className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
+            <div className="px-5 py-4 flex items-center justify-between border-b border-border gap-4">
+              <div className="min-w-0">
+                <p className="font-bold text-base leading-snug">{review.title}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {review.employee.first_name} {review.employee.last_name} · {review.period}
+                  {review.deadline && ` · Due ${new Date(review.deadline).toLocaleDateString("en-ZA", { dateStyle: "medium" })}`}
+                </p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                {myInv && <InviteeStatusBadge status={myInv.status} />}
+                {myInv?.status === "pending" && (
+                  <>
+                    <Button size="sm" className="h-7 text-xs gap-1"
+                      onClick={async () => {
+                        await fetch(`/api/kpi/invitees/${myInv.id}/respond`, {
+                          method: "POST", headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ response: "accepted" }),
+                        })
+                        showToast("Invitation accepted"); await loadAll()
+                      }}
+                    >
+                      <Check size={11} /> Accept
+                    </Button>
+                    <Button size="sm" variant="outline" className="h-7 text-xs gap-1 text-destructive border-destructive/40 hover:bg-destructive/10"
+                      onClick={async () => {
+                        await fetch(`/api/kpi/invitees/${myInv.id}/respond`, {
+                          method: "POST", headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ response: "declined" }),
+                        })
+                        showToast("Invitation declined"); await loadAll()
+                      }}
+                    >
+                      <X size={11} /> Decline
+                    </Button>
+                  </>
+                )}
+              </div>
+            </div>
+            {myInv && (myInv.status === "accepted" || myInv.status === "completed") && (
+              <div className="px-5 py-5 space-y-3">
+                {templateForReview(template, scores[review.id] ?? []).map((section, idx) => (
+                  <SectionAccordion
+                    key={section.id} section={section} sectionIndex={idx}
+                    scores={scores[review.id] ?? []} invitees={review.kpi_review_invitees ?? []}
+                    isHR={false} currentEmployeeId={currentEmployeeId}
+                    onScoreChange={(itemId, score, comments) => onScoreChange(review.id, itemId, score, comments)}
+                    defaultOpen={idx === 0}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 // ─── Main Page ──────────────────────────────────────────────────────────────────
 
 type Tab = "reviews" | "myassignments"
@@ -776,69 +1202,19 @@ export function KpiPageClient({ isHR, currentEmployeeId }: { isHR: boolean; curr
   const [allEmployees, setAllEmployees]   = useState<Employee[]>([])
   const [loading, setLoading]             = useState(true)
   const [showCreate, setShowCreate]       = useState(false)
+  const [createPreselect, setCreatePreselect] = useState<{ employeeId?: string; quarter?: Quarter }>({})
   const [creating, setCreating]           = useState(false)
-  const [currentPeriod, setCurrentPeriod] = useState("Q2 2026")
-  const [filterPeriod, setFilterPeriod]   = useState("all")
+  const [currentPeriod, setCurrentPeriod] = useState("Q1 2026")
   const [toast, setToast]                 = useState<string | null>(null)
   const [deleteTarget, setDeleteTarget]   = useState<string | null>(null)
   const [deleting, setDeleting]           = useState(false)
 
   function showToast(msg: string) {
     setToast(msg)
-    setTimeout(() => setToast(null), 3000)
+    setTimeout(() => setToast(null), 4000)
   }
 
-  // Fetch all data including scores — inline async so the effect can cancel in-flight
-  useEffect(() => {
-    let cancelled = false
-    async function load() {
-      setLoading(true)
-      try {
-        const [tRes, rRes, eRes, settRes] = await Promise.all([
-          fetch("/api/kpi/template"),
-          fetch("/api/kpi/reviews"),
-          isHR ? fetch("/api/employees/active") : Promise.resolve(null),
-          isHR ? fetch("/api/kpi/settings") : Promise.resolve(null),
-        ])
-        const [tData, rData, eData, settData] = await Promise.all([
-          tRes.ok ? tRes.json() : { sections: [] },
-          rRes.ok ? rRes.json() : [],
-          eRes?.ok ? eRes!.json() : [],
-          settRes?.ok ? settRes!.json() : null,
-        ])
-        if (cancelled) return
-
-        const revs: Review[] = Array.isArray(rData) ? rData : []
-        setTemplate(tData.sections ?? tData)
-        setReviews(revs)
-        setAllEmployees(Array.isArray(eData) ? eData : [])
-        if (settData?.current_period) setCurrentPeriod(settData.current_period)
-
-        if (revs.length > 0) {
-          const scoreResults = await Promise.all(
-            revs.map(r =>
-              fetch(`/api/kpi/reviews/${r.id}/scores`)
-                .then(res => res.ok ? res.json() : [])
-                .then((data: Score[]) => ({ id: r.id, data }))
-            )
-          )
-          if (cancelled) return
-          const map: Record<string, Score[]> = {}
-          scoreResults.forEach(({ id, data }) => { map[id] = data })
-          setScores(map)
-        }
-      } catch {
-        showToast("Failed to load data")
-      } finally {
-        if (!cancelled) setLoading(false)
-      }
-    }
-    load()
-    return () => { cancelled = true }
-  }, [isHR])
-
-  // Manual refresh — used by event handlers after mutations
-  async function loadAll() {
+  const loadAll = useCallback(async () => {
     setLoading(true)
     try {
       const [tRes, rRes, eRes, settRes] = await Promise.all([
@@ -872,11 +1248,14 @@ export function KpiPageClient({ isHR, currentEmployeeId }: { isHR: boolean; curr
         setScores(map)
       }
     } catch {
-      showToast("Failed to refresh data")
+      showToast("Failed to load data")
     } finally {
       setLoading(false)
     }
-  }
+  }, [isHR])
+
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { void loadAll() }, [loadAll])
 
   async function handleScoreChange(reviewId: string, itemId: string, score: number | null, comments: string) {
     const res = await fetch(`/api/kpi/reviews/${reviewId}/scores`, {
@@ -920,7 +1299,6 @@ export function KpiPageClient({ isHR, currentEmployeeId }: { isHR: boolean; curr
       body: JSON.stringify({ status }),
     })
     if (!res.ok) {
-      // rollback
       if (prev) setReviews(rs => rs.map(r => r.id === reviewId ? { ...r, status: prev } : r))
       showToast("Failed to update status")
     }
@@ -959,17 +1337,27 @@ export function KpiPageClient({ isHR, currentEmployeeId }: { isHR: boolean; curr
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify(d),
     })
-    if (res.ok) { showToast("Review created"); setShowCreate(false); await loadAll() }
+    if (res.ok) { showToast("Review created"); setShowCreate(false); setCreatePreselect({}); await loadAll() }
     else { const err = await res.json(); showToast(err.error ?? "Failed to create review") }
     setCreating(false)
   }
 
-  const myAssignments = isHR
-    ? reviews.filter(r => r.kpi_review_invitees?.some(i => i.invitee_id === currentEmployeeId))
-    : reviews
+  async function handleImport() {
+    showToast("Importing KPI data from Excel…")
+    const res = await fetch("/api/kpi/import", { method: "POST" })
+    if (res.ok) {
+      const data = await res.json()
+      showToast(data.message ?? "Import complete")
+      await loadAll()
+    } else {
+      showToast("Import failed — check server logs")
+    }
+  }
 
-  const periods = ["all", ...Array.from(new Set(reviews.map(r => r.period)))]
-  const filteredReviews = filterPeriod === "all" ? reviews : reviews.filter(r => r.period === filterPeriod)
+  function handleShowCreate(employeeId?: string, quarter?: Quarter) {
+    setCreatePreselect({ employeeId, quarter })
+    setShowCreate(true)
+  }
 
   const tabs: { id: Tab; label: string; icon: React.ElementType }[] = [
     ...(isHR ? [{ id: "reviews" as Tab, label: "All Reviews", icon: BarChart3 }] : []),
@@ -985,149 +1373,97 @@ export function KpiPageClient({ isHR, currentEmployeeId }: { isHR: boolean; curr
         </div>
       )}
 
-      <div className="flex items-start justify-between gap-4 mb-0">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">KPI &amp; Performance</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            {isHR ? "Manage performance reviews and scoring" : "View your KPI reviews and scoring"}
-          </p>
-        </div>
-      </div>
-
-      {/* Tabs */}
-      <div className="flex items-center gap-1 mt-6 mb-6 border-b border-border">
-        {tabs.map(t => {
-          const Icon = t.icon
-          return (
-            <button key={t.id} type="button" onClick={() => setTab(t.id)}
-              className={cn("flex items-center gap-2 px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px transition-colors",
-                tab === t.id ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground")}
-            >
-              <Icon size={15} /> {t.label}
-            </button>
-          )
-        })}
-        <div className="ml-auto flex items-center gap-2 pb-1">
-          {isHR && tab === "reviews" && (
-            <>
-              <select value={filterPeriod} onChange={e => setFilterPeriod(e.target.value)}
-                className="text-xs rounded-xl border border-border bg-card px-2.5 py-1.5 focus:outline-none"
+      {/* Tab bar — only shown for non-HR (who have only one tab) or when HR is on assignments tab */}
+      {(!isHR || tab === "myassignments") && (
+        <div className="flex items-center gap-1 mb-6 border-b border-border">
+          {tabs.map(t => {
+            const Icon = t.icon
+            return (
+              <button key={t.id} type="button" onClick={() => setTab(t.id)}
+                className={cn("flex items-center gap-2 px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px transition-colors",
+                  tab === t.id ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground")}
               >
-                {periods.map(p => <option key={p} value={p}>{p === "all" ? "All periods" : p}</option>)}
-              </select>
-              <Button size="sm" onClick={() => setShowCreate(true)} className="gap-1.5 h-8 text-xs">
-                <Plus size={13} /> New Review
-              </Button>
-            </>
-          )}
+                <Icon size={15} /> {t.label}
+              </button>
+            )
+          })}
         </div>
-      </div>
+      )}
+
+      {isHR && tab === "reviews" && (
+        <div className="flex items-center gap-1 mb-4">
+          {tabs.map(t => {
+            const Icon = t.icon
+            return (
+              <button key={t.id} type="button" onClick={() => setTab(t.id)}
+                className={cn("flex items-center gap-2 px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px transition-colors",
+                  tab === t.id ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground")}
+              >
+                <Icon size={15} /> {t.label}
+              </button>
+            )
+          })}
+        </div>
+      )}
 
       {loading ? (
-        <div className="flex items-center justify-center h-48">
+        <div className="flex items-center justify-center h-64">
           <Loader2 size={28} className="animate-spin text-muted-foreground" />
         </div>
       ) : (
         <>
           {tab === "reviews" && isHR && (
-            <div className="space-y-4">
-              {filteredReviews.length === 0
-                ? (
-                  <div className="flex flex-col items-center justify-center h-48 text-muted-foreground gap-3">
-                    <BarChart3 size={36} className="opacity-30" />
-                    <p className="text-sm">No reviews yet. Click <strong>New Review</strong> to get started.</p>
-                  </div>
-                )
-                : filteredReviews.map(review => (
-                    <ReviewAccordion
-                      key={review.id} review={review} template={template} scores={scores[review.id] ?? []}
-                      allEmployees={allEmployees} currentEmployeeId={currentEmployeeId} isHR={isHR}
-                      onScoreChange={handleScoreChange} onAddInvitee={handleAddInvitee}
-                      onRemoveInvitee={handleRemoveInvitee} onStatusChange={handleStatusChange}
-                      onDelete={handleDeleteReview} onAddItem={handleAddItem}
-                    />
-                  ))
-              }
-            </div>
+            <HRAdminView
+              template={template}
+              reviews={reviews}
+              scores={scores}
+              allEmployees={allEmployees}
+              currentEmployeeId={currentEmployeeId}
+              onScoreChange={handleScoreChange}
+              onAddInvitee={handleAddInvitee}
+              onRemoveInvitee={handleRemoveInvitee}
+              onStatusChange={handleStatusChange}
+              onDelete={handleDeleteReview}
+              onAddItem={handleAddItem}
+              onShowCreate={handleShowCreate}
+              onImport={handleImport}
+            />
           )}
 
           {tab === "myassignments" && (
-            <div className="space-y-4">
-              {myAssignments.length === 0
-                ? (
-                  <div className="flex flex-col items-center justify-center h-48 text-muted-foreground gap-3">
-                    <FileText size={36} className="opacity-30" />
-                    <p className="text-sm">{isHR ? "You have no pending scoring assignments." : "No KPI reviews found yet."}</p>
+            <>
+              {!isHR && (
+                <div className="flex items-start justify-between gap-4 mb-6">
+                  <div>
+                    <h1 className="text-2xl font-bold tracking-tight">KPI &amp; Performance</h1>
+                    <p className="text-sm text-muted-foreground mt-0.5">View your KPI reviews and scoring</p>
                   </div>
-                )
-                : myAssignments.map(review => {
-                    const myInv = review.kpi_review_invitees.find(i => i.invitee_id === currentEmployeeId)
-                    return (
-                      <div key={review.id} className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
-                        <div className="px-5 py-4 flex items-center justify-between border-b border-border gap-4">
-                          <div className="min-w-0">
-                            <p className="font-bold text-base leading-snug">{review.title}</p>
-                            <p className="text-xs text-muted-foreground mt-0.5">
-                              {review.employee.first_name} {review.employee.last_name} · {review.period}
-                              {review.deadline && ` · Due ${new Date(review.deadline).toLocaleDateString("en-ZA", { dateStyle: "medium" })}`}
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-2 shrink-0">
-                            {myInv && <InviteeStatusBadge status={myInv.status} />}
-                            {myInv?.status === "pending" && (
-                              <>
-                                <Button size="sm" className="h-7 text-xs gap-1"
-                                  onClick={async () => {
-                                    await fetch(`/api/kpi/invitees/${myInv.id}/respond`, {
-                                      method: "POST", headers: { "Content-Type": "application/json" },
-                                      body: JSON.stringify({ response: "accepted" }),
-                                    })
-                                    showToast("Invitation accepted"); await loadAll()
-                                  }}
-                                >
-                                  <Check size={11} /> Accept
-                                </Button>
-                                <Button size="sm" variant="outline" className="h-7 text-xs gap-1 text-destructive border-destructive/40 hover:bg-destructive/10"
-                                  onClick={async () => {
-                                    await fetch(`/api/kpi/invitees/${myInv.id}/respond`, {
-                                      method: "POST", headers: { "Content-Type": "application/json" },
-                                      body: JSON.stringify({ response: "declined" }),
-                                    })
-                                    showToast("Invitation declined"); await loadAll()
-                                  }}
-                                >
-                                  <X size={11} /> Decline
-                                </Button>
-                              </>
-                            )}
-                          </div>
-                        </div>
-                        {myInv && (myInv.status === "accepted" || myInv.status === "completed") && (
-                          <div className="px-5 py-5 space-y-3">
-                            {template.map((section, idx) => (
-                              <SectionAccordion
-                                key={section.id} section={section} sectionIndex={idx}
-                                scores={scores[review.id] ?? []} invitees={review.kpi_review_invitees ?? []}
-                                isHR={false} currentEmployeeId={currentEmployeeId}
-                                onScoreChange={(itemId, score, comments) => handleScoreChange(review.id, itemId, score, comments)}
-                                defaultOpen={idx === 0}
-                              />
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    )
-                  })
-              }
-            </div>
+                </div>
+              )}
+              <MyAssignmentsView
+                reviews={reviews}
+                scores={scores}
+                template={template}
+                currentEmployeeId={currentEmployeeId}
+                isHR={isHR}
+                onScoreChange={handleScoreChange}
+                loadAll={loadAll}
+                showToast={showToast}
+              />
+            </>
           )}
         </>
       )}
 
       {showCreate && (
         <CreateReviewModal
-          employees={allEmployees} currentPeriod={currentPeriod}
-          onSave={handleCreate} onClose={() => setShowCreate(false)} saving={creating}
+          employees={allEmployees}
+          currentPeriod={currentPeriod}
+          preselectedEmployeeId={createPreselect.employeeId}
+          preselectedQuarter={createPreselect.quarter}
+          onSave={handleCreate}
+          onClose={() => { setShowCreate(false); setCreatePreselect({}) }}
+          saving={creating}
         />
       )}
 

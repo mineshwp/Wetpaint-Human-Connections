@@ -1,0 +1,52 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gh auth *)",
+      "WebSearch",
+      "WebFetch(domain:supabase.com)",
+      "mcp__Claude_in_Chrome__list_connected_browsers",
+      "mcp__Claude_in_Chrome__select_browser",
+      "mcp__Claude_in_Chrome__tabs_context_mcp",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); mcps = d.get\\('mcpServers', {}\\); [print\\(k, v\\) for k,v in mcps.items\\(\\) if k in ['supabase','vercel']]\")",
+      "Bash(python3 -c ' *)",
+      "mcp__Claude_in_Chrome__navigate",
+      "mcp__Claude_in_Chrome__tabs_create_mcp",
+      "mcp__Claude_in_Chrome__computer",
+      "mcp__vercel__list_teams",
+      "mcp__vercel__list_projects",
+      "Bash(vercel whoami *)",
+      "Skill(xlsx)",
+      "Skill(xlsx:*)",
+      "Bash(supabase projects *)",
+      "Bash(pip install *)",
+      "Bash(python3 -c \"import openpyxl, supabase, dotenv; print\\('deps OK'\\)\")",
+      "Bash(git -C /Users/mineshsingh/Documents/Wetpaint/SAAS/wetpaint-human-connections diff --stat)",
+      "Bash(identify /Users/mineshsingh/Documents/Wetpaint/SAAS/wetpaint-human-connections/src/app/favicon.ico)",
+      "mcp__vercel__list_deployments",
+      "Bash(python3 -c \"import json,sys; p=json.load\\(sys.stdin\\); print\\(json.dumps\\(p.get\\('exports', p.get\\('main', 'no exports'\\)\\), indent=2\\)\\)\")",
+      "Bash(git commit -m ' *)",
+      "mcp__Claude_in_Chrome__read_console_messages",
+      "mcp__Claude_in_Chrome__read_network_requests",
+      "mcp__Claude_in_Chrome__browser_batch",
+      "Bash(identify \"/Users/mineshsingh/Documents/Wetpaint/SAAS/wetpaint-human-connections/src/app/icon.png\")",
+      "mcp__Claude_in_Chrome__javascript_tool",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/favicon.ico)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/icon.png)",
+      "mcp__vercel__get_project",
+      "mcp__vercel__get_deployment",
+      "WebFetch(domain:wetpaint-human-connections.vercel.app)",
+      "Bash(npx vercel *)",
+      "Bash(xargs ls -la)",
+      "Bash(mkdir -p \"/Users/mineshsingh/Documents/Wetpaint/SAAS/wetpaint-human-connections/src/app/api/employees/[id]/training\")",
+      "Bash(mkdir -p \"/Users/mineshsingh/Documents/Wetpaint/SAAS/wetpaint-human-connections/src/app/api/employees/[id]/training/[trainingId]\")",
+      "Bash(grep -E \"\\\\.\\(tsx|ts\\)$\")",
+      "Bash(npx eslint *)",
+      "Bash(grep -E \"\\\\.\\(tsx?|jsx?\\)$\")",
+      "Bash(grep -E \"\\\\.\\(png|svg|jpg|jpeg|webp\\)$\")"
+    ],
+    "additionalDirectories": [
+      "/Users/mineshsingh/Documents/Wetpaint/SAAS/wetpaint-human-connections/src/app/api/employees/[id]",
+      "/Users/mineshsingh/Documents/Wetpaint/SAAS/wetpaint-human-connections/src/app/api/employees/[id]/training"
+    ]
+  }
+}
