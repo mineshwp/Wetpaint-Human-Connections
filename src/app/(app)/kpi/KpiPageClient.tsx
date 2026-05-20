@@ -1170,19 +1170,24 @@ function MyAssignmentsView({ reviews, scores, template, currentEmployeeId, isHR,
                 )}
               </div>
             </div>
-            {myInv && (myInv.status === "accepted" || myInv.status === "completed") && (
-              <div className="px-5 py-5 space-y-3">
-                {templateForReview(template, scores[review.id] ?? []).map((section, idx) => (
-                  <SectionAccordion
-                    key={section.id} section={section} sectionIndex={idx}
-                    scores={scores[review.id] ?? []} invitees={review.kpi_review_invitees ?? []}
-                    isHR={false} currentEmployeeId={currentEmployeeId}
-                    onScoreChange={(itemId, score, comments) => onScoreChange(review.id, itemId, score, comments)}
-                    defaultOpen={idx === 0}
-                  />
-                ))}
-              </div>
-            )}
+            {(() => {
+              const inviteeActive = myInv && (myInv.status === "accepted" || myInv.status === "completed")
+              const subjectReadOnly = !myInv && !isHR && (review.status === "active" || review.status === "completed")
+              if (!inviteeActive && !subjectReadOnly) return null
+              return (
+                <div className="px-5 py-5 space-y-3">
+                  {templateForReview(template, scores[review.id] ?? []).map((section, idx) => (
+                    <SectionAccordion
+                      key={section.id} section={section} sectionIndex={idx}
+                      scores={scores[review.id] ?? []} invitees={review.kpi_review_invitees ?? []}
+                      isHR={false} currentEmployeeId={currentEmployeeId}
+                      onScoreChange={(itemId, score, comments) => onScoreChange(review.id, itemId, score, comments)}
+                      defaultOpen={idx === 0}
+                    />
+                  ))}
+                </div>
+              )
+            })()}
           </div>
         )
       })}
