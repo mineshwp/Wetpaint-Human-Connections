@@ -63,13 +63,6 @@ export type Department = {
   colour: string
 }
 
-export type LeaveBalance = {
-  leave_type: string
-  entitled: number
-  used: number
-  pending: number
-}
-
 export type EmployeeDocument = {
   id: string
   category: string

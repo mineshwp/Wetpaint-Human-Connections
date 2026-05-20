@@ -7,7 +7,11 @@
       "Bash(vercel --prod --yes)",
       "Bash(git commit -m ' *)",
       "mcp__vercel__get_deployment_build_logs",
-      "mcp__vercel__web_fetch_vercel_url"
+      "mcp__vercel__web_fetch_vercel_url",
+      "Bash(rm /Users/mineshsingh/Documents/Wetpaint/SAAS/wetpaint-human-connections/.git/index.lock && git add -A)"
+    ],
+    "additionalDirectories": [
+      "/Users/mineshsingh/Documents/Wetpaint/SAAS/wetpaint-human-connections/.git"
     ]
   }
 }

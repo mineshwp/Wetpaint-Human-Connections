@@ -370,7 +370,7 @@ export function EditEmployeeClient({ employee, departments, allEmployees }: Prop
               <SelectField value={form.status} onChange={set("status")}>
                 <option value="active">Active</option>
                 <option value="onboarding">Onboarding</option>
-                <option value="on-leave">On Leave</option>
+                <option value="on-leave">Inactive</option>
                 <option value="suspended">Suspended</option>
                 <option value="terminated">Terminated</option>
                 <option value="resigned">Resigned</option>

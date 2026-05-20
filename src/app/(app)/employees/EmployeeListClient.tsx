@@ -9,7 +9,6 @@ import {
   Users,
   UserCheck,
   Briefcase,
-  Clock,
   Mail,
   Phone,
 } from "lucide-react"
@@ -31,7 +30,7 @@ const STATUS_META: Record<
     bg: "bg-blue-50 border-blue-200",
   },
   "on-leave": {
-    label: "On Leave",
+    label: "Inactive",
     fg: "text-amber-700",
     bg: "bg-amber-50 border-amber-200",
   },
@@ -277,12 +276,11 @@ export function EmployeeListClient({ employees, archivedEmployees, departments }
 
   const activeCount = employees.filter((e) => e.status === "active").length
   const onboardingCount = employees.filter((e) => e.status === "onboarding").length
-  const onLeaveCount = employees.filter((e) => e.status === "on-leave").length
 
   return (
     <>
       {/* Stats row */}
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 mb-5">
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 mb-5">
         <StatCard
           label="Total"
           value={employees.length}
@@ -306,14 +304,6 @@ export function EmployeeListClient({ employees, archivedEmployees, departments }
           icon={<Briefcase className="h-5 w-5" />}
           color="text-blue-600"
           bg="bg-blue-50"
-        />
-        <StatCard
-          label="On Leave"
-          value={onLeaveCount}
-          sub="Away today"
-          icon={<Clock className="h-5 w-5" />}
-          color="text-amber-600"
-          bg="bg-amber-50"
         />
       </div>
 
@@ -364,7 +354,6 @@ export function EmployeeListClient({ employees, archivedEmployees, departments }
           <option value="all">All statuses</option>
           <option value="active">Active</option>
           <option value="onboarding">Onboarding</option>
-          <option value="on-leave">On Leave</option>
           <option value="terminated">Terminated</option>
           <option value="suspended">Suspended</option>
           <option value="resigned">Resigned</option>

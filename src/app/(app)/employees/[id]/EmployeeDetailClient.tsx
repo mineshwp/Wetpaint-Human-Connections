@@ -31,7 +31,6 @@ import {
 import { cn } from "@/lib/utils"
 import type {
   EmployeeFull,
-  LeaveBalance,
   EmployeeDocument,
   HRNote,
   KpiSummary,
@@ -111,7 +110,7 @@ const STATUS_META: Record<
 > = {
   active: { label: "Active", fg: "text-emerald-700", bg: "bg-emerald-50 border-emerald-200" },
   onboarding: { label: "Onboarding", fg: "text-blue-700", bg: "bg-blue-50 border-blue-200" },
-  "on-leave": { label: "On Leave", fg: "text-amber-700", bg: "bg-amber-50 border-amber-200" },
+  "on-leave": { label: "Inactive", fg: "text-amber-700", bg: "bg-amber-50 border-amber-200" },
   terminated: { label: "Terminated", fg: "text-gray-500", bg: "bg-gray-50 border-gray-200" },
   suspended: { label: "Suspended", fg: "text-red-700", bg: "bg-red-50 border-red-200" },
   resigned: { label: "Resigned", fg: "text-purple-700", bg: "bg-purple-50 border-purple-200" },
@@ -1439,17 +1438,7 @@ function profileCompleteness(emp: EmployeeFull): { pct: number; missing: string[
 
 // ─── Print ────────────────────────────────────────────────────────────────────
 
-const LEAVE_LABELS: Record<string, string> = {
-  annual: "Annual Leave",
-  sick: "Sick Leave",
-  family: "Family Responsibility",
-  study: "Study Leave",
-  unpaid: "Unpaid Leave",
-  recess: "Recess Leave",
-  other: "Other",
-}
-
-function buildPrintHTML(emp: EmployeeFull, leaveBalances: LeaveBalance[]): string {
+function buildPrintHTML(emp: EmployeeFull): string {
   const now = new Date().toLocaleDateString("en-ZA", {
     day: "numeric",
     month: "long",
@@ -1463,19 +1452,7 @@ function buildPrintHTML(emp: EmployeeFull, leaveBalances: LeaveBalance[]): strin
     terminated: "background:#f3f4f6;color:#6b7280",
     resigned: "background:#f3e8ff;color:#7e22ce",
   }
-  const leaveRows =
-    leaveBalances.length > 0
-      ? leaveBalances
-          .map((b) => {
-            const rem = (b.entitled - b.used - b.pending).toFixed(1)
-            return `<tr><td>${LEAVE_LABELS[b.leave_type] ?? b.leave_type}</td>
-            <td style="text-align:center">${b.entitled}</td>
-            <td style="text-align:center">${b.used}</td>
-            <td style="text-align:center">${b.pending || "—"}</td>
-            <td style="text-align:center;font-weight:600">${rem}</td></tr>`
-          })
-          .join("")
-      : `<tr><td colspan="5" style="text-align:center;color:#9ca3af;font-style:italic">No leave balances on record</td></tr>`
+  const statusLabel = STATUS_META[emp.status]?.label ?? emp.status
 
   const f = (label: string, val: string | null | undefined) => `
     <div class="field">
@@ -1511,7 +1488,7 @@ function buildPrintHTML(emp: EmployeeFull, leaveBalances: LeaveBalance[]): strin
   <div class="banner"><div class="avatar">${escHtml(emp.avatarInitials)}</div><div>
   <div class="emp-name">${escHtml(emp.firstName)} ${escHtml(emp.lastName)}</div>
   <div class="emp-title">${escHtml(emp.jobTitle)}${emp.department ? ` · ${escHtml(emp.department.name)}` : ""}</div>
-  <div class="status" style="${escHtml(statusColors[emp.status])}">${escHtml(emp.status.replace("-", " "))}</div>
+  <div class="status" style="${escHtml(statusColors[emp.status])}">${escHtml(statusLabel)}</div>
   </div></div>
   <div class="section"><div class="section-title">Personal Information</div><div class="two-col">
   <div>${f("First Name", emp.firstName)}${f("Surname", emp.lastName)}${f("Date of Birth", fmtDate(emp.dateOfBirth))}${f("Identity Number", emp.identityNumber)}${f("Gender", emp.gender)}</div>
@@ -1523,15 +1500,12 @@ function buildPrintHTML(emp: EmployeeFull, leaveBalances: LeaveBalance[]): strin
   <div class="section"><div class="section-title">Next of Kin</div><div class="two-col">
   <div>${f("Full Name", emp.nextOfKinName)}${f("Contact Number", emp.nextOfKinPhone)}${f("Relationship", emp.nextOfKinRelationship)}</div></div></div>
   <div class="section"><div class="section-title">Employment Details</div><div class="two-col">
-  <div>${f("Staff Number", emp.employeeNumber)}${f("Job Title", emp.jobTitle)}${f("Department", emp.department?.name)}${f("Status", emp.status)}${f("Contract Type", emp.contractType)}</div>
+  <div>${f("Staff Number", emp.employeeNumber)}${f("Job Title", emp.jobTitle)}${f("Department", emp.department?.name)}${f("Status", statusLabel)}${f("Contract Type", emp.contractType)}</div>
   <div>${f("Start Date", fmtDate(emp.startDate))}${f("Contract End", fmtDate(emp.contractEndDate))}${f("Probation End", fmtDate(emp.probationEndDate))}${f("Last Pay Review", fmtDate(emp.lastSalaryReviewDate))}</div>
   </div></div>
   <div class="section"><div class="section-title">Banking Details</div><div class="two-col">
   <div>${f("Bank", emp.bankName)}${f("Account Number", emp.bankAccountNumber)}${f("Branch Code", emp.bankBranchCode)}</div>
   <div>${f("Account Type", emp.bankAccountType)}${f("Verification", emp.bankVerificationStatus)}</div></div></div>
-  <div class="section"><div class="section-title">Leave Balances</div>
-  <table><thead><tr><th>Leave Type</th><th style="text-align:center">Entitled</th><th style="text-align:center">Used</th><th style="text-align:center">Pending</th><th style="text-align:center">Remaining</th></tr></thead>
-  <tbody>${leaveRows}</tbody></table></div>
   <div class="footer"><span>WP Human Connections · ${now}</span><span>Confidential — HR use only.</span></div>
   </div></body></html>`
 }
@@ -1542,7 +1516,6 @@ type Tab = "personal" | "banking" | "training" | "documents" | "notes"
 
 interface Props {
   employee: EmployeeFull
-  leaveBalances: LeaveBalance[]
   initialDocuments: EmployeeDocument[]
   initialNotes: HRNote[]
   kpiSummary: KpiSummary
@@ -1558,7 +1531,6 @@ interface Props {
 
 export function EmployeeDetailClient({
   employee: emp,
-  leaveBalances,
   initialDocuments,
   initialNotes,
   kpiSummary,
@@ -1578,11 +1550,6 @@ export function EmployeeDetailClient({
     ? profileCompleteness(emp)
     : { pct: 0, missing: [] }
 
-  const annualLeave = leaveBalances.find((b) => b.leave_type === "annual")
-  const annualRemaining = annualLeave
-    ? annualLeave.entitled - annualLeave.used - annualLeave.pending
-    : null
-
   const tabs: { key: Tab; label: string }[] = [
     { key: "personal", label: "Personal & Employment" },
     ...(canViewBanking ? [{ key: "banking" as Tab, label: "Banking & Payroll" }] : []),
@@ -1601,7 +1568,7 @@ export function EmployeeDetailClient({
   const activeTab = tabs.some((t) => t.key === tab) ? tab : "personal"
 
   function handlePrint() {
-    const html = buildPrintHTML(emp, leaveBalances)
+    const html = buildPrintHTML(emp)
     const win = window.open("", "_blank", "width=900,height=700")
     if (!win) return
     win.document.write(html)
@@ -1779,18 +1746,12 @@ export function EmployeeDetailClient({
       </div>
 
       {/* ── Stats row ────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
         <MiniStat
           label="Tenure"
           value={tenure(emp.startDate)}
           icon={<Clock size={18} />}
           iconClass="text-blue-600 bg-blue-50"
-        />
-        <MiniStat
-          label="Annual Leave"
-          value={annualRemaining !== null ? `${annualRemaining.toFixed(0)}d remaining` : "—"}
-          icon={<Calendar size={18} />}
-          iconClass="text-emerald-600 bg-emerald-50"
         />
         <MiniStat
           label="KPI"

@@ -6,7 +6,6 @@ import { setImpersonation } from "@/app/(app)/actions"
 import { EmployeeDetailClient } from "./EmployeeDetailClient"
 import type {
   EmployeeFull,
-  LeaveBalance,
   EmployeeDocument,
   HRNote,
   KpiSummary,
@@ -151,16 +150,8 @@ export default async function EmployeeDetailPage({
       : null,
   }
 
-  const year = new Date().getFullYear()
-
   // Fetch sub-resources in parallel
-  const [leaveResult, docsResult, notesResult, kpiResult, trainingResult] = await Promise.all([
-    supabase
-      .from("leave_balances")
-      .select("leave_type, entitled, used, pending")
-      .eq("employee_id", id)
-      .eq("year", year),
-
+  const [docsResult, notesResult, kpiResult, trainingResult] = await Promise.all([
     canViewDocuments
       ? (() => {
           let q = supabase
@@ -198,7 +189,6 @@ export default async function EmployeeDetailPage({
       .order("date_completed", { ascending: false, nullsFirst: false }),
   ])
 
-  const leaveBalances: LeaveBalance[] = leaveResult.data ?? []
   const documents: EmployeeDocument[] = (docsResult.data ?? []) as EmployeeDocument[]
   const hrNotes: HRNote[] = (notesResult.data ?? []) as HRNote[]
   const training: EmployeeTraining[] = (trainingResult.data ?? []) as EmployeeTraining[]
@@ -217,7 +207,6 @@ export default async function EmployeeDetailPage({
   return (
     <EmployeeDetailClient
       employee={employee}
-      leaveBalances={leaveBalances}
       initialDocuments={documents}
       initialNotes={hrNotes}
       kpiSummary={kpiSummary}
