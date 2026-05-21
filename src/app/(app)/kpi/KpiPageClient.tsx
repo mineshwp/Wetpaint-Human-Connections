@@ -437,9 +437,17 @@ function SectionAccordion({ section, sectionIndex, scores, invitees, isHR, curre
 
   return (
     <div className={cn("rounded-xl border bg-card overflow-hidden transition-all", open ? "border-border shadow-md" : "border-border shadow-sm")}>
-      <button
-        type="button" onClick={() => setOpen(o => !o)}
-        className={cn("w-full flex items-center gap-3 px-5 py-4 text-left transition-colors", open ? "border-b border-border" : "hover:bg-muted/20")}
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={() => setOpen(o => !o)}
+        onKeyDown={e => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault()
+            setOpen(o => !o)
+          }
+        }}
+        className={cn("w-full flex items-center gap-3 px-5 py-4 text-left transition-colors cursor-pointer select-none", open ? "border-b border-border" : "hover:bg-muted/20")}
       >
         <SectionIcon size={18} className={cn("shrink-0", cfg.colorClass)} />
         <div className="flex-1 min-w-0">
@@ -465,7 +473,7 @@ function SectionAccordion({ section, sectionIndex, scores, invitees, isHR, curre
         <div className={cn("w-7 h-7 rounded-full border border-border flex items-center justify-center text-muted-foreground transition-transform shrink-0", !open && "-rotate-90")}>
           <ChevronDown size={14} />
         </div>
-      </button>
+      </div>
 
       {open && (
         <div className="bg-[#FAFBFC] p-5 flex flex-col gap-4">

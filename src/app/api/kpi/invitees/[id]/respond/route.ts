@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
-import { getEmployeeIdForUser } from "@/lib/auth"
+import { getUserRole, getEmployeeIdForUser } from "@/lib/auth"
+import { getImpersonationContext } from "@/lib/impersonation"
 
 export async function POST(
   req: NextRequest,
@@ -11,8 +12,13 @@ export async function POST(
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-  const myEmployeeId = await getEmployeeIdForUser(supabase, user.id)
-  if (!myEmployeeId) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  const [role, myEmployeeId, impersonating] = await Promise.all([
+    getUserRole(supabase, user.id),
+    getEmployeeIdForUser(supabase, user.id),
+    getImpersonationContext(),
+  ])
+  const effectiveEmployeeId = role === "hr" && impersonating ? impersonating.employeeId : myEmployeeId
+  if (!effectiveEmployeeId) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
 
   // Verify the invitee row belongs to this user
   const { data: row } = await supabase
@@ -21,7 +27,7 @@ export async function POST(
     .eq("id", inviteeRowId)
     .single()
 
-  if (!row || row.invitee_id !== myEmployeeId) {
+  if (!row || row.invitee_id !== effectiveEmployeeId) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
 

@@ -35,6 +35,7 @@ export default function RootLayout({
     <html
       lang="en"
       className={`${arimo.variable} ${dmSans.variable} h-full antialiased`}
+      data-scroll-behavior="smooth"
     >
       <body className="min-h-full flex flex-col bg-background text-foreground">
         {children}

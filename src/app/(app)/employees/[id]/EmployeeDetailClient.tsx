@@ -787,8 +787,10 @@ function TrainingModal({
           )}
 
           <div>
-            <label className={labelClass}>Training Name *</label>
+            <label htmlFor="training-name" className={labelClass}>Training Name *</label>
             <input
+              id="training-name"
+              name="training-name"
               className={inputClass}
               value={form.name}
               onChange={(e) => set("name", e.target.value)}
@@ -799,8 +801,10 @@ function TrainingModal({
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className={labelClass}>Type *</label>
+              <label htmlFor="training-type" className={labelClass}>Type *</label>
               <select
+                id="training-type"
+                name="training-type"
                 className={inputClass}
                 value={form.type}
                 onChange={(e) => set("type", e.target.value as "online" | "in-person")}
@@ -810,8 +814,10 @@ function TrainingModal({
               </select>
             </div>
             <div>
-              <label className={labelClass}>Category</label>
+              <label htmlFor="training-category" className={labelClass}>Category</label>
               <select
+                id="training-category"
+                name="training-category"
                 className={inputClass}
                 value={form.category}
                 onChange={(e) => set("category", e.target.value)}
@@ -827,8 +833,10 @@ function TrainingModal({
           </div>
 
           <div>
-            <label className={labelClass}>Provider / Institution</label>
+            <label htmlFor="training-provider" className={labelClass}>Provider / Institution</label>
             <input
+              id="training-provider"
+              name="training-provider"
               className={inputClass}
               value={form.provider}
               onChange={(e) => set("provider", e.target.value)}
@@ -838,8 +846,10 @@ function TrainingModal({
 
           {form.type === "online" ? (
             <div>
-              <label className={labelClass}>Course URL</label>
+              <label htmlFor="training-url" className={labelClass}>Course URL</label>
               <input
+                id="training-url"
+                name="training-url"
                 className={inputClass}
                 type="url"
                 value={form.url}
@@ -849,8 +859,10 @@ function TrainingModal({
             </div>
           ) : (
             <div>
-              <label className={labelClass}>Venue</label>
+              <label htmlFor="training-venue" className={labelClass}>Venue</label>
               <input
+                id="training-venue"
+                name="training-venue"
                 className={inputClass}
                 value={form.venue}
                 onChange={(e) => set("venue", e.target.value)}
@@ -861,8 +873,10 @@ function TrainingModal({
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className={labelClass}>Date Completed</label>
+              <label htmlFor="training-date-completed" className={labelClass}>Date Completed</label>
               <input
+                id="training-date-completed"
+                name="training-date-completed"
                 className={inputClass}
                 type="date"
                 value={form.date_completed}
@@ -870,8 +884,10 @@ function TrainingModal({
               />
             </div>
             <div>
-              <label className={labelClass}>Expiry Date</label>
+              <label htmlFor="training-expiry-date" className={labelClass}>Expiry Date</label>
               <input
+                id="training-expiry-date"
+                name="training-expiry-date"
                 className={inputClass}
                 type="date"
                 value={form.expiry_date}
@@ -881,8 +897,10 @@ function TrainingModal({
           </div>
 
           <div>
-            <label className={labelClass}>Duration (hours)</label>
+            <label htmlFor="training-duration-hours" className={labelClass}>Duration (hours)</label>
             <input
+              id="training-duration-hours"
+              name="training-duration-hours"
               className={inputClass}
               type="number"
               min="0"
@@ -894,8 +912,10 @@ function TrainingModal({
           </div>
 
           <div>
-            <label className={labelClass}>Certificate</label>
+            <label htmlFor="training-certificate" className={labelClass}>Certificate</label>
             <input
+              id="training-certificate"
+              name="training-certificate"
               type="file"
               accept=".pdf,.jpg,.jpeg,.png,.webp"
               onChange={(e) => setCertFile(e.target.files?.[0] ?? null)}
@@ -919,8 +939,10 @@ function TrainingModal({
           </div>
 
           <div>
-            <label className={labelClass}>Notes</label>
+            <label htmlFor="training-notes" className={labelClass}>Notes</label>
             <textarea
+              id="training-notes"
+              name="training-notes"
               className={cn(inputClass, "resize-none")}
               rows={3}
               value={form.notes}
