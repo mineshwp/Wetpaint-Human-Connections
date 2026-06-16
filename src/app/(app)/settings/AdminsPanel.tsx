@@ -10,6 +10,18 @@ export interface AdminRow {
   active_role: string
   employee_id: string | null
   employees: { first_name: string; last_name: string; email: string } | null
+  // true = invited but has never signed in yet (awaiting acceptance)
+  pending: boolean
+}
+
+// Response bodies may be non-JSON (e.g. a 500 HTML error page or a redirect to
+// /login). Never let res.json() throw and swallow the failure silently.
+async function readJson(res: Response): Promise<Record<string, unknown>> {
+  try {
+    return await res.json()
+  } catch {
+    return {}
+  }
 }
 
 interface AdminsPanelProps {
@@ -47,16 +59,30 @@ export function AdminsPanel({ initialAdmins, currentUserId }: AdminsPanelProps) 
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: trimmed }),
       })
-      const json = await res.json()
-      if (!res.ok) { flash(json.error ?? "Failed to add admin", "error"); return }
+      const json = await readJson(res)
+      if (!res.ok) {
+        flash((json.error as string) ?? `Failed to add admin (${res.status})`, "error")
+        return
+      }
 
       // Refresh the list
       const listRes = await fetch("/api/settings/admins")
-      const listJson = await listRes.json()
-      if (listRes.ok) setAdmins(listJson.admins)
+      const listJson = await readJson(listRes)
+      if (listRes.ok && Array.isArray(listJson.admins)) {
+        setAdmins(listJson.admins as AdminRow[])
+      }
 
       setEmail("")
-      flash(`${json.name} has been granted admin access. A notification email has been sent.`, "success")
+      const name = (json.name as string) ?? trimmed
+      const pending = json.pending === true
+      flash(
+        pending
+          ? `Invite sent to ${name}. They'll appear as “Pending” until they accept and sign in.`
+          : `${name} has been granted admin access. A notification email has been sent.`,
+        "success"
+      )
+    } catch (err) {
+      flash(err instanceof Error ? err.message : "Network error — please try again.", "error")
     } finally {
       setAdding(false)
     }
@@ -68,10 +94,15 @@ export function AdminsPanel({ initialAdmins, currentUserId }: AdminsPanelProps) 
     setRemovingId(userId)
     try {
       const res = await fetch(`/api/settings/admins/${userId}`, { method: "DELETE" })
-      const json = await res.json()
-      if (!res.ok) { flash(json.error ?? "Failed to remove admin", "error"); return }
+      const json = await readJson(res)
+      if (!res.ok) {
+        flash((json.error as string) ?? `Failed to remove admin (${res.status})`, "error")
+        return
+      }
       setAdmins((prev) => prev.filter((a) => a.id !== userId))
       flash(`${name}'s admin access has been removed.`, "success")
+    } catch (err) {
+      flash(err instanceof Error ? err.message : "Network error — please try again.", "error")
     } finally {
       setRemovingId(null)
     }
@@ -127,6 +158,11 @@ export function AdminsPanel({ initialAdmins, currentUserId }: AdminsPanelProps) 
                     {name}
                     {isSelf && (
                       <span className="ml-2 text-xs font-normal text-muted-foreground">(you)</span>
+                    )}
+                    {admin.pending && (
+                      <span className="ml-2 inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-700 align-middle">
+                        Pending
+                      </span>
                     )}
                   </p>
                   {admin.employees?.email && (
