@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { getUserRole } from "@/lib/auth"
 import { sendAdminRevokedEmail } from "@/lib/email"
 
@@ -19,8 +20,12 @@ export async function DELETE(
     return NextResponse.json({ error: "You cannot remove your own admin access" }, { status: 400 })
   }
 
+  // RLS on app_users only exposes a user's own row, so use the service-role
+  // client for these cross-user reads/writes (hr authorization enforced above).
+  const adminClient = createAdminClient()
+
   // Get their employee details for the notification email
-  const { data: target } = await supabase
+  const { data: target } = await adminClient
     .from("app_users")
     .select("id, active_role, employees(first_name, last_name, email)")
     .eq("id", userId)
@@ -31,7 +36,7 @@ export async function DELETE(
     return NextResponse.json({ error: "This user is not an admin" }, { status: 400 })
   }
 
-  const { error } = await supabase
+  const { error } = await adminClient
     .from("app_users")
     .update({ active_role: "staff" })
     .eq("id", userId)

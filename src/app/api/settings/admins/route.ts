@@ -14,7 +14,7 @@ export async function GET() {
   if (role !== "hr") return NextResponse.json({ error: "Forbidden" }, { status: 403 })
 
   try {
-    const admins = await listAdmins(supabase)
+    const admins = await listAdmins()
     return NextResponse.json({ admins })
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed to load admins"
@@ -57,10 +57,12 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // Find or create app_user for this employee
+    // Find or create app_user for this employee. RLS on app_users only exposes a
+    // user's own row, so all app_users reads/writes here use the service-role
+    // client — authorization was already enforced via getUserRole above.
     const adminClient = createAdminClient()
 
-    const { data: existingUser, error: userLookupError } = await supabase
+    const { data: existingUser, error: userLookupError } = await adminClient
       .from("app_users")
       .select("id, active_role")
       .eq("employee_id", emp.id)
@@ -79,7 +81,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "This person is already an admin" }, { status: 409 })
       }
 
-      const { error: updateError } = await supabase
+      const { error: updateError } = await adminClient
         .from("app_users")
         .update({ active_role: "hr" })
         .eq("id", existingUser.id)
@@ -97,7 +99,7 @@ export async function POST(req: NextRequest) {
       )
       if (inviteError) return NextResponse.json({ error: inviteError.message }, { status: 500 })
 
-      const { error: insertError } = await supabase
+      const { error: insertError } = await adminClient
         .from("app_users")
         .insert({ id: invited.user.id, employee_id: emp.id, active_role: "hr" })
 

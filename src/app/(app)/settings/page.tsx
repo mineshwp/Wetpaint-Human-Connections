@@ -15,7 +15,7 @@ export default async function SettingsPage() {
   const role = await getUserRole(supabase, user.id)
   if (role !== "hr") redirect("/employees")
 
-  const admins = await listAdmins(supabase)
+  const admins = await listAdmins()
 
   return (
     <div className="space-y-6 max-w-2xl">
