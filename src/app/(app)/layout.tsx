@@ -25,10 +25,20 @@ export default async function AppLayout({
 
   if (!user) redirect("/login")
 
+  // Mark genuine acceptance: the first time a user actually loads the app, stamp
+  // accepted_at (drives the "Pending" badge in Settings). A URL scanner like
+  // Microsoft Safe Links hits Supabase's verify endpoint, never this authenticated
+  // page, so it can't trigger this. Uses the user's own client — RLS allows a user
+  // to update their own row. No-op (0 rows) once already set.
   const [role, employeeId, impersonating] = await Promise.all([
     getUserRole(supabase, user.id),
     getEmployeeIdForUser(supabase, user.id),
     getImpersonationContext(),
+    supabase
+      .from("app_users")
+      .update({ accepted_at: new Date().toISOString() })
+      .eq("id", user.id)
+      .is("accepted_at", null),
   ])
 
   let userName = user.email ?? "User"

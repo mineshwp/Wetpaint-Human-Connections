@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { getUserRole } from "@/lib/auth"
 import { sendAdminGrantedEmail } from "@/lib/email"
 import { listAdmins } from "@/lib/admins"
+import { generateTempPassword } from "@/lib/password"
 
 export async function GET() {
   const supabase = await createClient()
@@ -64,7 +65,7 @@ export async function POST(req: NextRequest) {
 
     const { data: existingUser, error: userLookupError } = await adminClient
       .from("app_users")
-      .select("id, active_role")
+      .select("id, active_role, accepted_at")
       .eq("employee_id", emp.id)
       .single()
 
@@ -72,9 +73,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: userLookupError.message }, { status: 500 })
     }
 
-    // pending = invited and awaiting first sign-in. An already-onboarded user
-    // who is being promoted has already accepted, so they are not pending.
+    // pending = added but hasn't genuinely signed into the app yet (accepted_at null).
     let pending = false
+    // tempPassword is returned only when we provision a brand-new login, so HR can
+    // share it. Onboarding is HR-set-password (no email invites — Safe Links breaks
+    // those by auto-consuming the one-time link).
+    let tempPassword: string | null = null
 
     if (existingUser) {
       if (existingUser.active_role === "hr") {
@@ -88,27 +92,50 @@ export async function POST(req: NextRequest) {
 
       if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 })
 
-      // Already-existing auth user that has never signed in is still pending.
-      const { data: authUser } = await adminClient.auth.admin.getUserById(existingUser.id)
-      pending = !!authUser?.user && !authUser.user.last_sign_in_at
+      // Existing app user being promoted — pending reflects whether they've ever
+      // signed into the app themselves. Don't reset their password.
+      pending = existingUser.accepted_at == null
     } else {
-      // They haven't been invited/logged in yet — invite them and set role to hr
-      const { data: invited, error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(
-        normalised,
-        { data: { employee_id: emp.id } }
-      )
-      if (inviteError) return NextResponse.json({ error: inviteError.message }, { status: 500 })
+      // No app_user yet — provision a login with a temporary password HR will share.
+      const temp = generateTempPassword()
+      let authUserId: string
+
+      const { data: created, error: createError } = await adminClient.auth.admin.createUser({
+        email: normalised,
+        password: temp,
+        email_confirm: true,
+        user_metadata: { employee_id: emp.id },
+      })
+
+      if (createError) {
+        // An auth user may already exist (e.g. left over from an old invite).
+        // Reuse it and set a known password so HR can hand it over.
+        const { data: list } = await adminClient.auth.admin.listUsers({ perPage: 1000 })
+        const found = list?.users.find((u) => (u.email ?? "").toLowerCase() === normalised)
+        if (!found) {
+          return NextResponse.json({ error: createError.message }, { status: 500 })
+        }
+        const { error: pwError } = await adminClient.auth.admin.updateUserById(found.id, {
+          password: temp,
+          email_confirm: true,
+        })
+        if (pwError) return NextResponse.json({ error: pwError.message }, { status: 500 })
+        authUserId = found.id
+      } else {
+        authUserId = created.user.id
+      }
 
       const { error: insertError } = await adminClient
         .from("app_users")
-        .insert({ id: invited.user.id, employee_id: emp.id, active_role: "hr" })
+        .insert({ id: authUserId, employee_id: emp.id, active_role: "hr", accepted_at: null })
 
       if (insertError) return NextResponse.json({ error: insertError.message }, { status: 500 })
 
       pending = true
+      tempPassword = temp
     }
 
-    // Send notification email (non-blocking — don't fail the request if email fails)
+    // Optional notification email (no links — safe from Safe Links). Non-blocking.
     try {
       await sendAdminGrantedEmail(normalised, emp.first_name)
     } catch (e) {
@@ -120,6 +147,7 @@ export async function POST(req: NextRequest) {
       name: `${emp.first_name} ${emp.last_name}`,
       email: normalised,
       pending,
+      tempPassword,
     })
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed to add admin"

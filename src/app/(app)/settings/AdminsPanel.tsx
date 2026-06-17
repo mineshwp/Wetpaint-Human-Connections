@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { UserCog, Trash2, Plus, Loader2, AlertCircle, CheckCircle2, Mail } from "lucide-react"
+import { UserCog, Trash2, Plus, Loader2, AlertCircle, CheckCircle2, Mail, KeyRound, Copy, Check, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
@@ -10,7 +10,7 @@ export interface AdminRow {
   active_role: string
   employee_id: string | null
   employees: { first_name: string; last_name: string; email: string } | null
-  // true = invited but has never signed in yet (awaiting acceptance)
+  // true = added but has never genuinely signed into the app yet (accepted_at null)
   pending: boolean
 }
 
@@ -34,12 +34,26 @@ export function AdminsPanel({ initialAdmins, currentUserId }: AdminsPanelProps) 
   const [email, setEmail] = useState("")
   const [adding, setAdding] = useState(false)
   const [removingId, setRemovingId] = useState<string | null>(null)
+  const [resettingId, setResettingId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
+  // A freshly-issued temporary password to hand to the admin (shown until dismissed).
+  const [credential, setCredential] = useState<{ name: string; email: string; password: string } | null>(null)
+  const [copied, setCopied] = useState(false)
 
   function flash(msg: string, type: "success" | "error") {
     if (type === "success") { setSuccess(msg); setTimeout(() => setSuccess(null), 4000) }
     else { setError(msg); setTimeout(() => setError(null), 6000) }
+  }
+
+  async function refreshList() {
+    const listRes = await fetch("/api/settings/admins")
+    const listJson = await readJson(listRes)
+    if (listRes.ok && Array.isArray(listJson.admins)) setAdmins(listJson.admins as AdminRow[])
+  }
+
+  async function copyPassword(pw: string) {
+    try { await navigator.clipboard.writeText(pw); setCopied(true); setTimeout(() => setCopied(false), 2000) } catch {}
   }
 
   async function handleAdd(e: React.FormEvent) {
@@ -65,22 +79,17 @@ export function AdminsPanel({ initialAdmins, currentUserId }: AdminsPanelProps) 
         return
       }
 
-      // Refresh the list
-      const listRes = await fetch("/api/settings/admins")
-      const listJson = await readJson(listRes)
-      if (listRes.ok && Array.isArray(listJson.admins)) {
-        setAdmins(listJson.admins as AdminRow[])
-      }
-
+      await refreshList()
       setEmail("")
       const name = (json.name as string) ?? trimmed
-      const pending = json.pending === true
-      flash(
-        pending
-          ? `Invite sent to ${name}. They'll appear as “Pending” until they accept and sign in.`
-          : `${name} has been granted admin access. A notification email has been sent.`,
-        "success"
-      )
+      const tempPassword = json.tempPassword as string | null
+      if (tempPassword) {
+        // Brand-new login provisioned — surface the password for HR to share.
+        setCredential({ name, email: trimmed, password: tempPassword })
+        flash(`${name} added. Share the temporary password below — they'll show as “Pending” until they sign in.`, "success")
+      } else {
+        flash(`${name} has been granted admin access.`, "success")
+      }
     } catch (err) {
       flash(err instanceof Error ? err.message : "Network error — please try again.", "error")
     } finally {
@@ -105,6 +114,27 @@ export function AdminsPanel({ initialAdmins, currentUserId }: AdminsPanelProps) 
       flash(err instanceof Error ? err.message : "Network error — please try again.", "error")
     } finally {
       setRemovingId(null)
+    }
+  }
+
+  async function handleResetPassword(userId: string, name: string, emailAddr: string) {
+    setError(null)
+    setSuccess(null)
+    setResettingId(userId)
+    try {
+      const res = await fetch(`/api/settings/admins/${userId}`, { method: "POST" })
+      const json = await readJson(res)
+      if (!res.ok) {
+        flash((json.error as string) ?? `Failed to set password (${res.status})`, "error")
+        return
+      }
+      const pw = json.tempPassword as string
+      setCredential({ name, email: emailAddr, password: pw })
+      flash(`New temporary password set for ${name}. Share it below.`, "success")
+    } catch (err) {
+      flash(err instanceof Error ? err.message : "Network error — please try again.", "error")
+    } finally {
+      setResettingId(null)
     }
   }
 
@@ -133,6 +163,41 @@ export function AdminsPanel({ initialAdmins, currentUserId }: AdminsPanelProps) 
         </div>
       )}
 
+      {/* Temporary password reveal */}
+      {credential && (
+        <div className="border-b border-amber-200 bg-amber-50 px-5 py-4">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-start gap-2.5 min-w-0">
+              <KeyRound className="h-4 w-4 shrink-0 mt-0.5 text-amber-700" />
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-amber-900">Temporary password for {credential.name}</p>
+                <p className="text-xs text-amber-800 mt-0.5">
+                  Share these credentials securely. Shown only once — they can sign in and should change it afterwards.
+                </p>
+                <div className="mt-2 space-y-1.5 text-sm">
+                  <div className="text-amber-900"><span className="text-xs text-amber-700">Email:</span> {credential.email}</div>
+                  <div className="flex items-center gap-2">
+                    <code className="rounded bg-white border border-amber-300 px-2 py-1 font-mono text-sm text-amber-900 select-all">
+                      {credential.password}
+                    </code>
+                    <button
+                      onClick={() => copyPassword(credential.password)}
+                      className="flex items-center gap-1 rounded-md border border-amber-300 bg-white px-2 py-1 text-xs font-medium text-amber-800 hover:bg-amber-100"
+                    >
+                      {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                      {copied ? "Copied" : "Copy"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <button onClick={() => setCredential(null)} className="shrink-0 text-amber-700 hover:text-amber-900" aria-label="Dismiss">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Admin list */}
       <ul className="divide-y divide-border">
         {admins.length === 0 && (
@@ -144,6 +209,7 @@ export function AdminsPanel({ initialAdmins, currentUserId }: AdminsPanelProps) 
           const name = admin.employees
             ? `${admin.employees.first_name} ${admin.employees.last_name}`
             : "Unknown"
+          const emailAddr = admin.employees?.email ?? ""
           const isSelf = admin.id === currentUserId
           return (
             <li key={admin.id} className="flex items-center justify-between gap-4 px-5 py-3.5">
@@ -165,26 +231,39 @@ export function AdminsPanel({ initialAdmins, currentUserId }: AdminsPanelProps) 
                       </span>
                     )}
                   </p>
-                  {admin.employees?.email && (
+                  {emailAddr && (
                     <p className="text-xs text-muted-foreground flex items-center gap-1 truncate">
                       <Mail className="h-3 w-3 shrink-0" />
-                      {admin.employees.email}
+                      {emailAddr}
                     </p>
                   )}
                 </div>
               </div>
               {!isSelf && (
-                <button
-                  onClick={() => handleRemove(admin.id, name)}
-                  disabled={removingId === admin.id}
-                  className="shrink-0 flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 border border-transparent hover:border-red-200 transition-colors disabled:opacity-50"
-                  aria-label={`Remove ${name} as admin`}
-                >
-                  {removingId === admin.id
-                    ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    : <Trash2 className="h-3.5 w-3.5" />}
-                  Remove
-                </button>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    onClick={() => handleResetPassword(admin.id, name, emailAddr)}
+                    disabled={resettingId === admin.id}
+                    className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-foreground hover:bg-muted border border-transparent hover:border-border transition-colors disabled:opacity-50"
+                    aria-label={`Set a temporary password for ${name}`}
+                  >
+                    {resettingId === admin.id
+                      ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      : <KeyRound className="h-3.5 w-3.5" />}
+                    {admin.pending ? "Set password" : "Reset password"}
+                  </button>
+                  <button
+                    onClick={() => handleRemove(admin.id, name)}
+                    disabled={removingId === admin.id}
+                    className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 border border-transparent hover:border-red-200 transition-colors disabled:opacity-50"
+                    aria-label={`Remove ${name} as admin`}
+                  >
+                    {removingId === admin.id
+                      ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      : <Trash2 className="h-3.5 w-3.5" />}
+                    Remove
+                  </button>
+                </div>
               )}
             </li>
           )
@@ -215,8 +294,8 @@ export function AdminsPanel({ initialAdmins, currentUserId }: AdminsPanelProps) 
         </form>
         <p className="mt-2 text-xs text-muted-foreground">
           The person must have a <strong>wetpaint.co.za</strong> email and exist as an employee.
-          They will receive an email notification and, if not yet registered,
-          an invitation to set up their password.
+          A temporary password is generated for you to share with them — they sign in with their
+          email and that password.
         </p>
       </div>
     </section>
