@@ -1,11 +1,11 @@
 "use client"
 
-import { useState, useEffect, useMemo, useCallback } from "react"
+import { useState, useEffect, useMemo, useCallback, useRef } from "react"
 import {
   ChevronDown, Plus, Trash2, X, Check,
   Users, UserPlus, Send, Clock, CheckCircle2, XCircle,
   Loader2, BarChart3, FileText, Target, Heart, Building2,
-  Upload, Search, Pencil, SlidersHorizontal, ArrowUp, ArrowDown,
+  Upload, Search, Pencil, SlidersHorizontal, ArrowUp, ArrowDown, Download, FileSpreadsheet,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -1083,7 +1083,7 @@ function StaffRow({ employee, reviews, scores, template, allEmployees, currentEm
 
 // ─── HR Admin View ──────────────────────────────────────────────────────────────
 
-function HRAdminView({ template, reviews, scores, allEmployees, currentEmployeeId, onScoreChange, onAddInvitee, onRemoveInvitee, onStatusChange, onDelete, onAddItem, onEditItem, onDeleteItem, onUpdateReviewDetails, onShowCreate, onImport, onManageTemplate }: {
+function HRAdminView({ template, reviews, scores, allEmployees, currentEmployeeId, onScoreChange, onAddInvitee, onRemoveInvitee, onStatusChange, onDelete, onAddItem, onEditItem, onDeleteItem, onUpdateReviewDetails, onShowCreate, onManageTemplate }: {
   template: TemplateSection[]
   reviews: Review[]
   scores: Record<string, Score[]>
@@ -1099,13 +1099,11 @@ function HRAdminView({ template, reviews, scores, allEmployees, currentEmployeeI
   onDeleteItem?: (itemId: string, title: string) => void
   onUpdateReviewDetails?: (reviewId: string, data: { title: string; period: string; deadline: string | null }) => Promise<void>
   onShowCreate: (employeeId?: string, quarter?: Quarter) => void
-  onImport: () => Promise<void>
   onManageTemplate: () => void
 }) {
   const [searchQ, setSearchQ]         = useState("")
   const [deptFilter, setDeptFilter]   = useState("all")
   const [statusFilter, setStatusFilter] = useState("all")
-  const [importing, setImporting]     = useState(false)
 
   // Build a map: employee_id → reviews[]
   const reviewsByEmployee = useMemo(() => {
@@ -1160,12 +1158,6 @@ function HRAdminView({ template, reviews, scores, allEmployees, currentEmployeeI
     })
   }, [allEmployees, deptFilter, statusFilter, searchQ, reviewsByEmployee])
 
-  async function handleImport() {
-    setImporting(true)
-    await onImport()
-    setImporting(false)
-  }
-
   return (
     <div className="space-y-5">
       {/* Page header */}
@@ -1179,10 +1171,6 @@ function HRAdminView({ template, reviews, scores, allEmployees, currentEmployeeI
         <div className="flex items-center gap-2 shrink-0">
           <Button size="sm" variant="outline" onClick={onManageTemplate} className="gap-1.5 h-9 text-xs">
             <SlidersHorizontal size={13} /> Manage Template
-          </Button>
-          <Button size="sm" variant="outline" onClick={handleImport} disabled={importing} className="gap-1.5 h-9 text-xs">
-            {importing ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />}
-            Import from Excel
           </Button>
           <Button size="sm" onClick={() => onShowCreate()} className="gap-1.5 h-9 text-xs">
             <Plus size={13} /> New Review
@@ -1368,7 +1356,7 @@ function MyAssignmentsView({ reviews, scores, template, currentEmployeeId, isHR,
 
 // ─── Manage Template Modal ──────────────────────────────────────────────────────
 
-function ManageTemplateModal({ template, currentPeriod, onClose, onSetPeriod, onCreateSection, onRenameSection, onReorderSection, onDeleteSection }: {
+function ManageTemplateModal({ template, currentPeriod, onClose, onSetPeriod, onCreateSection, onRenameSection, onReorderSection, onDeleteSection, onExport, onImport }: {
   template: TemplateSection[]
   currentPeriod: string
   onClose: () => void
@@ -1377,6 +1365,8 @@ function ManageTemplateModal({ template, currentPeriod, onClose, onSetPeriod, on
   onRenameSection: (id: string, title: string) => Promise<void>
   onReorderSection: (id: string, direction: "up" | "down") => Promise<void>
   onDeleteSection: (id: string, title: string) => void
+  onExport: (format: "csv" | "xlsx") => Promise<void>
+  onImport: (file: File) => Promise<void>
 }) {
   const sorted = [...template].sort((a, b) => a.position - b.position)
 
@@ -1388,6 +1378,9 @@ function ManageTemplateModal({ template, currentPeriod, onClose, onSetPeriod, on
   const [editId, setEditId]           = useState<string | null>(null)
   const [editVal, setEditVal]         = useState("")
   const [savingEdit, setSavingEdit]   = useState(false)
+  const [importing, setImporting]     = useState(false)
+  const [exporting, setExporting]     = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) { if (e.key === "Escape") onClose() }
@@ -1426,6 +1419,51 @@ function ManageTemplateModal({ template, currentPeriod, onClose, onSetPeriod, on
               className="h-9 text-xs gap-1"
             >
               {savingPeriod ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} />} Save
+            </Button>
+          </div>
+        </div>
+
+        {/* Import / Export */}
+        <div className="rounded-xl border border-border bg-muted/10 p-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <FileSpreadsheet size={15} className="text-primary" />
+            <p className="text-sm font-semibold">Import / Export template</p>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Export the current template as a spreadsheet, add the rest of your sections and KPIs in the
+            same columns, then import it back. Matching is by section &amp; KPI name — existing rows are
+            updated, new ones added, and anything not in the file is left untouched.
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button size="sm" variant="outline" disabled={exporting}
+              onClick={async () => { setExporting(true); await onExport("csv"); setExporting(false) }}
+              className="h-8 text-xs gap-1.5">
+              <Download size={12} /> Export CSV
+            </Button>
+            <Button size="sm" variant="outline" disabled={exporting}
+              onClick={async () => { setExporting(true); await onExport("xlsx"); setExporting(false) }}
+              className="h-8 text-xs gap-1.5">
+              <Download size={12} /> Export XLSX
+            </Button>
+            <div className="w-px h-6 bg-border mx-1" />
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              className="hidden"
+              onChange={async (e) => {
+                const f = e.target.files?.[0]
+                if (!f) return
+                setImporting(true)
+                await onImport(f)
+                setImporting(false)
+                if (fileInputRef.current) fileInputRef.current.value = ""
+              }}
+            />
+            <Button size="sm" disabled={importing}
+              onClick={() => fileInputRef.current?.click()}
+              className="h-8 text-xs gap-1.5">
+              {importing ? <Loader2 size={12} className="animate-spin" /> : <Upload size={12} />} Import file
             </Button>
           </div>
         </div>
@@ -1731,6 +1769,34 @@ export function KpiPageClient({ isHR, currentEmployeeId }: { isHR: boolean; curr
     else showToast("Failed to delete section")
   }
 
+  async function handleExportTemplate(format: "csv" | "xlsx") {
+    const res = await fetch(`/api/kpi/template/export?format=${format}`)
+    if (!res.ok) { showToast("Export failed"); return }
+    const blob = await res.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `kpi-template.${format}`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+  }
+
+  async function handleImportTemplate(file: File) {
+    const fd = new FormData()
+    fd.append("file", file)
+    const res = await fetch("/api/kpi/template/import", { method: "POST", body: fd })
+    const data = await res.json().catch(() => null)
+    if (res.ok) {
+      showToast(data?.message ?? "Import complete")
+      if (Array.isArray(data?.errors) && data.errors.length) console.warn("[KPI import] row errors:", data.errors)
+      await loadAll()
+    } else {
+      showToast(data?.error ?? "Import failed")
+    }
+  }
+
   async function handleCreate(d: { employee_id: string; period: string; title: string; deadline: string }) {
     setCreating(true)
     const res = await fetch("/api/kpi/reviews", {
@@ -1740,18 +1806,6 @@ export function KpiPageClient({ isHR, currentEmployeeId }: { isHR: boolean; curr
     if (res.ok) { showToast("Review created"); setShowCreate(false); setCreatePreselect({}); await loadAll() }
     else { const err = await res.json(); showToast(err.error ?? "Failed to create review") }
     setCreating(false)
-  }
-
-  async function handleImport() {
-    showToast("Importing KPI data from Excel…")
-    const res = await fetch("/api/kpi/import", { method: "POST" })
-    if (res.ok) {
-      const data = await res.json()
-      showToast(data.message ?? "Import complete")
-      await loadAll()
-    } else {
-      showToast("Import failed — check server logs")
-    }
   }
 
   function handleShowCreate(employeeId?: string, quarter?: Quarter) {
@@ -1829,7 +1883,6 @@ export function KpiPageClient({ isHR, currentEmployeeId }: { isHR: boolean; curr
               onDeleteItem={handleDeleteItem}
               onUpdateReviewDetails={handleUpdateReviewDetails}
               onShowCreate={handleShowCreate}
-              onImport={handleImport}
               onManageTemplate={() => setShowManage(true)}
             />
           )}
@@ -1889,6 +1942,8 @@ export function KpiPageClient({ isHR, currentEmployeeId }: { isHR: boolean; curr
           onRenameSection={handleRenameSection}
           onReorderSection={handleReorderSection}
           onDeleteSection={handleDeleteSection}
+          onExport={handleExportTemplate}
+          onImport={handleImportTemplate}
         />
       )}
     </div>
