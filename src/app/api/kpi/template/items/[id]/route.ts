@@ -32,3 +32,29 @@ export async function PATCH(
 
   return NextResponse.json(data)
 }
+
+// Soft-delete an item (HR only). Kept inactive so historical scores survive.
+export async function DELETE(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+
+  const role = await getUserRole(supabase, user.id)
+  if (role !== "hr") return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+
+  const { error } = await supabase
+    .from("kpi_template_items")
+    .update({ is_active: false })
+    .eq("id", id)
+
+  if (error) {
+    console.error("[DELETE /api/kpi/template/items/[id]]", error)
+    return NextResponse.json({ error: "Failed to delete item" }, { status: 500 })
+  }
+
+  return NextResponse.json({ success: true })
+}

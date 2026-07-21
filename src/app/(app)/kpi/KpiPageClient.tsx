@@ -5,7 +5,7 @@ import {
   ChevronDown, Plus, Trash2, X, Check,
   Users, UserPlus, Send, Clock, CheckCircle2, XCircle,
   Loader2, BarChart3, FileText, Target, Heart, Building2,
-  Upload, Search, Pencil,
+  Upload, Search, Pencil, SlidersHorizontal, ArrowUp, ArrowDown,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -217,15 +217,17 @@ function ScorerRow({ name, role, scoreObj, canEdit, item, onSave }: {
 
 // ─── KPI Card ───────────────────────────────────────────────────────────────────
 
-function KpiCard({ item, itemIndex, sectionType, scores, invitees, isHR, currentEmployeeId, onScoreChange, onEditItem }: {
+function KpiCard({ item, itemIndex, sectionType, scores, invitees, isHR, currentEmployeeId, onScoreChange, onEditItem, onDeleteItem }: {
   item: TemplateItem; itemIndex: number; sectionType: "invitee" | "hr"
   scores: Score[]; invitees: ReviewInvitee[]; isHR: boolean; currentEmployeeId: string | null
   onScoreChange: (itemId: string, score: number | null, comments: string) => Promise<void>
-  onEditItem?: (itemId: string, data: { title: string; description: string; max_score: number }) => Promise<void>
+  onEditItem?: (itemId: string, data: { title: string; description: string; min_score: number; max_score: number }) => Promise<void>
+  onDeleteItem?: (itemId: string, title: string) => void
 }) {
   const [editMode, setEditMode]     = useState(false)
   const [editTitle, setEditTitle]   = useState(item.title)
   const [editDesc, setEditDesc]     = useState(item.description ?? "")
+  const [editMin, setEditMin]       = useState(item.min_score)
   const [editMax, setEditMax]       = useState(item.max_score)
   const [editSaving, setEditSaving] = useState(false)
 
@@ -266,7 +268,7 @@ function KpiCard({ item, itemIndex, sectionType, scores, invitees, isHR, current
   async function handleEditSave() {
     if (!onEditItem || !editTitle.trim()) return
     setEditSaving(true)
-    await onEditItem(item.id, { title: editTitle.trim(), description: editDesc, max_score: editMax })
+    await onEditItem(item.id, { title: editTitle.trim(), description: editDesc, min_score: editMin, max_score: editMax })
     setEditSaving(false)
     setEditMode(false)
   }
@@ -296,7 +298,7 @@ function KpiCard({ item, itemIndex, sectionType, scores, invitees, isHR, current
           {isHR && !editMode && (
             <button
               type="button"
-              onClick={() => { setEditTitle(item.title); setEditDesc(item.description ?? ""); setEditMax(item.max_score); setEditMode(true) }}
+              onClick={() => { setEditTitle(item.title); setEditDesc(item.description ?? ""); setEditMin(item.min_score); setEditMax(item.max_score); setEditMode(true) }}
               className="w-7 h-7 rounded-lg border border-border flex items-center justify-center text-muted-foreground hover:text-primary hover:border-primary/60 transition-colors"
             >
               <Pencil size={12} />
@@ -332,19 +334,38 @@ function KpiCard({ item, itemIndex, sectionType, scores, invitees, isHR, current
           </div>
           {editMode && (
             <div className="space-y-3">
-              <div>
-                <label className="text-xs font-medium text-muted-foreground block mb-1">Max Score</label>
-                <input
-                  type="number" min={1} value={editMax}
-                  onChange={e => setEditMax(Number(e.target.value))}
-                  className="w-24 rounded-lg border border-border bg-card px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
-                />
+              <div className="flex gap-4">
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground block mb-1">Min Score</label>
+                  <input
+                    type="number" min={0} value={editMin}
+                    onChange={e => setEditMin(Number(e.target.value))}
+                    className="w-24 rounded-lg border border-border bg-card px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground block mb-1">Max Score</label>
+                  <input
+                    type="number" min={1} value={editMax}
+                    onChange={e => setEditMax(Number(e.target.value))}
+                    className="w-24 rounded-lg border border-border bg-card px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                  />
+                </div>
               </div>
-              <div className="flex gap-2">
+              <div className="flex items-center gap-2">
                 <Button size="sm" onClick={handleEditSave} disabled={!editTitle.trim() || editSaving} className="h-7 text-xs gap-1">
                   {editSaving ? <Loader2 size={10} className="animate-spin" /> : <Check size={10} />} Save
                 </Button>
                 <Button size="sm" variant="ghost" onClick={() => setEditMode(false)} className="h-7 text-xs">Cancel</Button>
+                {onDeleteItem && (
+                  <button
+                    type="button"
+                    onClick={() => onDeleteItem(item.id, item.title)}
+                    className="ml-auto flex items-center gap-1 text-xs text-destructive hover:opacity-70 transition-opacity px-2 py-1.5 rounded-lg border border-destructive/30 hover:bg-destructive/5"
+                  >
+                    <Trash2 size={11} /> Delete KPI
+                  </button>
+                )}
               </div>
             </div>
           )}
@@ -391,12 +412,13 @@ function KpiCard({ item, itemIndex, sectionType, scores, invitees, isHR, current
 
 // ─── Section Accordion ──────────────────────────────────────────────────────────
 
-function SectionAccordion({ section, sectionIndex, scores, invitees, isHR, currentEmployeeId, onScoreChange, onAddItem, onEditItem, defaultOpen }: {
+function SectionAccordion({ section, sectionIndex, scores, invitees, isHR, currentEmployeeId, onScoreChange, onAddItem, onEditItem, onDeleteItem, defaultOpen }: {
   section: TemplateSection; sectionIndex: number; scores: Score[]; invitees: ReviewInvitee[]
   isHR: boolean; currentEmployeeId: string | null
   onScoreChange: (itemId: string, score: number | null, comments: string) => Promise<void>
   onAddItem?: (sectionId: string, data: { title: string; description: string; min_score: number; max_score: number }) => Promise<void>
-  onEditItem?: (itemId: string, data: { title: string; description: string; max_score: number }) => Promise<void>
+  onEditItem?: (itemId: string, data: { title: string; description: string; min_score: number; max_score: number }) => Promise<void>
+  onDeleteItem?: (itemId: string, title: string) => void
   defaultOpen?: boolean
 }) {
   const [open, setOpen]           = useState(defaultOpen ?? sectionIndex === 0)
@@ -429,6 +451,7 @@ function SectionAccordion({ section, sectionIndex, scores, invitees, isHR, curre
   const progressPct = sectionMax > 0 ? Math.min(100, (sectionCurrent / sectionMax) * 100) : 0
   const cfg = SECTION_CONFIG[section.position] ?? { icon: BarChart3, colorClass: "text-primary", label: section.title }
   const SectionIcon = cfg.icon
+  const sectionLabel = section.title?.trim() ? section.title : cfg.label
 
   const scorerNames = invitees
     .filter(i => i.status === "accepted" || i.status === "completed")
@@ -451,7 +474,7 @@ function SectionAccordion({ section, sectionIndex, scores, invitees, isHR, curre
       >
         <SectionIcon size={18} className={cn("shrink-0", cfg.colorClass)} />
         <div className="flex-1 min-w-0">
-          <p className="font-bold text-[14px] text-foreground leading-snug">{cfg.label}</p>
+          <p className="font-bold text-[14px] text-foreground leading-snug">{sectionLabel}</p>
           <p className="text-xs text-muted-foreground mt-0.5">
             {items.length} item{items.length !== 1 ? "s" : ""} · max {sectionMax} pts
             {section.type === "hr" ? " · Scored by HR" : scorerNames ? ` · ${scorerNames}` : " · Scored by peers"}
@@ -490,7 +513,7 @@ function SectionAccordion({ section, sectionIndex, scores, invitees, isHR, curre
               <KpiCard
                 key={item.id} item={item} itemIndex={idx} sectionType={section.type}
                 scores={scores} invitees={invitees} isHR={isHR} currentEmployeeId={currentEmployeeId}
-                onScoreChange={onScoreChange} onEditItem={onEditItem}
+                onScoreChange={onScoreChange} onEditItem={onEditItem} onDeleteItem={onDeleteItem}
               />
             ))
           )}
@@ -716,7 +739,7 @@ function CreateReviewModal({ employees, currentPeriod, preselectedEmployeeId, pr
 
 // ─── Quarter Panel (within staff row) ──────────────────────────────────────────
 
-function QuarterPanel({ review, template, scores, allEmployees, currentEmployeeId, isHR, onScoreChange, onAddInvitee, onRemoveInvitee, onStatusChange, onDelete, onAddItem, onEditItem }: {
+function QuarterPanel({ review, template, scores, allEmployees, currentEmployeeId, isHR, onScoreChange, onAddInvitee, onRemoveInvitee, onStatusChange, onDelete, onAddItem, onEditItem, onDeleteItem, onUpdateReviewDetails }: {
   review: Review; template: TemplateSection[]; scores: Score[]
   allEmployees: Employee[]; currentEmployeeId: string | null; isHR: boolean
   onScoreChange: (reviewId: string, itemId: string, score: number | null, comments: string) => Promise<void>
@@ -725,10 +748,30 @@ function QuarterPanel({ review, template, scores, allEmployees, currentEmployeeI
   onStatusChange: (reviewId: string, status: string) => Promise<void>
   onDelete: (reviewId: string) => void
   onAddItem?: (sectionId: string, data: { title: string; description: string; min_score: number; max_score: number }) => Promise<void>
-  onEditItem?: (itemId: string, data: { title: string; description: string; max_score: number }) => Promise<void>
+  onEditItem?: (itemId: string, data: { title: string; description: string; min_score: number; max_score: number }) => Promise<void>
+  onDeleteItem?: (itemId: string, title: string) => void
+  onUpdateReviewDetails?: (reviewId: string, data: { title: string; period: string; deadline: string | null }) => Promise<void>
 }) {
   const invitees       = review.kpi_review_invitees ?? []
   const reviewTemplate = templateForReview(template, scores)
+
+  const [editDetails, setEditDetails]   = useState(false)
+  const [detailTitle, setDetailTitle]   = useState(review.title)
+  const [detailPeriod, setDetailPeriod] = useState(review.period)
+  const [detailDeadline, setDetailDeadline] = useState(review.deadline ?? "")
+  const [savingDetails, setSavingDetails]   = useState(false)
+
+  async function handleSaveDetails() {
+    if (!onUpdateReviewDetails || !detailTitle.trim() || !detailPeriod.trim()) return
+    setSavingDetails(true)
+    await onUpdateReviewDetails(review.id, {
+      title: detailTitle.trim(),
+      period: detailPeriod.trim(),
+      deadline: detailDeadline || null,
+    })
+    setSavingDetails(false)
+    setEditDetails(false)
+  }
 
   const overallMax = reviewTemplate.reduce((a, s) => a + s.kpi_template_items.reduce((b, i) => b + i.max_score, 0), 0)
   const scoreMap = new Map<string, Score>()
@@ -777,6 +820,18 @@ function QuarterPanel({ review, template, scores, allEmployees, currentEmployeeI
           <>
             <div className="hidden sm:block w-px h-8 bg-border" />
             <div className="flex items-center gap-2 ml-auto">
+              {onUpdateReviewDetails && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDetailTitle(review.title); setDetailPeriod(review.period)
+                    setDetailDeadline(review.deadline ?? ""); setEditDetails(v => !v)
+                  }}
+                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors px-2 py-1.5 rounded-lg border border-border hover:border-primary/60"
+                >
+                  <Pencil size={11} /> Edit details
+                </button>
+              )}
               <select
                 value={review.status}
                 onChange={e => onStatusChange(review.id, e.target.value)}
@@ -798,6 +853,35 @@ function QuarterPanel({ review, template, scores, allEmployees, currentEmployeeI
         )}
       </div>
 
+      {isHR && editDetails && onUpdateReviewDetails && (
+        <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 space-y-3">
+          <p className="text-sm font-semibold">Edit Review Details</p>
+          <div className="grid sm:grid-cols-3 gap-3">
+            <div className="sm:col-span-3">
+              <label className="text-xs font-medium text-muted-foreground block mb-1">Title</label>
+              <input value={detailTitle} onChange={e => setDetailTitle(e.target.value)}
+                className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary" />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground block mb-1">Period</label>
+              <input value={detailPeriod} onChange={e => setDetailPeriod(e.target.value)} placeholder="e.g. Q3 2026"
+                className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary" />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground block mb-1">Deadline</label>
+              <input type="date" value={detailDeadline} onChange={e => setDetailDeadline(e.target.value)}
+                className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary" />
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Button size="sm" onClick={handleSaveDetails} disabled={!detailTitle.trim() || !detailPeriod.trim() || savingDetails} className="h-7 text-xs gap-1">
+              {savingDetails ? <Loader2 size={10} className="animate-spin" /> : <Check size={10} />} Save
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setEditDetails(false)} className="h-7 text-xs">Cancel</Button>
+          </div>
+        </div>
+      )}
+
       {isHR && (
         <InviteePanel review={review} allEmployees={allEmployees} onAddInvitee={onAddInvitee} onRemoveInvitee={onRemoveInvitee} />
       )}
@@ -814,7 +898,7 @@ function QuarterPanel({ review, template, scores, allEmployees, currentEmployeeI
             scores={scores} invitees={review.kpi_review_invitees ?? []}
             isHR={isHR} currentEmployeeId={currentEmployeeId}
             onScoreChange={(itemId, score, comments) => onScoreChange(review.id, itemId, score, comments)}
-            onAddItem={onAddItem} onEditItem={onEditItem} defaultOpen={idx === 0}
+            onAddItem={onAddItem} onEditItem={onEditItem} onDeleteItem={onDeleteItem} defaultOpen={idx === 0}
           />
         ))}
       </div>
@@ -824,7 +908,7 @@ function QuarterPanel({ review, template, scores, allEmployees, currentEmployeeI
 
 // ─── Staff Row (HR admin view) ──────────────────────────────────────────────────
 
-function StaffRow({ employee, reviews, scores, template, allEmployees, currentEmployeeId, onScoreChange, onAddInvitee, onRemoveInvitee, onStatusChange, onDelete, onAddItem, onEditItem, onCreateReview, initialOpenQuarter }: {
+function StaffRow({ employee, reviews, scores, template, allEmployees, currentEmployeeId, onScoreChange, onAddInvitee, onRemoveInvitee, onStatusChange, onDelete, onAddItem, onEditItem, onDeleteItem, onUpdateReviewDetails, onCreateReview, initialOpenQuarter }: {
   employee: Employee
   reviews: Review[]
   scores: Record<string, Score[]>
@@ -837,7 +921,9 @@ function StaffRow({ employee, reviews, scores, template, allEmployees, currentEm
   onStatusChange: (reviewId: string, status: string) => Promise<void>
   onDelete: (reviewId: string) => void
   onAddItem?: (sectionId: string, data: { title: string; description: string; min_score: number; max_score: number }) => Promise<void>
-  onEditItem?: (itemId: string, data: { title: string; description: string; max_score: number }) => Promise<void>
+  onEditItem?: (itemId: string, data: { title: string; description: string; min_score: number; max_score: number }) => Promise<void>
+  onDeleteItem?: (itemId: string, title: string) => void
+  onUpdateReviewDetails?: (reviewId: string, data: { title: string; period: string; deadline: string | null }) => Promise<void>
   onCreateReview: (employeeId: string, quarter: Quarter) => void
   initialOpenQuarter?: Quarter
 }) {
@@ -977,6 +1063,8 @@ function StaffRow({ employee, reviews, scores, template, allEmployees, currentEm
               onDelete={onDelete}
               onAddItem={onAddItem}
               onEditItem={onEditItem}
+              onDeleteItem={onDeleteItem}
+              onUpdateReviewDetails={onUpdateReviewDetails}
             />
           ) : (
             <div className="flex flex-col items-center justify-center py-10 text-muted-foreground gap-3">
@@ -995,7 +1083,7 @@ function StaffRow({ employee, reviews, scores, template, allEmployees, currentEm
 
 // ─── HR Admin View ──────────────────────────────────────────────────────────────
 
-function HRAdminView({ template, reviews, scores, allEmployees, currentEmployeeId, onScoreChange, onAddInvitee, onRemoveInvitee, onStatusChange, onDelete, onAddItem, onEditItem, onShowCreate, onImport }: {
+function HRAdminView({ template, reviews, scores, allEmployees, currentEmployeeId, onScoreChange, onAddInvitee, onRemoveInvitee, onStatusChange, onDelete, onAddItem, onEditItem, onDeleteItem, onUpdateReviewDetails, onShowCreate, onImport, onManageTemplate }: {
   template: TemplateSection[]
   reviews: Review[]
   scores: Record<string, Score[]>
@@ -1007,9 +1095,12 @@ function HRAdminView({ template, reviews, scores, allEmployees, currentEmployeeI
   onStatusChange: (reviewId: string, status: string) => Promise<void>
   onDelete: (reviewId: string) => void
   onAddItem?: (sectionId: string, data: { title: string; description: string; min_score: number; max_score: number }) => Promise<void>
-  onEditItem?: (itemId: string, data: { title: string; description: string; max_score: number }) => Promise<void>
+  onEditItem?: (itemId: string, data: { title: string; description: string; min_score: number; max_score: number }) => Promise<void>
+  onDeleteItem?: (itemId: string, title: string) => void
+  onUpdateReviewDetails?: (reviewId: string, data: { title: string; period: string; deadline: string | null }) => Promise<void>
   onShowCreate: (employeeId?: string, quarter?: Quarter) => void
   onImport: () => Promise<void>
+  onManageTemplate: () => void
 }) {
   const [searchQ, setSearchQ]         = useState("")
   const [deptFilter, setDeptFilter]   = useState("all")
@@ -1086,6 +1177,9 @@ function HRAdminView({ template, reviews, scores, allEmployees, currentEmployeeI
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
+          <Button size="sm" variant="outline" onClick={onManageTemplate} className="gap-1.5 h-9 text-xs">
+            <SlidersHorizontal size={13} /> Manage Template
+          </Button>
           <Button size="sm" variant="outline" onClick={handleImport} disabled={importing} className="gap-1.5 h-9 text-xs">
             {importing ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />}
             Import from Excel
@@ -1171,6 +1265,8 @@ function HRAdminView({ template, reviews, scores, allEmployees, currentEmployeeI
               onDelete={onDelete}
               onAddItem={onAddItem}
               onEditItem={onEditItem}
+              onDeleteItem={onDeleteItem}
+              onUpdateReviewDetails={onUpdateReviewDetails}
               onCreateReview={(empId, quarter) => onShowCreate(empId, quarter)}
             />
           ))}
@@ -1270,6 +1366,147 @@ function MyAssignmentsView({ reviews, scores, template, currentEmployeeId, isHR,
   )
 }
 
+// ─── Manage Template Modal ──────────────────────────────────────────────────────
+
+function ManageTemplateModal({ template, currentPeriod, onClose, onSetPeriod, onCreateSection, onRenameSection, onReorderSection, onDeleteSection }: {
+  template: TemplateSection[]
+  currentPeriod: string
+  onClose: () => void
+  onSetPeriod: (value: string) => Promise<void>
+  onCreateSection: (title: string, type: "hr" | "invitee") => Promise<void>
+  onRenameSection: (id: string, title: string) => Promise<void>
+  onReorderSection: (id: string, direction: "up" | "down") => Promise<void>
+  onDeleteSection: (id: string, title: string) => void
+}) {
+  const sorted = [...template].sort((a, b) => a.position - b.position)
+
+  const [period, setPeriod]           = useState(currentPeriod)
+  const [savingPeriod, setSavingPeriod] = useState(false)
+  const [newTitle, setNewTitle]       = useState("")
+  const [newType, setNewType]         = useState<"hr" | "invitee">("invitee")
+  const [addingSection, setAddingSection] = useState(false)
+  const [editId, setEditId]           = useState<string | null>(null)
+  const [editVal, setEditVal]         = useState("")
+  const [savingEdit, setSavingEdit]   = useState(false)
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) { if (e.key === "Escape") onClose() }
+    document.addEventListener("keydown", onKey)
+    return () => document.removeEventListener("keydown", onKey)
+  }, [onClose])
+
+  async function saveRename(id: string) {
+    if (!editVal.trim()) { setEditId(null); return }
+    setSavingEdit(true)
+    await onRenameSection(id, editVal.trim())
+    setSavingEdit(false)
+    setEditId(null)
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={onClose}>
+      <div className="w-full max-w-2xl max-h-[85vh] overflow-y-auto rounded-2xl bg-card border border-border p-6 shadow-xl space-y-6" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="font-bold text-lg">Manage KPI Template</h2>
+            <p className="text-xs text-muted-foreground mt-0.5">Sections, KPI items and the active review period</p>
+          </div>
+          <button type="button" onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors"><X size={18} /></button>
+        </div>
+
+        {/* Current period */}
+        <div className="rounded-xl border border-border bg-muted/10 p-4 space-y-2">
+          <p className="text-sm font-semibold">Current Period</p>
+          <p className="text-xs text-muted-foreground">The period new reviews default to (e.g. &quot;Q3 2026&quot;).</p>
+          <div className="flex gap-2">
+            <input value={period} onChange={e => setPeriod(e.target.value)} placeholder="e.g. Q3 2026"
+              className="flex-1 rounded-lg border border-border bg-card px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary" />
+            <Button size="sm" disabled={!period.trim() || savingPeriod}
+              onClick={async () => { setSavingPeriod(true); await onSetPeriod(period.trim()); setSavingPeriod(false) }}
+              className="h-9 text-xs gap-1"
+            >
+              {savingPeriod ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} />} Save
+            </Button>
+          </div>
+        </div>
+
+        {/* Sections */}
+        <div className="space-y-3">
+          <p className="text-sm font-semibold">Sections</p>
+          {sorted.length === 0 && <p className="text-xs text-muted-foreground italic">No sections yet — add one below.</p>}
+          <div className="space-y-2">
+            {sorted.map((section, idx) => (
+              <div key={section.id} className="flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2.5">
+                <div className="flex flex-col">
+                  <button type="button" disabled={idx === 0} onClick={() => onReorderSection(section.id, "up")}
+                    className="text-muted-foreground hover:text-primary disabled:opacity-20 disabled:cursor-not-allowed">
+                    <ArrowUp size={13} />
+                  </button>
+                  <button type="button" disabled={idx === sorted.length - 1} onClick={() => onReorderSection(section.id, "down")}
+                    className="text-muted-foreground hover:text-primary disabled:opacity-20 disabled:cursor-not-allowed">
+                    <ArrowDown size={13} />
+                  </button>
+                </div>
+                <div className="flex-1 min-w-0">
+                  {editId === section.id ? (
+                    <input autoFocus value={editVal} onChange={e => setEditVal(e.target.value)}
+                      onKeyDown={e => { if (e.key === "Enter") saveRename(section.id) }}
+                      className="w-full rounded-lg border border-primary bg-card px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary" />
+                  ) : (
+                    <p className="text-sm font-medium truncate">{section.title || "(untitled section)"}</p>
+                  )}
+                  <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                    {section.type === "hr" ? "Scored by HR" : "Scored by peers"} · {section.kpi_template_items?.length ?? 0} item{(section.kpi_template_items?.length ?? 0) !== 1 ? "s" : ""}
+                  </span>
+                </div>
+                {editId === section.id ? (
+                  <>
+                    <Button size="sm" onClick={() => saveRename(section.id)} disabled={savingEdit} className="h-7 text-xs gap-1">
+                      {savingEdit ? <Loader2 size={10} className="animate-spin" /> : <Check size={10} />}
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setEditId(null)} className="h-7 text-xs">Cancel</Button>
+                  </>
+                ) : (
+                  <>
+                    <button type="button" onClick={() => { setEditId(section.id); setEditVal(section.title) }}
+                      className="w-7 h-7 rounded-lg border border-border flex items-center justify-center text-muted-foreground hover:text-primary hover:border-primary/60 transition-colors">
+                      <Pencil size={12} />
+                    </button>
+                    <button type="button" onClick={() => onDeleteSection(section.id, section.title)}
+                      className="w-7 h-7 rounded-lg border border-destructive/30 flex items-center justify-center text-destructive hover:bg-destructive/5 transition-colors">
+                      <Trash2 size={12} />
+                    </button>
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {/* Add section */}
+          <div className="rounded-xl border border-dashed border-border p-4 space-y-3">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Add a section</p>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <input value={newTitle} onChange={e => setNewTitle(e.target.value)} placeholder="Section name, e.g. Leadership"
+                className="flex-1 rounded-lg border border-border bg-card px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary" />
+              <select value={newType} onChange={e => setNewType(e.target.value as "hr" | "invitee")}
+                className="rounded-lg border border-border bg-card px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary">
+                <option value="invitee">Scored by peers</option>
+                <option value="hr">Scored by HR</option>
+              </select>
+              <Button size="sm" disabled={!newTitle.trim() || addingSection}
+                onClick={async () => { setAddingSection(true); await onCreateSection(newTitle.trim(), newType); setNewTitle(""); setNewType("invitee"); setAddingSection(false) }}
+                className="h-9 text-xs gap-1">
+                {addingSection ? <Loader2 size={11} className="animate-spin" /> : <Plus size={11} />} Add
+              </Button>
+            </div>
+            <p className="text-[11px] text-muted-foreground">Add KPI items to a section from within a review using the &quot;Add KPI&quot; button.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Main Page ──────────────────────────────────────────────────────────────────
 
 type Tab = "reviews" | "myassignments"
@@ -1288,6 +1525,7 @@ export function KpiPageClient({ isHR, currentEmployeeId }: { isHR: boolean; curr
   const [toast, setToast]                 = useState<string | null>(null)
   const [deleteTarget, setDeleteTarget]   = useState<string | null>(null)
   const [deleting, setDeleting]           = useState(false)
+  const [showManage, setShowManage]       = useState(false)
 
   function showToast(msg: string) {
     setToast(msg)
@@ -1411,13 +1649,86 @@ export function KpiPageClient({ isHR, currentEmployeeId }: { isHR: boolean; curr
     else showToast("Failed to add KPI item")
   }
 
-  async function handleEditItem(itemId: string, data: { title: string; description: string; max_score: number }) {
+  async function handleEditItem(itemId: string, data: { title: string; description: string; min_score: number; max_score: number }) {
     const res = await fetch(`/api/kpi/template/items/${itemId}`, {
       method: "PATCH", headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
     })
     if (res.ok) { showToast("KPI item updated"); await loadAll() }
     else showToast("Failed to update KPI item")
+  }
+
+  async function handleDeleteItem(itemId: string, title: string) {
+    if (!window.confirm(`Delete KPI "${title}"? Existing scores are kept but it will no longer appear in reviews.`)) return
+    const res = await fetch(`/api/kpi/template/items/${itemId}`, { method: "DELETE" })
+    if (res.ok) { showToast("KPI item deleted"); await loadAll() }
+    else showToast("Failed to delete KPI item")
+  }
+
+  async function handleUpdateReviewDetails(reviewId: string, data: { title: string; period: string; deadline: string | null }) {
+    const res = await fetch(`/api/kpi/reviews/${reviewId}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    })
+    if (res.ok) {
+      setReviews(rs => rs.map(r => r.id === reviewId ? { ...r, ...data } : r))
+      showToast("Review details updated")
+    } else showToast("Failed to update review details")
+  }
+
+  async function handleSetPeriod(value: string) {
+    const res = await fetch("/api/kpi/settings", {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key: "current_period", value }),
+    })
+    if (res.ok) { setCurrentPeriod(value); showToast("Current period updated") }
+    else showToast("Failed to update period")
+  }
+
+  async function handleCreateSection(title: string, type: "hr" | "invitee") {
+    const res = await fetch("/api/kpi/template/sections", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title, type }),
+    })
+    if (res.ok) { showToast("Section added"); await loadAll() }
+    else showToast("Failed to add section")
+  }
+
+  async function handleRenameSection(id: string, title: string) {
+    const res = await fetch(`/api/kpi/template/sections/${id}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title }),
+    })
+    if (res.ok) { showToast("Section renamed"); await loadAll() }
+    else showToast("Failed to rename section")
+  }
+
+  async function handleReorderSection(id: string, direction: "up" | "down") {
+    const sorted = [...template].sort((a, b) => a.position - b.position)
+    const idx = sorted.findIndex(s => s.id === id)
+    const swapIdx = direction === "up" ? idx - 1 : idx + 1
+    if (idx < 0 || swapIdx < 0 || swapIdx >= sorted.length) return
+    const a = sorted[idx], b = sorted[swapIdx]
+    // Swap their positions
+    const results = await Promise.all([
+      fetch(`/api/kpi/template/sections/${a.id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ position: b.position }),
+      }),
+      fetch(`/api/kpi/template/sections/${b.id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ position: a.position }),
+      }),
+    ])
+    if (results.every(r => r.ok)) await loadAll()
+    else showToast("Failed to reorder sections")
+  }
+
+  async function handleDeleteSection(id: string, title: string) {
+    if (!window.confirm(`Delete section "${title || "(untitled)"}" and all its KPI items? Existing scores are kept but the section will no longer appear in reviews.`)) return
+    const res = await fetch(`/api/kpi/template/sections/${id}`, { method: "DELETE" })
+    if (res.ok) { showToast("Section deleted"); await loadAll() }
+    else showToast("Failed to delete section")
   }
 
   async function handleCreate(d: { employee_id: string; period: string; title: string; deadline: string }) {
@@ -1515,8 +1826,11 @@ export function KpiPageClient({ isHR, currentEmployeeId }: { isHR: boolean; curr
               onDelete={handleDeleteReview}
               onAddItem={handleAddItem}
               onEditItem={handleEditItem}
+              onDeleteItem={handleDeleteItem}
+              onUpdateReviewDetails={handleUpdateReviewDetails}
               onShowCreate={handleShowCreate}
               onImport={handleImport}
+              onManageTemplate={() => setShowManage(true)}
             />
           )}
 
@@ -1562,6 +1876,19 @@ export function KpiPageClient({ isHR, currentEmployeeId }: { isHR: boolean; curr
           onConfirm={confirmDelete}
           onCancel={() => setDeleteTarget(null)}
           deleting={deleting}
+        />
+      )}
+
+      {showManage && isHR && (
+        <ManageTemplateModal
+          template={template}
+          currentPeriod={currentPeriod}
+          onClose={() => setShowManage(false)}
+          onSetPeriod={handleSetPeriod}
+          onCreateSection={handleCreateSection}
+          onRenameSection={handleRenameSection}
+          onReorderSection={handleReorderSection}
+          onDeleteSection={handleDeleteSection}
         />
       )}
     </div>
