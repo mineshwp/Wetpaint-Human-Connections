@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { getUserRole, getEmployeeIdForUser } from "@/lib/auth"
 import type { Employee } from "@/lib/types"
 
@@ -114,7 +115,11 @@ export async function POST(req: Request) {
     if (f in body) insert[f] = toNull(body[f])
   }
 
-  const { data, error } = await supabase
+  // RLS on `employees` only exposes SELECT/UPDATE to authenticated users —
+  // there is no INSERT policy, so creating a record must go through the
+  // service-role client (auth + role already enforced above).
+  const admin = createAdminClient()
+  const { data, error } = await admin
     .from("employees")
     .insert(insert)
     .select("id")
