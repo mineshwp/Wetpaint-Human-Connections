@@ -31,6 +31,49 @@ export async function sendAdminGrantedEmail(to: string, name: string) {
   })
 }
 
+export async function sendKpiScoringInviteEmail(opts: {
+  to: string
+  inviteeName: string
+  subjectName: string
+  period: string
+  url: string
+}): Promise<boolean> {
+  if (!resend) {
+    console.warn("[email] RESEND_API_KEY not set — skipping KPI scoring invite email")
+    return false
+  }
+  const { to, inviteeName, subjectName, period, url } = opts
+  try {
+    await resend.emails.send({
+      from: FROM,
+      to,
+      subject: `Please score ${subjectName}'s ${period} KPI review`,
+      html: `
+        <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px">
+          <p style="font-size:15px;color:#111">Hi ${inviteeName},</p>
+          <p style="font-size:15px;color:#333;line-height:1.6">
+            You've been asked to score <strong>${subjectName}</strong>'s
+            <strong>${period}</strong> KPI review on the Wetpaint Human Connections platform.
+          </p>
+          <p style="font-size:15px;color:#333;line-height:1.6">
+            Log in and open the <strong>KPI</strong> page to submit your scores:
+          </p>
+          <p style="margin:24px 0">
+            <a href="${url}" style="background:#111;color:#fff;text-decoration:none;padding:10px 20px;border-radius:8px;font-size:14px">Open Human Connections</a>
+          </p>
+          <p style="margin-top:32px;font-size:13px;color:#888">
+            — Wetpaint Human Connections
+          </p>
+        </div>
+      `,
+    })
+    return true
+  } catch (e) {
+    console.error("[email] KPI scoring invite failed:", e)
+    return false
+  }
+}
+
 export async function sendAdminRevokedEmail(to: string, name: string) {
   if (!resend) {
     console.warn("[email] RESEND_API_KEY not set — skipping admin revocation email")

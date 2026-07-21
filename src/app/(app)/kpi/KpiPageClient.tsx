@@ -570,12 +570,13 @@ function SectionAccordion({ section, sectionIndex, scores, invitees, isHR, curre
 
 function InviteePanel({ review, allEmployees, onAddInvitee, onRemoveInvitee }: {
   review: Review; allEmployees: Employee[]
-  onAddInvitee: (reviewId: string, ids: string[]) => Promise<void>
+  onAddInvitee: (reviewId: string, ids: string[], sendEmail: boolean) => Promise<void>
   onRemoveInvitee: (reviewId: string, id: string) => Promise<void>
 }) {
   const [showPanel, setShowPanel] = useState(false)
   const [selected, setSelected]   = useState<string[]>([])
   const [adding, setAdding]       = useState(false)
+  const [sendEmail, setSendEmail] = useState(false)
   const invitees   = review.kpi_review_invitees ?? []
   const alreadyIds = new Set(invitees.map(i => i.invitee_id))
   const available  = allEmployees.filter(e => !alreadyIds.has(e.id) && e.id !== review.employee_id)
@@ -583,7 +584,7 @@ function InviteePanel({ review, allEmployees, onAddInvitee, onRemoveInvitee }: {
   async function handleAdd() {
     if (!selected.length) return
     setAdding(true)
-    await onAddInvitee(review.id, selected)
+    await onAddInvitee(review.id, selected, sendEmail)
     setSelected([]); setAdding(false); setShowPanel(false)
   }
 
@@ -622,9 +623,22 @@ function InviteePanel({ review, allEmployees, onAddInvitee, onRemoveInvitee }: {
             ))}
             {available.length === 0 && <p className="text-xs text-muted-foreground col-span-3 italic">All employees already invited</p>}
           </div>
+          <label className="flex items-start gap-2 rounded-lg border border-border bg-muted/10 px-3 py-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={sendEmail}
+              onChange={e => setSendEmail(e.target.checked)}
+              className="mt-0.5 h-4 w-4 rounded border-border accent-primary shrink-0"
+            />
+            <span className="text-xs text-muted-foreground leading-relaxed">
+              <span className="font-semibold text-foreground">Email invitees to score</span> — sends a link asking them to submit scores.
+              Leave unchecked for backdated reviews already scored elsewhere.
+            </span>
+          </label>
           <div className="flex gap-2">
             <Button size="sm" onClick={handleAdd} disabled={!selected.length || adding} className="h-7 text-xs gap-1">
-              {adding ? <Loader2 size={10} className="animate-spin" /> : <Send size={10} />} Send ({selected.length})
+              {adding ? <Loader2 size={10} className="animate-spin" /> : <Send size={10} />}
+              {sendEmail ? `Add & email (${selected.length})` : `Add (${selected.length})`}
             </Button>
             <Button size="sm" variant="ghost" onClick={() => setShowPanel(false)} className="h-7 text-xs">Cancel</Button>
           </div>
@@ -743,7 +757,7 @@ function QuarterPanel({ review, template, scores, allEmployees, currentEmployeeI
   review: Review; template: TemplateSection[]; scores: Score[]
   allEmployees: Employee[]; currentEmployeeId: string | null; isHR: boolean
   onScoreChange: (reviewId: string, itemId: string, score: number | null, comments: string) => Promise<void>
-  onAddInvitee: (reviewId: string, ids: string[]) => Promise<void>
+  onAddInvitee: (reviewId: string, ids: string[], sendEmail: boolean) => Promise<void>
   onRemoveInvitee: (reviewId: string, id: string) => Promise<void>
   onStatusChange: (reviewId: string, status: string) => Promise<void>
   onDelete: (reviewId: string) => void
@@ -916,7 +930,7 @@ function StaffRow({ employee, reviews, scores, template, allEmployees, currentEm
   allEmployees: Employee[]
   currentEmployeeId: string | null
   onScoreChange: (reviewId: string, itemId: string, score: number | null, comments: string) => Promise<void>
-  onAddInvitee: (reviewId: string, ids: string[]) => Promise<void>
+  onAddInvitee: (reviewId: string, ids: string[], sendEmail: boolean) => Promise<void>
   onRemoveInvitee: (reviewId: string, id: string) => Promise<void>
   onStatusChange: (reviewId: string, status: string) => Promise<void>
   onDelete: (reviewId: string) => void
@@ -1090,7 +1104,7 @@ function HRAdminView({ template, reviews, scores, allEmployees, currentEmployeeI
   allEmployees: Employee[]
   currentEmployeeId: string | null
   onScoreChange: (reviewId: string, itemId: string, score: number | null, comments: string) => Promise<void>
-  onAddInvitee: (reviewId: string, ids: string[]) => Promise<void>
+  onAddInvitee: (reviewId: string, ids: string[], sendEmail: boolean) => Promise<void>
   onRemoveInvitee: (reviewId: string, id: string) => Promise<void>
   onStatusChange: (reviewId: string, status: string) => Promise<void>
   onDelete: (reviewId: string) => void
@@ -1629,13 +1643,17 @@ export function KpiPageClient({ isHR, currentEmployeeId }: { isHR: boolean; curr
     }
   }
 
-  async function handleAddInvitee(reviewId: string, inviteeIds: string[]) {
+  async function handleAddInvitee(reviewId: string, inviteeIds: string[], sendEmail: boolean) {
     const res = await fetch(`/api/kpi/reviews/${reviewId}/invitees`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ invitee_ids: inviteeIds }),
+      body: JSON.stringify({ invitee_ids: inviteeIds, send_email: sendEmail }),
     })
-    if (res.ok) { showToast("Invitations sent"); await loadAll() }
-    else showToast("Failed to send invitations")
+    if (res.ok) {
+      const data = await res.json().catch(() => null)
+      if (sendEmail) showToast(`Scorers added · ${data?.emailed ?? 0} emailed`)
+      else showToast("Scorers added")
+      await loadAll()
+    } else showToast("Failed to add scorers")
   }
 
   async function handleRemoveInvitee(reviewId: string, inviteeId: string) {
