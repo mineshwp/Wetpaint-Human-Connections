@@ -1290,7 +1290,7 @@ function MyAssignmentsView({ reviews, scores, template, currentEmployeeId, isHR,
   currentEmployeeId: string | null
   isHR: boolean
   onScoreChange: (reviewId: string, itemId: string, score: number | null, comments: string, scorerId: string | null) => Promise<void>
-  loadAll: () => Promise<void>
+  loadAll: (opts?: { silent?: boolean }) => Promise<void>
   showToast: (msg: string) => void
 }) {
   const myAssignments = isHR
@@ -1326,7 +1326,7 @@ function MyAssignmentsView({ reviews, scores, template, currentEmployeeId, isHR,
                           method: "POST", headers: { "Content-Type": "application/json" },
                           body: JSON.stringify({ response: "accepted" }),
                         })
-                        showToast("Invitation accepted"); await loadAll()
+                        showToast("Invitation accepted"); await loadAll({ silent: true })
                       }}
                     >
                       <Check size={11} /> Accept
@@ -1337,7 +1337,7 @@ function MyAssignmentsView({ reviews, scores, template, currentEmployeeId, isHR,
                           method: "POST", headers: { "Content-Type": "application/json" },
                           body: JSON.stringify({ response: "declined" }),
                         })
-                        showToast("Invitation declined"); await loadAll()
+                        showToast("Invitation declined"); await loadAll({ silent: true })
                       }}
                     >
                       <X size={11} /> Decline
@@ -1587,8 +1587,10 @@ export function KpiPageClient({ isHR, currentEmployeeId }: { isHR: boolean; curr
     setTimeout(() => setToast(null), 4000)
   }
 
-  const loadAll = useCallback(async () => {
-    setLoading(true)
+  const loadAll = useCallback(async (opts?: { silent?: boolean }) => {
+    // Silent refreshes skip the full-screen spinner so the list (and any
+    // expanded staff row) stays mounted and keeps its open state.
+    if (!opts?.silent) setLoading(true)
     try {
       const [tRes, rRes, eRes, settRes] = await Promise.all([
         fetch("/api/kpi/template"),
@@ -1623,7 +1625,7 @@ export function KpiPageClient({ isHR, currentEmployeeId }: { isHR: boolean; curr
     } catch {
       showToast("Failed to load data")
     } finally {
-      setLoading(false)
+      if (!opts?.silent) setLoading(false)
     }
   }, [isHR])
 
@@ -1655,7 +1657,7 @@ export function KpiPageClient({ isHR, currentEmployeeId }: { isHR: boolean; curr
       const data = await res.json().catch(() => null)
       if (sendEmail) showToast(`Scorers added · ${data?.emailed ?? 0} emailed`)
       else showToast("Scorers added")
-      await loadAll()
+      await loadAll({ silent: true })
     } else showToast("Failed to add scorers")
   }
 
@@ -1664,7 +1666,7 @@ export function KpiPageClient({ isHR, currentEmployeeId }: { isHR: boolean; curr
       method: "DELETE", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ invitee_id: inviteeId }),
     })
-    if (res.ok) await loadAll()
+    if (res.ok) await loadAll({ silent: true })
     else showToast("Failed to remove invitee")
   }
 
@@ -1704,7 +1706,7 @@ export function KpiPageClient({ isHR, currentEmployeeId }: { isHR: boolean; curr
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
     })
-    if (res.ok) { showToast("KPI item added"); await loadAll() }
+    if (res.ok) { showToast("KPI item added"); await loadAll({ silent: true }) }
     else showToast("Failed to add KPI item")
   }
 
@@ -1713,14 +1715,14 @@ export function KpiPageClient({ isHR, currentEmployeeId }: { isHR: boolean; curr
       method: "PATCH", headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
     })
-    if (res.ok) { showToast("KPI item updated"); await loadAll() }
+    if (res.ok) { showToast("KPI item updated"); await loadAll({ silent: true }) }
     else showToast("Failed to update KPI item")
   }
 
   async function handleDeleteItem(itemId: string, title: string) {
     if (!window.confirm(`Delete KPI "${title}"? Existing scores are kept but it will no longer appear in reviews.`)) return
     const res = await fetch(`/api/kpi/template/items/${itemId}`, { method: "DELETE" })
-    if (res.ok) { showToast("KPI item deleted"); await loadAll() }
+    if (res.ok) { showToast("KPI item deleted"); await loadAll({ silent: true }) }
     else showToast("Failed to delete KPI item")
   }
 
@@ -1749,7 +1751,7 @@ export function KpiPageClient({ isHR, currentEmployeeId }: { isHR: boolean; curr
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ title, type }),
     })
-    if (res.ok) { showToast("Section added"); await loadAll() }
+    if (res.ok) { showToast("Section added"); await loadAll({ silent: true }) }
     else showToast("Failed to add section")
   }
 
@@ -1758,7 +1760,7 @@ export function KpiPageClient({ isHR, currentEmployeeId }: { isHR: boolean; curr
       method: "PATCH", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ title }),
     })
-    if (res.ok) { showToast("Section renamed"); await loadAll() }
+    if (res.ok) { showToast("Section renamed"); await loadAll({ silent: true }) }
     else showToast("Failed to rename section")
   }
 
@@ -1779,14 +1781,14 @@ export function KpiPageClient({ isHR, currentEmployeeId }: { isHR: boolean; curr
         body: JSON.stringify({ position: a.position }),
       }),
     ])
-    if (results.every(r => r.ok)) await loadAll()
+    if (results.every(r => r.ok)) await loadAll({ silent: true })
     else showToast("Failed to reorder sections")
   }
 
   async function handleDeleteSection(id: string, title: string) {
     if (!window.confirm(`Delete section "${title || "(untitled)"}" and all its KPI items? Existing scores are kept but the section will no longer appear in reviews.`)) return
     const res = await fetch(`/api/kpi/template/sections/${id}`, { method: "DELETE" })
-    if (res.ok) { showToast("Section deleted"); await loadAll() }
+    if (res.ok) { showToast("Section deleted"); await loadAll({ silent: true }) }
     else showToast("Failed to delete section")
   }
 
@@ -1812,7 +1814,7 @@ export function KpiPageClient({ isHR, currentEmployeeId }: { isHR: boolean; curr
     if (res.ok) {
       showToast(data?.message ?? "Import complete")
       if (Array.isArray(data?.errors) && data.errors.length) console.warn("[KPI import] row errors:", data.errors)
-      await loadAll()
+      await loadAll({ silent: true })
     } else {
       showToast(data?.error ?? "Import failed")
     }
@@ -1824,7 +1826,7 @@ export function KpiPageClient({ isHR, currentEmployeeId }: { isHR: boolean; curr
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify(d),
     })
-    if (res.ok) { showToast("Review created"); setShowCreate(false); setCreatePreselect({}); await loadAll() }
+    if (res.ok) { showToast("Review created"); setShowCreate(false); setCreatePreselect({}); await loadAll({ silent: true }) }
     else { const err = await res.json(); showToast(err.error ?? "Failed to create review") }
     setCreating(false)
   }
