@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef } from "react"
 import {
-  ChevronDown, Plus, Trash2, X, Check,
+  ChevronDown, ChevronRight, ChevronLeft, Plus, Trash2, X, Check,
   Users, UserPlus, Send, Clock, CheckCircle2, XCircle,
   Loader2, BarChart3, FileText, Target, Heart, Building2,
   Upload, Search, Pencil, SlidersHorizontal, ArrowUp, ArrowDown, Download, FileSpreadsheet,
@@ -923,9 +923,88 @@ function QuarterPanel({ review, template, scores, allEmployees, currentEmployeeI
   )
 }
 
-// ─── Staff Row (HR admin view) ──────────────────────────────────────────────────
+// ─── Staff Row (compact — opens the single-person detail view) ────────────────────
 
-function StaffRow({ employee, reviews, scores, template, allEmployees, currentEmployeeId, onScoreChange, onAddInvitee, onRemoveInvitee, onStatusChange, onDelete, onAddItem, onEditItem, onDeleteItem, onUpdateReviewDetails, onCreateReview, initialOpenQuarter }: {
+function StaffRow({ employee, reviews, scores, template, onOpen }: {
+  employee: Employee
+  reviews: Review[]
+  scores: Record<string, Score[]>
+  template: TemplateSection[]
+  onOpen: (employeeId: string, quarter?: Quarter) => void
+}) {
+  const reviewByQuarter = useMemo(() => {
+    const map: Partial<Record<Quarter, Review>> = {}
+    for (const r of reviews) {
+      const q = periodToQuarter(r.period)
+      if (q) map[q] = r
+    }
+    return map
+  }, [reviews])
+
+  const name = `${employee.first_name} ${employee.last_name}`
+  const deptName = (employee as { department?: { name: string } | null }).department?.name ?? ""
+
+  return (
+    <div className="border-b border-border last:border-b-0">
+      <div
+        className="flex items-center gap-3 px-4 py-3 hover:bg-muted/20 transition-colors cursor-pointer"
+        onClick={() => onOpen(employee.id)}
+      >
+        <Avatar name={name} size="md" />
+        <div className="flex-1 min-w-0">
+          <div className="font-semibold text-sm text-foreground">{name}</div>
+          <div className="text-xs text-muted-foreground mt-0.5">
+            {employee.job_title}{deptName ? ` · ${deptName}` : ""}
+          </div>
+        </div>
+
+        {/* Quarter chips — click a chip to open that quarter directly */}
+        <div className="flex items-center gap-1.5 flex-wrap justify-end" onClick={e => e.stopPropagation()}>
+          {QUARTERS.map(q => {
+            const review = reviewByQuarter[q]
+            if (review) {
+              const statusInfo = STATUS_DISPLAY[review.status] ?? STATUS_DISPLAY.draft
+              const reviewScores = scores[review.id] ?? []
+              const totalMax = template.reduce((a, s) => a + s.kpi_template_items.reduce((b, i) => b + i.max_score, 0), 0)
+              const current = reviewScores.reduce((a, s) => a + (s.score ?? 0), 0)
+              return (
+                <button
+                  key={q}
+                  type="button"
+                  onClick={() => onOpen(employee.id, q)}
+                  className={cn(
+                    "inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-semibold transition-all hover:shadow-sm",
+                    statusInfo.chipCls
+                  )}
+                >
+                  Q{q} · {totalMax > 0 ? `${Math.round(current)}/${totalMax}` : "—"} · {statusInfo.label}
+                </button>
+              )
+            }
+            return (
+              <button
+                key={q}
+                type="button"
+                onClick={() => onOpen(employee.id, q)}
+                className="inline-flex items-center rounded-full border border-dashed border-border px-2.5 py-0.5 text-[11px] font-medium text-muted-foreground hover:border-primary/50 hover:text-primary transition-all"
+              >
+                Q{q}
+              </button>
+            )
+          })}
+        </div>
+
+        <div className="w-7 h-7 rounded-full border border-border flex items-center justify-center text-muted-foreground shrink-0 ml-1">
+          <ChevronRight size={14} />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Employee Review Detail (single-person full view) ─────────────────────────────
+
+function EmployeeReviewDetail({ employee, reviews, scores, template, allEmployees, currentEmployeeId, onScoreChange, onAddInvitee, onRemoveInvitee, onStatusChange, onDelete, onAddItem, onEditItem, onDeleteItem, onUpdateReviewDetails, onCreateReview, onBack, initialQuarter }: {
   employee: Employee
   reviews: Review[]
   scores: Record<string, Score[]>
@@ -942,9 +1021,9 @@ function StaffRow({ employee, reviews, scores, template, allEmployees, currentEm
   onDeleteItem?: (itemId: string, title: string) => void
   onUpdateReviewDetails?: (reviewId: string, data: { title: string; period: string; deadline: string | null }) => Promise<void>
   onCreateReview: (employeeId: string, quarter: Quarter) => void
-  initialOpenQuarter?: Quarter
+  onBack: () => void
+  initialQuarter?: Quarter
 }) {
-  // Map each quarter to a review (if exists)
   const reviewByQuarter = useMemo(() => {
     const map: Partial<Record<Quarter, Review>> = {}
     for (const r of reviews) {
@@ -954,10 +1033,6 @@ function StaffRow({ employee, reviews, scores, template, allEmployees, currentEm
     return map
   }, [reviews])
 
-  const name = `${employee.first_name} ${employee.last_name}`
-  const deptName = (employee as { department?: { name: string } | null }).department?.name ?? ""
-
-  // Determine which quarter tabs to show: quarters with reviews + one next empty quarter
   const visibleQuarters = useMemo<Quarter[]>(() => {
     const withReview = QUARTERS.filter(q => reviewByQuarter[q])
     const nextEmpty = QUARTERS.find(q => !reviewByQuarter[q])
@@ -965,133 +1040,82 @@ function StaffRow({ employee, reviews, scores, template, allEmployees, currentEm
     return all.sort((a, b) => a - b) as Quarter[]
   }, [reviewByQuarter])
 
-  const [expanded, setExpanded]       = useState(false)
-  const [activeQuarter, setActiveQuarter] = useState<Quarter>(initialOpenQuarter ?? visibleQuarters[0] ?? 1)
+  const name = `${employee.first_name} ${employee.last_name}`
+  const deptName = (employee as { department?: { name: string } | null }).department?.name ?? ""
 
-  function openQuarter(q: Quarter) {
-    setActiveQuarter(q)
-    setExpanded(true)
-  }
-
+  const [activeQuarter, setActiveQuarter] = useState<Quarter>(initialQuarter ?? visibleQuarters[0] ?? 1)
   const activeReview = reviewByQuarter[activeQuarter]
 
   return (
-    <div className="border-b border-border last:border-b-0">
-      {/* Main row */}
-      <div
-        className="flex items-center gap-3 px-4 py-3 hover:bg-muted/20 transition-colors cursor-pointer"
-        onClick={() => setExpanded(o => !o)}
-      >
-        <Avatar name={name} size="md" />
-        <div className="flex-1 min-w-0">
-          <div className="font-semibold text-sm text-foreground">{name}</div>
-          <div className="text-xs text-muted-foreground mt-0.5">
-            {employee.job_title}{deptName ? ` · ${deptName}` : ""}
+    <div className="space-y-4">
+      {/* Back + person header */}
+      <div className="flex items-center gap-3">
+        <Button size="sm" variant="outline" onClick={onBack} className="gap-1.5 h-9 text-xs shrink-0">
+          <ChevronLeft size={14} /> All employees
+        </Button>
+        <div className="flex items-center gap-3 flex-1 min-w-0 rounded-2xl border border-border bg-card px-4 py-2.5 shadow-sm">
+          <Avatar name={name} size="md" />
+          <div className="min-w-0">
+            <div className="font-bold text-sm text-foreground truncate">{name}</div>
+            <div className="text-xs text-muted-foreground truncate">
+              {employee.job_title}{deptName ? ` · ${deptName}` : ""}
+            </div>
           </div>
-        </div>
-
-        {/* Quarter chips */}
-        <div className="flex items-center gap-1.5 flex-wrap justify-end" onClick={e => e.stopPropagation()}>
-          {QUARTERS.map(q => {
-            const review = reviewByQuarter[q]
-            if (review) {
-              const statusInfo = STATUS_DISPLAY[review.status] ?? STATUS_DISPLAY.draft
-              const reviewScores = scores[review.id] ?? []
-              const totalMax = template.reduce((a, s) => a + s.kpi_template_items.reduce((b, i) => b + i.max_score, 0), 0)
-              const scoreMap = new Map<string, Score>()
-              for (const s of reviewScores) scoreMap.set(`${s.item_id}::${s.scorer_id ?? "hr"}`, s)
-              const current = reviewScores.reduce((a, s) => a + (s.score ?? 0), 0)
-              return (
-                <button
-                  key={q}
-                  type="button"
-                  onClick={() => openQuarter(q)}
-                  className={cn(
-                    "inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-semibold transition-all hover:shadow-sm",
-                    statusInfo.chipCls
-                  )}
-                >
-                  Q{q} · {totalMax > 0 ? `${Math.round(current)}/${totalMax}` : "—"} · {statusInfo.label}
-                </button>
-              )
-            } else {
-              // No review — show faded dashed chip
-              return (
-                <button
-                  key={q}
-                  type="button"
-                  onClick={() => { setActiveQuarter(q); setExpanded(true) }}
-                  className="inline-flex items-center rounded-full border border-dashed border-border px-2.5 py-0.5 text-[11px] font-medium text-muted-foreground hover:border-primary/50 hover:text-primary transition-all"
-                >
-                  Q{q}
-                </button>
-              )
-            }
-          })}
-        </div>
-
-        <div className={cn("w-7 h-7 rounded-full border border-border flex items-center justify-center text-muted-foreground transition-transform shrink-0 ml-1", expanded ? "" : "-rotate-90")}>
-          <ChevronDown size={14} />
         </div>
       </div>
 
-      {/* Expanded content */}
-      {expanded && (
-        <div className="px-4 pb-5 pt-0 bg-muted/10">
-          {/* Quarter tab bar */}
-          <div className="flex items-center gap-0 border-b border-border mb-4 pt-1">
-            {visibleQuarters.map(q => (
-              <button
-                key={q}
-                type="button"
-                onClick={() => setActiveQuarter(q)}
-                className={cn(
-                  "px-3 py-2 text-xs font-semibold border-b-2 -mb-px transition-colors whitespace-nowrap",
-                  activeQuarter === q
-                    ? "border-primary text-primary"
-                    : "border-transparent text-muted-foreground hover:text-foreground"
-                )}
-              >
-                {QUARTER_LABELS[q]}
-                {reviewByQuarter[q] && (
-                  <span className={cn(
-                    "ml-1.5 inline-flex items-center rounded-full border px-1.5 py-0 text-[10px] font-medium",
-                    STATUS_DISPLAY[reviewByQuarter[q]!.status]?.chipCls ?? ""
-                  )}>
-                    {STATUS_DISPLAY[reviewByQuarter[q]!.status]?.label}
-                  </span>
-                )}
-              </button>
-            ))}
-          </div>
+      {/* Quarter tab bar */}
+      <div className="flex items-center gap-0 border-b border-border">
+        {visibleQuarters.map(q => (
+          <button
+            key={q}
+            type="button"
+            onClick={() => setActiveQuarter(q)}
+            className={cn(
+              "px-3 py-2 text-xs font-semibold border-b-2 -mb-px transition-colors whitespace-nowrap",
+              activeQuarter === q
+                ? "border-primary text-primary"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            )}
+          >
+            {QUARTER_LABELS[q]}
+            {reviewByQuarter[q] && (
+              <span className={cn(
+                "ml-1.5 inline-flex items-center rounded-full border px-1.5 py-0 text-[10px] font-medium",
+                STATUS_DISPLAY[reviewByQuarter[q]!.status]?.chipCls ?? ""
+              )}>
+                {STATUS_DISPLAY[reviewByQuarter[q]!.status]?.label}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
 
-          {activeReview ? (
-            <QuarterPanel
-              review={activeReview}
-              template={template}
-              scores={scores[activeReview.id] ?? []}
-              allEmployees={allEmployees}
-              currentEmployeeId={currentEmployeeId}
-              isHR={true}
-              onScoreChange={onScoreChange}
-              onAddInvitee={onAddInvitee}
-              onRemoveInvitee={onRemoveInvitee}
-              onStatusChange={onStatusChange}
-              onDelete={onDelete}
-              onAddItem={onAddItem}
-              onEditItem={onEditItem}
-              onDeleteItem={onDeleteItem}
-              onUpdateReviewDetails={onUpdateReviewDetails}
-            />
-          ) : (
-            <div className="flex flex-col items-center justify-center py-10 text-muted-foreground gap-3">
-              <BarChart3 size={28} className="opacity-30" />
-              <p className="text-sm font-medium">No Q{activeQuarter} review set up yet</p>
-              <Button size="sm" onClick={() => onCreateReview(employee.id, activeQuarter)} className="gap-1.5 h-8 text-xs">
-                <Plus size={13} /> Set up Q{activeQuarter}
-              </Button>
-            </div>
-          )}
+      {activeReview ? (
+        <QuarterPanel
+          review={activeReview}
+          template={template}
+          scores={scores[activeReview.id] ?? []}
+          allEmployees={allEmployees}
+          currentEmployeeId={currentEmployeeId}
+          isHR={true}
+          onScoreChange={onScoreChange}
+          onAddInvitee={onAddInvitee}
+          onRemoveInvitee={onRemoveInvitee}
+          onStatusChange={onStatusChange}
+          onDelete={onDelete}
+          onAddItem={onAddItem}
+          onEditItem={onEditItem}
+          onDeleteItem={onDeleteItem}
+          onUpdateReviewDetails={onUpdateReviewDetails}
+        />
+      ) : (
+        <div className="flex flex-col items-center justify-center py-12 text-muted-foreground gap-3">
+          <BarChart3 size={28} className="opacity-30" />
+          <p className="text-sm font-medium">No Q{activeQuarter} review set up yet</p>
+          <Button size="sm" onClick={() => onCreateReview(employee.id, activeQuarter)} className="gap-1.5 h-8 text-xs">
+            <Plus size={13} /> Set up Q{activeQuarter}
+          </Button>
         </div>
       )}
     </div>
@@ -1121,6 +1145,8 @@ function HRAdminView({ template, reviews, scores, allEmployees, currentEmployeeI
   const [searchQ, setSearchQ]         = useState("")
   const [deptFilter, setDeptFilter]   = useState("all")
   const [statusFilter, setStatusFilter] = useState("all")
+  const [selectedId, setSelectedId]   = useState<string | null>(null)
+  const [selectedQuarter, setSelectedQuarter] = useState<Quarter | undefined>(undefined)
 
   // Build a map: employee_id → reviews[]
   const reviewsByEmployee = useMemo(() => {
@@ -1174,6 +1200,34 @@ function HRAdminView({ template, reviews, scores, allEmployees, currentEmployeeI
       return true
     })
   }, [allEmployees, deptFilter, statusFilter, searchQ, reviewsByEmployee])
+
+  // Detail view — a single person, full screen, with a Back button.
+  const selectedEmp = selectedId ? allEmployees.find(e => e.id === selectedId) : undefined
+  if (selectedEmp) {
+    return (
+      <EmployeeReviewDetail
+        key={selectedEmp.id}
+        employee={selectedEmp}
+        reviews={reviewsByEmployee[selectedEmp.id] ?? []}
+        scores={scores}
+        template={template}
+        allEmployees={allEmployees}
+        currentEmployeeId={currentEmployeeId}
+        onScoreChange={onScoreChange}
+        onAddInvitee={onAddInvitee}
+        onRemoveInvitee={onRemoveInvitee}
+        onStatusChange={onStatusChange}
+        onDelete={onDelete}
+        onAddItem={onAddItem}
+        onEditItem={onEditItem}
+        onDeleteItem={onDeleteItem}
+        onUpdateReviewDetails={onUpdateReviewDetails}
+        onCreateReview={(empId, quarter) => onShowCreate(empId, quarter)}
+        onBack={() => setSelectedId(null)}
+        initialQuarter={selectedQuarter}
+      />
+    )
+  }
 
   return (
     <div className="space-y-5">
@@ -1261,18 +1315,7 @@ function HRAdminView({ template, reviews, scores, allEmployees, currentEmployeeI
               reviews={reviewsByEmployee[emp.id] ?? []}
               scores={scores}
               template={template}
-              allEmployees={allEmployees}
-              currentEmployeeId={currentEmployeeId}
-              onScoreChange={onScoreChange}
-              onAddInvitee={onAddInvitee}
-              onRemoveInvitee={onRemoveInvitee}
-              onStatusChange={onStatusChange}
-              onDelete={onDelete}
-              onAddItem={onAddItem}
-              onEditItem={onEditItem}
-              onDeleteItem={onDeleteItem}
-              onUpdateReviewDetails={onUpdateReviewDetails}
-              onCreateReview={(empId, quarter) => onShowCreate(empId, quarter)}
+              onOpen={(id, quarter) => { setSelectedId(id); setSelectedQuarter(quarter) }}
             />
           ))}
         </div>
