@@ -20,7 +20,11 @@ export async function POST(
   const sendEmail: boolean = body.send_email === true
   if (!inviteeIds.length) return NextResponse.json({ error: "invitee_ids required" }, { status: 400 })
 
-  const rows = inviteeIds.map((invitee_id) => ({ review_id: reviewId, invitee_id, status: "pending" }))
+  // Emailing = a live invitation they must accept → "pending".
+  // Silent add (backdated data entry) → "completed" so HR can immediately
+  // record the reviewer's scores against them.
+  const status = sendEmail ? "pending" : "completed"
+  const rows = inviteeIds.map((invitee_id) => ({ review_id: reviewId, invitee_id, status }))
   const { data, error } = await supabase
     .from("kpi_review_invitees")
     .upsert(rows, { onConflict: "review_id,invitee_id", ignoreDuplicates: true })

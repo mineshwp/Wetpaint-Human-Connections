@@ -220,7 +220,7 @@ function ScorerRow({ name, role, scoreObj, canEdit, item, onSave }: {
 function KpiCard({ item, itemIndex, sectionType, scores, invitees, isHR, currentEmployeeId, onScoreChange, onEditItem, onDeleteItem }: {
   item: TemplateItem; itemIndex: number; sectionType: "invitee" | "hr"
   scores: Score[]; invitees: ReviewInvitee[]; isHR: boolean; currentEmployeeId: string | null
-  onScoreChange: (itemId: string, score: number | null, comments: string) => Promise<void>
+  onScoreChange: (itemId: string, score: number | null, comments: string, scorerId: string | null) => Promise<void>
   onEditItem?: (itemId: string, data: { title: string; description: string; min_score: number; max_score: number }) => Promise<void>
   onDeleteItem?: (itemId: string, title: string) => void
 }) {
@@ -250,17 +250,20 @@ function KpiCard({ item, itemIndex, sectionType, scores, invitees, isHR, current
     ? numericScores.reduce((a, b) => a + b, 0) / numericScores.length
     : null
 
-  const scorerRows: { key: string; name: string; role: string; scoreObj: Score | undefined; canEdit: boolean }[] = []
+  const scorerRows: { key: string; name: string; role: string; scoreObj: Score | undefined; canEdit: boolean; scorerId: string | null }[] = []
   if (sectionType === "hr") {
-    scorerRows.push({ key: "hr", name: "HR / Admin", role: "HR", scoreObj: scoreMap.get(`${item.id}::hr`), canEdit: isHR })
+    scorerRows.push({ key: "hr", name: "HR / Admin", role: "HR", scoreObj: scoreMap.get(`${item.id}::hr`), canEdit: isHR, scorerId: null })
   } else {
     for (const inv of activeInvitees) {
       scorerRows.push({
         key: inv.invitee_id,
         name: `${inv.invitee.first_name} ${inv.invitee.last_name}`,
-        role: "Peer",
+        role: "Reviewer",
         scoreObj: scoreMap.get(`${item.id}::${inv.invitee_id}`),
-        canEdit: inv.invitee_id === currentEmployeeId,
+        // HR can enter/edit any reviewer's score (backdated entry); a reviewer
+        // scoring live can edit only their own row.
+        canEdit: isHR || inv.invitee_id === currentEmployeeId,
+        scorerId: inv.invitee_id,
       })
     }
   }
@@ -385,7 +388,7 @@ function KpiCard({ item, itemIndex, sectionType, scores, invitees, isHR, current
                   <ScorerRow
                     key={row.key} name={row.name} role={row.role}
                     scoreObj={row.scoreObj} canEdit={row.canEdit} item={item}
-                    onSave={(score, comm) => onScoreChange(item.id, score, comm)}
+                    onSave={(score, comm) => onScoreChange(item.id, score, comm, row.scorerId)}
                   />
                 ))
             }
@@ -415,7 +418,7 @@ function KpiCard({ item, itemIndex, sectionType, scores, invitees, isHR, current
 function SectionAccordion({ section, sectionIndex, scores, invitees, isHR, currentEmployeeId, onScoreChange, onAddItem, onEditItem, onDeleteItem, defaultOpen }: {
   section: TemplateSection; sectionIndex: number; scores: Score[]; invitees: ReviewInvitee[]
   isHR: boolean; currentEmployeeId: string | null
-  onScoreChange: (itemId: string, score: number | null, comments: string) => Promise<void>
+  onScoreChange: (itemId: string, score: number | null, comments: string, scorerId: string | null) => Promise<void>
   onAddItem?: (sectionId: string, data: { title: string; description: string; min_score: number; max_score: number }) => Promise<void>
   onEditItem?: (itemId: string, data: { title: string; description: string; min_score: number; max_score: number }) => Promise<void>
   onDeleteItem?: (itemId: string, title: string) => void
@@ -591,8 +594,8 @@ function InviteePanel({ review, allEmployees, onAddInvitee, onRemoveInvitee }: {
   return (
     <div className="mb-4">
       <div className="flex flex-wrap items-center gap-2 px-4 py-3 bg-card border border-border rounded-xl shadow-sm">
-        <span className="text-xs font-semibold text-muted-foreground shrink-0">Invitees:</span>
-        {invitees.length === 0 && <span className="text-xs text-muted-foreground italic">None assigned yet</span>}
+        <span className="text-xs font-semibold text-muted-foreground shrink-0">Reviewers:</span>
+        {invitees.length === 0 && <span className="text-xs text-muted-foreground italic">None added yet</span>}
         {invitees.map(inv => (
           <div key={inv.id} className="flex items-center gap-1.5 rounded-full border border-border bg-muted/20 px-2.5 py-1">
             <Avatar name={`${inv.invitee.first_name} ${inv.invitee.last_name}`} size="sm" />
@@ -604,12 +607,12 @@ function InviteePanel({ review, allEmployees, onAddInvitee, onRemoveInvitee }: {
           </div>
         ))}
         <Button size="sm" variant="outline" onClick={() => setShowPanel(o => !o)} className="h-7 text-xs gap-1 ml-auto shrink-0">
-          <UserPlus size={12} /> Add Invitee
+          <UserPlus size={12} /> Add reviewer
         </Button>
       </div>
       {showPanel && (
         <div className="mt-2 rounded-xl border border-border bg-card p-4 space-y-3 shadow-sm">
-          <p className="text-xs font-semibold text-muted-foreground">Select staff to invite:</p>
+          <p className="text-xs font-semibold text-muted-foreground">Select reviewers to add:</p>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 max-h-36 overflow-y-auto">
             {available.map(emp => (
               <button key={emp.id} type="button"
@@ -756,7 +759,7 @@ function CreateReviewModal({ employees, currentPeriod, preselectedEmployeeId, pr
 function QuarterPanel({ review, template, scores, allEmployees, currentEmployeeId, isHR, onScoreChange, onAddInvitee, onRemoveInvitee, onStatusChange, onDelete, onAddItem, onEditItem, onDeleteItem, onUpdateReviewDetails }: {
   review: Review; template: TemplateSection[]; scores: Score[]
   allEmployees: Employee[]; currentEmployeeId: string | null; isHR: boolean
-  onScoreChange: (reviewId: string, itemId: string, score: number | null, comments: string) => Promise<void>
+  onScoreChange: (reviewId: string, itemId: string, score: number | null, comments: string, scorerId: string | null) => Promise<void>
   onAddInvitee: (reviewId: string, ids: string[], sendEmail: boolean) => Promise<void>
   onRemoveInvitee: (reviewId: string, id: string) => Promise<void>
   onStatusChange: (reviewId: string, status: string) => Promise<void>
@@ -911,7 +914,7 @@ function QuarterPanel({ review, template, scores, allEmployees, currentEmployeeI
             key={section.id} section={section} sectionIndex={idx}
             scores={scores} invitees={review.kpi_review_invitees ?? []}
             isHR={isHR} currentEmployeeId={currentEmployeeId}
-            onScoreChange={(itemId, score, comments) => onScoreChange(review.id, itemId, score, comments)}
+            onScoreChange={(itemId, score, comments, scorerId) => onScoreChange(review.id, itemId, score, comments, scorerId)}
             onAddItem={onAddItem} onEditItem={onEditItem} onDeleteItem={onDeleteItem} defaultOpen={idx === 0}
           />
         ))}
@@ -929,7 +932,7 @@ function StaffRow({ employee, reviews, scores, template, allEmployees, currentEm
   template: TemplateSection[]
   allEmployees: Employee[]
   currentEmployeeId: string | null
-  onScoreChange: (reviewId: string, itemId: string, score: number | null, comments: string) => Promise<void>
+  onScoreChange: (reviewId: string, itemId: string, score: number | null, comments: string, scorerId: string | null) => Promise<void>
   onAddInvitee: (reviewId: string, ids: string[], sendEmail: boolean) => Promise<void>
   onRemoveInvitee: (reviewId: string, id: string) => Promise<void>
   onStatusChange: (reviewId: string, status: string) => Promise<void>
@@ -1103,7 +1106,7 @@ function HRAdminView({ template, reviews, scores, allEmployees, currentEmployeeI
   scores: Record<string, Score[]>
   allEmployees: Employee[]
   currentEmployeeId: string | null
-  onScoreChange: (reviewId: string, itemId: string, score: number | null, comments: string) => Promise<void>
+  onScoreChange: (reviewId: string, itemId: string, score: number | null, comments: string, scorerId: string | null) => Promise<void>
   onAddInvitee: (reviewId: string, ids: string[], sendEmail: boolean) => Promise<void>
   onRemoveInvitee: (reviewId: string, id: string) => Promise<void>
   onStatusChange: (reviewId: string, status: string) => Promise<void>
@@ -1286,7 +1289,7 @@ function MyAssignmentsView({ reviews, scores, template, currentEmployeeId, isHR,
   template: TemplateSection[]
   currentEmployeeId: string | null
   isHR: boolean
-  onScoreChange: (reviewId: string, itemId: string, score: number | null, comments: string) => Promise<void>
+  onScoreChange: (reviewId: string, itemId: string, score: number | null, comments: string, scorerId: string | null) => Promise<void>
   loadAll: () => Promise<void>
   showToast: (msg: string) => void
 }) {
@@ -1354,7 +1357,7 @@ function MyAssignmentsView({ reviews, scores, template, currentEmployeeId, isHR,
                       key={section.id} section={section} sectionIndex={idx}
                       scores={scores[review.id] ?? []} invitees={review.kpi_review_invitees ?? []}
                       isHR={false} currentEmployeeId={currentEmployeeId}
-                      onScoreChange={(itemId, score, comments) => onScoreChange(review.id, itemId, score, comments)}
+                      onScoreChange={(itemId, score, comments, scorerId) => onScoreChange(review.id, itemId, score, comments, scorerId)}
                       defaultOpen={idx === 0}
                     />
                   ))}
@@ -1627,10 +1630,10 @@ export function KpiPageClient({ isHR, currentEmployeeId }: { isHR: boolean; curr
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { void loadAll() }, [loadAll])
 
-  async function handleScoreChange(reviewId: string, itemId: string, score: number | null, comments: string) {
+  async function handleScoreChange(reviewId: string, itemId: string, score: number | null, comments: string, scorerId: string | null) {
     const res = await fetch(`/api/kpi/reviews/${reviewId}/scores`, {
       method: "PUT", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ item_id: itemId, score, comments }),
+      body: JSON.stringify({ item_id: itemId, score, comments, scorer_id: scorerId }),
     })
     if (res.ok) {
       const updated: Score = await res.json()

@@ -76,13 +76,29 @@ export async function PUT(
 
   const body = await req.json()
   const { item_id, score, comments } = body
+  const bodyScorerId: string | null = body.scorer_id ?? null
 
   if (!item_id) return NextResponse.json({ error: "item_id is required" }, { status: 400 })
 
-  // HR scores with scorer_id = null; invitees score with their own employee id
+  // scorer_id semantics:
+  //  - HR: null = the HR-scored section; a value = recording a specific
+  //    reviewer's score on their behalf (used for backdated data entry).
+  //  - Invitee: always their own employee id (client value is ignored).
   let scorerId: string | null = null
 
-  if (effectiveRole !== "hr") {
+  if (effectiveRole === "hr") {
+    if (bodyScorerId) {
+      // Must be an actual invitee (reviewer) on this review.
+      const { data: inv } = await supabase
+        .from("kpi_review_invitees")
+        .select("id")
+        .eq("review_id", reviewId)
+        .eq("invitee_id", bodyScorerId)
+        .single()
+      if (!inv) return NextResponse.json({ error: "That reviewer is not on this review" }, { status: 400 })
+      scorerId = bodyScorerId
+    }
+  } else {
     if (!effectiveEmployeeId) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     // Verify this person is an accepted invitee on this review
     const { data: inv } = await supabase
