@@ -24,6 +24,7 @@ interface TemplateSection {
 interface ReviewInvitee {
   id: string; invitee_id: string; status: "pending" | "accepted" | "declined" | "completed"
   invitee: { id: string; first_name: string; last_name: string }
+  kpi_review_invitee_sections?: { section_id: string }[]
 }
 interface Review {
   id: string; employee_id: string; period: string; title: string
@@ -55,6 +56,15 @@ const AVATAR_COLORS = [
 
 // Show whole numbers plainly and half-points with one decimal (e.g. 9, 6.5).
 const fmtScore = (n: number) => (n % 1 === 0 ? String(n) : n.toFixed(1))
+
+// Active reviewers (accepted/completed) assigned to a given section.
+function assignedReviewers(invitees: ReviewInvitee[], sectionId: string): ReviewInvitee[] {
+  return invitees.filter(
+    i =>
+      (i.status === "accepted" || i.status === "completed") &&
+      (i.kpi_review_invitee_sections ?? []).some(s => s.section_id === sectionId)
+  )
+}
 
 // Section styling config
 const SECTION_CONFIG: Record<number, { icon: React.ElementType; colorClass: string; label: string }> = {
@@ -237,38 +247,38 @@ function KpiCard({ item, itemIndex, sectionType, scores, invitees, isHR, current
   const scoreMap = new Map<string, Score>()
   for (const s of scores) scoreMap.set(`${s.item_id}::${s.scorer_id ?? "hr"}`, s)
 
-  const activeInvitees = invitees.filter(i => i.status === "accepted" || i.status === "completed")
+  // Only reviewers assigned to this item's section can score it. An HR/Admin
+  // row (scorer_id null) is also shown for HR sections and wherever an
+  // HR/Admin score already exists (preserves historical/imported data).
+  const reviewers = assignedReviewers(invitees, item.section_id)
+  const hrScoreObj = scoreMap.get(`${item.id}::hr`)
+  const showHrRow = sectionType === "hr" || hrScoreObj !== undefined
 
   const numericScores: number[] = []
-  if (sectionType === "hr") {
-    const v = scoreMap.get(`${item.id}::hr`)?.score
+  if (hrScoreObj?.score != null) numericScores.push(hrScoreObj.score)
+  for (const inv of reviewers) {
+    const v = scoreMap.get(`${item.id}::${inv.invitee_id}`)?.score
     if (v != null) numericScores.push(v)
-  } else {
-    for (const inv of activeInvitees) {
-      const v = scoreMap.get(`${item.id}::${inv.invitee_id}`)?.score
-      if (v != null) numericScores.push(v)
-    }
   }
   const avgScore = numericScores.length > 0
     ? numericScores.reduce((a, b) => a + b, 0) / numericScores.length
     : null
 
   const scorerRows: { key: string; name: string; role: string; scoreObj: Score | undefined; canEdit: boolean; scorerId: string | null }[] = []
-  if (sectionType === "hr") {
-    scorerRows.push({ key: "hr", name: "HR / Admin", role: "HR", scoreObj: scoreMap.get(`${item.id}::hr`), canEdit: isHR, scorerId: null })
-  } else {
-    for (const inv of activeInvitees) {
-      scorerRows.push({
-        key: inv.invitee_id,
-        name: `${inv.invitee.first_name} ${inv.invitee.last_name}`,
-        role: "Reviewer",
-        scoreObj: scoreMap.get(`${item.id}::${inv.invitee_id}`),
-        // HR can enter/edit any reviewer's score (backdated entry); a reviewer
-        // scoring live can edit only their own row.
-        canEdit: isHR || inv.invitee_id === currentEmployeeId,
-        scorerId: inv.invitee_id,
-      })
-    }
+  if (showHrRow) {
+    scorerRows.push({ key: "hr", name: "HR / Admin", role: "HR", scoreObj: hrScoreObj, canEdit: isHR, scorerId: null })
+  }
+  for (const inv of reviewers) {
+    scorerRows.push({
+      key: inv.invitee_id,
+      name: `${inv.invitee.first_name} ${inv.invitee.last_name}`,
+      role: "Reviewer",
+      scoreObj: scoreMap.get(`${item.id}::${inv.invitee_id}`),
+      // HR can enter/edit any reviewer's score (backdated entry); a reviewer
+      // scoring live can edit only their own row.
+      canEdit: isHR || inv.invitee_id === currentEmployeeId,
+      scorerId: inv.invitee_id,
+    })
   }
 
   async function handleEditSave() {
@@ -386,7 +396,7 @@ function KpiCard({ item, itemIndex, sectionType, scores, invitees, isHR, current
               <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider text-center">✓</span>
             </div>
             {scorerRows.length === 0
-              ? <div className="px-3 py-4 text-xs text-muted-foreground text-center italic">No scorers assigned yet.</div>
+              ? <div className="px-3 py-4 text-xs text-muted-foreground text-center italic">No reviewers assigned to this section.</div>
               : scorerRows.map(row => (
                   <ScorerRow
                     key={row.key} name={row.name} role={row.role}
@@ -397,7 +407,7 @@ function KpiCard({ item, itemIndex, sectionType, scores, invitees, isHR, current
             }
             <div className="px-3 py-2.5 border-t border-dashed border-border bg-muted/10 flex items-center justify-between gap-2">
               <span className="text-[11px] text-muted-foreground">
-                {sectionType === "hr" ? "HR score is the final score" : "Final score is the weighted average"}
+                Final score is the average of all submitted scores
               </span>
             </div>
           </div>
@@ -438,31 +448,33 @@ function SectionAccordion({ section, sectionIndex, scores, invitees, isHR, curre
   const sectionMax = items.reduce((a, i) => a + i.max_score, 0)
   const scoreMap = new Map<string, Score>()
   for (const s of scores) scoreMap.set(`${s.item_id}::${s.scorer_id ?? "hr"}`, s)
-  const activeInvitees = invitees.filter(i => i.status === "accepted" || i.status === "completed")
 
-  const sectionCurrent = (() => {
-    if (section.type === "hr") {
-      return items.reduce((a, item) => a + (scoreMap.get(`${item.id}::hr`)?.score ?? 0), 0)
+  // Reviewers assigned to this section score every item in it. An HR/Admin
+  // score (scorer_id null) also counts where present or on HR sections.
+  const reviewers = assignedReviewers(invitees, section.id)
+  const sectionHasHr = section.type === "hr" || items.some(i => scoreMap.get(`${i.id}::hr`) !== undefined)
+
+  const sectionCurrent = items.reduce((total, item) => {
+    const vals: number[] = []
+    const hrv = scoreMap.get(`${item.id}::hr`)?.score
+    if (hrv != null) vals.push(hrv)
+    for (const inv of reviewers) {
+      const v = scoreMap.get(`${item.id}::${inv.invitee_id}`)?.score
+      if (v != null) vals.push(v)
     }
-    if (activeInvitees.length === 0) return 0
-    return items.reduce((total, item) => {
-      const vals = activeInvitees
-        .map(inv => scoreMap.get(`${item.id}::${inv.invitee_id}`)?.score)
-        .filter((v): v is number => v != null)
-      if (vals.length === 0) return total
-      return total + vals.reduce((a, b) => a + b, 0) / vals.length
-    }, 0)
-  })()
+    if (vals.length === 0) return total
+    return total + vals.reduce((a, b) => a + b, 0) / vals.length
+  }, 0)
 
   const progressPct = sectionMax > 0 ? Math.min(100, (sectionCurrent / sectionMax) * 100) : 0
   const cfg = SECTION_CONFIG[section.position] ?? { icon: BarChart3, colorClass: "text-primary", label: section.title }
   const SectionIcon = cfg.icon
   const sectionLabel = section.title?.trim() ? section.title : cfg.label
 
-  const scorerNames = invitees
-    .filter(i => i.status === "accepted" || i.status === "completed")
-    .map(i => i.invitee.first_name)
-    .join(", ")
+  const scorerNames = [
+    ...(sectionHasHr ? ["HR / Admin"] : []),
+    ...reviewers.map(i => i.invitee.first_name),
+  ].join(", ")
 
   return (
     <div className={cn("rounded-xl border bg-card overflow-hidden transition-all", open ? "border-border shadow-md" : "border-border shadow-sm")}>
@@ -483,7 +495,7 @@ function SectionAccordion({ section, sectionIndex, scores, invitees, isHR, curre
           <p className="font-bold text-[14px] text-foreground leading-snug">{sectionLabel}</p>
           <p className="text-xs text-muted-foreground mt-0.5">
             {items.length} item{items.length !== 1 ? "s" : ""} · max {sectionMax} pts
-            {section.type === "hr" ? " · Scored by HR" : scorerNames ? ` · ${scorerNames}` : " · Scored by peers"}
+            {scorerNames ? ` · ${scorerNames}` : " · No reviewers assigned"}
           </p>
         </div>
         <div className="flex items-center gap-3 shrink-0" onClick={e => e.stopPropagation()}>
@@ -574,52 +586,109 @@ function SectionAccordion({ section, sectionIndex, scores, invitees, isHR, curre
 
 // ─── Invitee Panel ──────────────────────────────────────────────────────────────
 
-function InviteePanel({ review, allEmployees, onAddInvitee, onRemoveInvitee }: {
-  review: Review; allEmployees: Employee[]
-  onAddInvitee: (reviewId: string, ids: string[], sendEmail: boolean) => Promise<void>
+function InviteePanel({ review, allEmployees, template, onAddInvitee, onRemoveInvitee, onSetSections }: {
+  review: Review; allEmployees: Employee[]; template: TemplateSection[]
+  onAddInvitee: (reviewId: string, ids: string[], sendEmail: boolean, sectionIds: string[]) => Promise<void>
+  onSetSections: (reviewId: string, reviewInviteeId: string, sectionIds: string[]) => Promise<void>
   onRemoveInvitee: (reviewId: string, id: string) => Promise<void>
 }) {
   const [showPanel, setShowPanel] = useState(false)
   const [selected, setSelected]   = useState<string[]>([])
   const [adding, setAdding]       = useState(false)
   const [sendEmail, setSendEmail] = useState(false)
+  const [addSections, setAddSections] = useState<string[]>([])
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editSections, setEditSections] = useState<string[]>([])
+  const [savingSections, setSavingSections] = useState(false)
+
   const invitees   = review.kpi_review_invitees ?? []
   const alreadyIds = new Set(invitees.map(i => i.invitee_id))
   const available  = allEmployees.filter(e => !alreadyIds.has(e.id) && e.id !== review.employee_id)
+  const sections   = [...template].sort((a, b) => a.position - b.position)
+  const secName    = (s: TemplateSection) => (s.title?.trim() ? s.title : SECTION_CONFIG[s.position]?.label ?? "Section")
+
+  function toggle(list: string[], id: string) {
+    return list.includes(id) ? list.filter(x => x !== id) : [...list, id]
+  }
 
   async function handleAdd() {
     if (!selected.length) return
     setAdding(true)
-    await onAddInvitee(review.id, selected, sendEmail)
-    setSelected([]); setAdding(false); setShowPanel(false)
+    await onAddInvitee(review.id, selected, sendEmail, addSections)
+    setSelected([]); setAddSections([]); setAdding(false); setShowPanel(false)
+  }
+
+  async function handleSaveSections(reviewInviteeId: string) {
+    setSavingSections(true)
+    await onSetSections(review.id, reviewInviteeId, editSections)
+    setSavingSections(false)
+    setEditingId(null)
   }
 
   return (
-    <div className="mb-4">
-      <div className="flex flex-wrap items-center gap-2 px-4 py-3 bg-card border border-border rounded-xl shadow-sm">
-        <span className="text-xs font-semibold text-muted-foreground shrink-0">Reviewers:</span>
-        {invitees.length === 0 && <span className="text-xs text-muted-foreground italic">None added yet</span>}
-        {invitees.map(inv => (
-          <div key={inv.id} className="flex items-center gap-1.5 rounded-full border border-border bg-muted/20 px-2.5 py-1">
-            <Avatar name={`${inv.invitee.first_name} ${inv.invitee.last_name}`} size="sm" />
-            <span className="text-xs font-medium">{inv.invitee.first_name} {inv.invitee.last_name}</span>
-            <InviteeStatusBadge status={inv.status} />
-            <button type="button" onClick={() => onRemoveInvitee(review.id, inv.invitee_id)} className="text-muted-foreground hover:text-destructive transition-colors ml-0.5">
-              <X size={10} />
-            </button>
-          </div>
-        ))}
-        <Button size="sm" variant="outline" onClick={() => setShowPanel(o => !o)} className="h-7 text-xs gap-1 ml-auto shrink-0">
-          <UserPlus size={12} /> Add reviewer
-        </Button>
+    <div className="mb-4 space-y-2">
+      <div className="px-4 py-3 bg-card border border-border rounded-xl shadow-sm space-y-2">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-semibold text-muted-foreground">Reviewers</span>
+          <Button size="sm" variant="outline" onClick={() => setShowPanel(o => !o)} className="h-7 text-xs gap-1 ml-auto shrink-0">
+            <UserPlus size={12} /> Add reviewer
+          </Button>
+        </div>
+        {invitees.length === 0 && <p className="text-xs text-muted-foreground italic">None added yet</p>}
+        {invitees.map(inv => {
+          const assigned = (inv.kpi_review_invitee_sections ?? []).map(s => s.section_id)
+          const isEditing = editingId === inv.id
+          return (
+            <div key={inv.id} className="rounded-lg border border-border bg-muted/10 px-3 py-2">
+              <div className="flex items-center gap-2">
+                <Avatar name={`${inv.invitee.first_name} ${inv.invitee.last_name}`} size="sm" />
+                <span className="text-xs font-medium">{inv.invitee.first_name} {inv.invitee.last_name}</span>
+                <InviteeStatusBadge status={inv.status} />
+                <span className="text-[10px] text-muted-foreground">
+                  {assigned.length} section{assigned.length !== 1 ? "s" : ""}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => { setEditingId(isEditing ? null : inv.id); setEditSections(assigned) }}
+                  className="ml-auto text-[11px] text-primary hover:underline"
+                >
+                  {isEditing ? "Close" : "Sections"}
+                </button>
+                <button type="button" onClick={() => onRemoveInvitee(review.id, inv.invitee_id)} className="text-muted-foreground hover:text-destructive transition-colors">
+                  <X size={12} />
+                </button>
+              </div>
+              {isEditing && (
+                <div className="mt-2 pt-2 border-t border-border space-y-2">
+                  <p className="text-[11px] font-semibold text-muted-foreground">Sections this reviewer may score:</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                    {sections.map(s => (
+                      <label key={s.id} className="flex items-center gap-2 rounded-md border border-border bg-card px-2 py-1.5 cursor-pointer">
+                        <input type="checkbox" checked={editSections.includes(s.id)}
+                          onChange={() => setEditSections(prev => toggle(prev, s.id))}
+                          className="h-3.5 w-3.5 rounded border-border accent-primary shrink-0" />
+                        <span className="text-xs truncate">{secName(s)}</span>
+                      </label>
+                    ))}
+                    {sections.length === 0 && <p className="text-xs text-muted-foreground italic">No sections in the template yet.</p>}
+                  </div>
+                  <Button size="sm" onClick={() => handleSaveSections(inv.id)} disabled={savingSections} className="h-7 text-xs gap-1">
+                    {savingSections ? <Loader2 size={10} className="animate-spin" /> : <Check size={10} />} Save sections
+                  </Button>
+                </div>
+              )}
+            </div>
+          )
+        })}
       </div>
+
       {showPanel && (
-        <div className="mt-2 rounded-xl border border-border bg-card p-4 space-y-3 shadow-sm">
+        <div className="rounded-xl border border-border bg-card p-4 space-y-3 shadow-sm">
           <p className="text-xs font-semibold text-muted-foreground">Select reviewers to add:</p>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 max-h-36 overflow-y-auto">
             {available.map(emp => (
               <button key={emp.id} type="button"
-                onClick={() => setSelected(prev => prev.includes(emp.id) ? prev.filter(x => x !== emp.id) : [...prev, emp.id])}
+                onClick={() => setSelected(prev => toggle(prev, emp.id))}
                 className={cn("flex items-center gap-2 rounded-lg border px-2 py-1.5 text-xs text-left transition-colors",
                   selected.includes(emp.id) ? "border-primary bg-primary/10 text-primary" : "border-border bg-card hover:bg-muted/40")}
               >
@@ -627,8 +696,24 @@ function InviteePanel({ review, allEmployees, onAddInvitee, onRemoveInvitee }: {
                 {emp.first_name} {emp.last_name}
               </button>
             ))}
-            {available.length === 0 && <p className="text-xs text-muted-foreground col-span-3 italic">All employees already invited</p>}
+            {available.length === 0 && <p className="text-xs text-muted-foreground col-span-3 italic">All employees already added</p>}
           </div>
+
+          <div className="space-y-1.5">
+            <p className="text-xs font-semibold text-muted-foreground">Assign sections they may score:</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+              {sections.map(s => (
+                <label key={s.id} className="flex items-center gap-2 rounded-md border border-border bg-muted/10 px-2 py-1.5 cursor-pointer">
+                  <input type="checkbox" checked={addSections.includes(s.id)}
+                    onChange={() => setAddSections(prev => toggle(prev, s.id))}
+                    className="h-3.5 w-3.5 rounded border-border accent-primary shrink-0" />
+                  <span className="text-xs truncate">{secName(s)}</span>
+                </label>
+              ))}
+              {sections.length === 0 && <p className="text-xs text-muted-foreground italic">No sections in the template yet.</p>}
+            </div>
+          </div>
+
           <label className="flex items-start gap-2 rounded-lg border border-border bg-muted/10 px-3 py-2 cursor-pointer select-none">
             <input
               type="checkbox"
@@ -646,7 +731,7 @@ function InviteePanel({ review, allEmployees, onAddInvitee, onRemoveInvitee }: {
               {adding ? <Loader2 size={10} className="animate-spin" /> : <Send size={10} />}
               {sendEmail ? `Add & email (${selected.length})` : `Add (${selected.length})`}
             </Button>
-            <Button size="sm" variant="ghost" onClick={() => setShowPanel(false)} className="h-7 text-xs">Cancel</Button>
+            <Button size="sm" variant="ghost" onClick={() => { setShowPanel(false); setSelected([]); setAddSections([]) }} className="h-7 text-xs">Cancel</Button>
           </div>
         </div>
       )}
@@ -759,11 +844,12 @@ function CreateReviewModal({ employees, currentPeriod, preselectedEmployeeId, pr
 
 // ─── Quarter Panel (within staff row) ──────────────────────────────────────────
 
-function QuarterPanel({ review, template, scores, allEmployees, currentEmployeeId, isHR, onScoreChange, onAddInvitee, onRemoveInvitee, onStatusChange, onDelete, onAddItem, onEditItem, onDeleteItem, onUpdateReviewDetails }: {
+function QuarterPanel({ review, template, scores, allEmployees, currentEmployeeId, isHR, onScoreChange, onAddInvitee, onRemoveInvitee, onSetSections, onStatusChange, onDelete, onAddItem, onEditItem, onDeleteItem, onUpdateReviewDetails }: {
   review: Review; template: TemplateSection[]; scores: Score[]
   allEmployees: Employee[]; currentEmployeeId: string | null; isHR: boolean
   onScoreChange: (reviewId: string, itemId: string, score: number | null, comments: string, scorerId: string | null) => Promise<void>
-  onAddInvitee: (reviewId: string, ids: string[], sendEmail: boolean) => Promise<void>
+  onAddInvitee: (reviewId: string, ids: string[], sendEmail: boolean, sectionIds: string[]) => Promise<void>
+  onSetSections: (reviewId: string, reviewInviteeId: string, sectionIds: string[]) => Promise<void>
   onRemoveInvitee: (reviewId: string, id: string) => Promise<void>
   onStatusChange: (reviewId: string, status: string) => Promise<void>
   onDelete: (reviewId: string) => void
@@ -797,12 +883,15 @@ function QuarterPanel({ review, template, scores, allEmployees, currentEmployeeI
   const scoreMap = new Map<string, Score>()
   for (const s of scores) scoreMap.set(`${s.item_id}::${s.scorer_id ?? "hr"}`, s)
   const overallCurrent = reviewTemplate.reduce((total, section) => {
-    const items = section.kpi_template_items ?? []
-    if (section.type === "hr") return total + items.reduce((a, item) => a + (scoreMap.get(`${item.id}::hr`)?.score ?? 0), 0)
-    const invIds = [...new Set(scores.filter(s => s.scorer_id !== null).map(s => s.scorer_id!))]
-    if (invIds.length === 0) return total
-    return total + items.reduce((a, item) => {
-      const vals = invIds.map(id => scoreMap.get(`${item.id}::${id}`)?.score).filter((v): v is number => v != null)
+    const revs = assignedReviewers(invitees, section.id)
+    return total + (section.kpi_template_items ?? []).reduce((a, item) => {
+      const vals: number[] = []
+      const hrv = scoreMap.get(`${item.id}::hr`)?.score
+      if (hrv != null) vals.push(hrv)
+      for (const inv of revs) {
+        const v = scoreMap.get(`${item.id}::${inv.invitee_id}`)?.score
+        if (v != null) vals.push(v)
+      }
       return a + (vals.length > 0 ? vals.reduce((x, y) => x + y, 0) / vals.length : 0)
     }, 0)
   }, 0)
@@ -903,7 +992,7 @@ function QuarterPanel({ review, template, scores, allEmployees, currentEmployeeI
       )}
 
       {isHR && (
-        <InviteePanel review={review} allEmployees={allEmployees} onAddInvitee={onAddInvitee} onRemoveInvitee={onRemoveInvitee} />
+        <InviteePanel review={review} allEmployees={allEmployees} template={template} onAddInvitee={onAddInvitee} onRemoveInvitee={onRemoveInvitee} onSetSections={onSetSections} />
       )}
 
       <div className="flex flex-col gap-3">
@@ -1007,7 +1096,7 @@ function StaffRow({ employee, reviews, scores, template, onOpen }: {
 
 // ─── Employee Review Detail (single-person full view) ─────────────────────────────
 
-function EmployeeReviewDetail({ employee, reviews, scores, template, allEmployees, currentEmployeeId, onScoreChange, onAddInvitee, onRemoveInvitee, onStatusChange, onDelete, onAddItem, onEditItem, onDeleteItem, onUpdateReviewDetails, onCreateReview, onBack, initialQuarter }: {
+function EmployeeReviewDetail({ employee, reviews, scores, template, allEmployees, currentEmployeeId, onScoreChange, onAddInvitee, onRemoveInvitee, onSetSections, onStatusChange, onDelete, onAddItem, onEditItem, onDeleteItem, onUpdateReviewDetails, onCreateReview, onBack, initialQuarter }: {
   employee: Employee
   reviews: Review[]
   scores: Record<string, Score[]>
@@ -1015,7 +1104,8 @@ function EmployeeReviewDetail({ employee, reviews, scores, template, allEmployee
   allEmployees: Employee[]
   currentEmployeeId: string | null
   onScoreChange: (reviewId: string, itemId: string, score: number | null, comments: string, scorerId: string | null) => Promise<void>
-  onAddInvitee: (reviewId: string, ids: string[], sendEmail: boolean) => Promise<void>
+  onAddInvitee: (reviewId: string, ids: string[], sendEmail: boolean, sectionIds: string[]) => Promise<void>
+  onSetSections: (reviewId: string, reviewInviteeId: string, sectionIds: string[]) => Promise<void>
   onRemoveInvitee: (reviewId: string, id: string) => Promise<void>
   onStatusChange: (reviewId: string, status: string) => Promise<void>
   onDelete: (reviewId: string) => void
@@ -1105,6 +1195,7 @@ function EmployeeReviewDetail({ employee, reviews, scores, template, allEmployee
           onScoreChange={onScoreChange}
           onAddInvitee={onAddInvitee}
           onRemoveInvitee={onRemoveInvitee}
+          onSetSections={onSetSections}
           onStatusChange={onStatusChange}
           onDelete={onDelete}
           onAddItem={onAddItem}
@@ -1127,14 +1218,15 @@ function EmployeeReviewDetail({ employee, reviews, scores, template, allEmployee
 
 // ─── HR Admin View ──────────────────────────────────────────────────────────────
 
-function HRAdminView({ template, reviews, scores, allEmployees, currentEmployeeId, onScoreChange, onAddInvitee, onRemoveInvitee, onStatusChange, onDelete, onAddItem, onEditItem, onDeleteItem, onUpdateReviewDetails, onShowCreate, onManageTemplate }: {
+function HRAdminView({ template, reviews, scores, allEmployees, currentEmployeeId, onScoreChange, onAddInvitee, onRemoveInvitee, onSetSections, onStatusChange, onDelete, onAddItem, onEditItem, onDeleteItem, onUpdateReviewDetails, onShowCreate, onManageTemplate }: {
   template: TemplateSection[]
   reviews: Review[]
   scores: Record<string, Score[]>
   allEmployees: Employee[]
   currentEmployeeId: string | null
   onScoreChange: (reviewId: string, itemId: string, score: number | null, comments: string, scorerId: string | null) => Promise<void>
-  onAddInvitee: (reviewId: string, ids: string[], sendEmail: boolean) => Promise<void>
+  onAddInvitee: (reviewId: string, ids: string[], sendEmail: boolean, sectionIds: string[]) => Promise<void>
+  onSetSections: (reviewId: string, reviewInviteeId: string, sectionIds: string[]) => Promise<void>
   onRemoveInvitee: (reviewId: string, id: string) => Promise<void>
   onStatusChange: (reviewId: string, status: string) => Promise<void>
   onDelete: (reviewId: string) => void
@@ -1219,6 +1311,7 @@ function HRAdminView({ template, reviews, scores, allEmployees, currentEmployeeI
         onScoreChange={onScoreChange}
         onAddInvitee={onAddInvitee}
         onRemoveInvitee={onRemoveInvitee}
+        onSetSections={onSetSections}
         onStatusChange={onStatusChange}
         onDelete={onDelete}
         onAddItem={onAddItem}
@@ -1557,7 +1650,7 @@ function ManageTemplateModal({ template, currentPeriod, onClose, onSetPeriod, on
                     <p className="text-sm font-medium truncate">{section.title || "(untitled section)"}</p>
                   )}
                   <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-                    {section.type === "hr" ? "Scored by HR" : "Scored by peers"} · {section.kpi_template_items?.length ?? 0} item{(section.kpi_template_items?.length ?? 0) !== 1 ? "s" : ""}
+                    {section.kpi_template_items?.length ?? 0} item{(section.kpi_template_items?.length ?? 0) !== 1 ? "s" : ""}
                   </span>
                 </div>
                 {editId === section.id ? (
@@ -1694,17 +1787,26 @@ export function KpiPageClient({ isHR, currentEmployeeId }: { isHR: boolean; curr
     }
   }
 
-  async function handleAddInvitee(reviewId: string, inviteeIds: string[], sendEmail: boolean) {
+  async function handleAddInvitee(reviewId: string, inviteeIds: string[], sendEmail: boolean, sectionIds: string[]) {
     const res = await fetch(`/api/kpi/reviews/${reviewId}/invitees`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ invitee_ids: inviteeIds, send_email: sendEmail }),
+      body: JSON.stringify({ invitee_ids: inviteeIds, send_email: sendEmail, section_ids: sectionIds }),
     })
     if (res.ok) {
       const data = await res.json().catch(() => null)
-      if (sendEmail) showToast(`Scorers added · ${data?.emailed ?? 0} emailed`)
-      else showToast("Scorers added")
+      if (sendEmail) showToast(`Reviewers added · ${data?.emailed ?? 0} emailed`)
+      else showToast("Reviewers added")
       await loadAll({ silent: true })
-    } else showToast("Failed to add scorers")
+    } else showToast("Failed to add reviewers")
+  }
+
+  async function handleSetSections(reviewId: string, reviewInviteeId: string, sectionIds: string[]) {
+    const res = await fetch(`/api/kpi/reviews/${reviewId}/invitees`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ review_invitee_id: reviewInviteeId, section_ids: sectionIds }),
+    })
+    if (res.ok) { showToast("Sections updated"); await loadAll({ silent: true }) }
+    else showToast("Failed to update sections")
   }
 
   async function handleRemoveInvitee(reviewId: string, inviteeId: string) {
@@ -1945,6 +2047,7 @@ export function KpiPageClient({ isHR, currentEmployeeId }: { isHR: boolean; curr
               onScoreChange={handleScoreChange}
               onAddInvitee={handleAddInvitee}
               onRemoveInvitee={handleRemoveInvitee}
+              onSetSections={handleSetSections}
               onStatusChange={handleStatusChange}
               onDelete={handleDeleteReview}
               onAddItem={handleAddItem}

@@ -80,15 +80,22 @@ export async function PUT(
 
   if (!item_id) return NextResponse.json({ error: "item_id is required" }, { status: 400 })
 
-  // scorer_id semantics:
-  //  - HR: null = the HR-scored section; a value = recording a specific
-  //    reviewer's score on their behalf (used for backdated data entry).
-  //  - Invitee: always their own employee id (client value is ignored).
+  // Every score belongs to a reviewer who must be assigned to the item's
+  // section. Resolve the section for the assignment check.
+  const { data: itemRow } = await supabase
+    .from("kpi_template_items")
+    .select("section_id")
+    .eq("id", item_id)
+    .single()
+  const sectionId = itemRow?.section_id ?? null
+
   let scorerId: string | null = null
+  let reviewInviteeId: string | null = null
 
   if (effectiveRole === "hr") {
+    // HR either records the HR/Admin score (scorer_id null — no assignment
+    // needed) or a specific reviewer's score on their behalf (backdated entry).
     if (bodyScorerId) {
-      // Must be an actual invitee (reviewer) on this review.
       const { data: inv } = await supabase
         .from("kpi_review_invitees")
         .select("id")
@@ -97,6 +104,7 @@ export async function PUT(
         .single()
       if (!inv) return NextResponse.json({ error: "That reviewer is not on this review" }, { status: 400 })
       scorerId = bodyScorerId
+      reviewInviteeId = inv.id
     }
   } else {
     if (!effectiveEmployeeId) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
@@ -110,6 +118,18 @@ export async function PUT(
       .single()
     if (!inv) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     scorerId = effectiveEmployeeId
+    reviewInviteeId = inv.id
+  }
+
+  // The reviewer must be assigned to this item's section.
+  if (sectionId && reviewInviteeId) {
+    const { data: assign } = await supabase
+      .from("kpi_review_invitee_sections")
+      .select("id")
+      .eq("review_invitee_id", reviewInviteeId)
+      .eq("section_id", sectionId)
+      .maybeSingle()
+    if (!assign) return NextResponse.json({ error: "This reviewer is not assigned to that section" }, { status: 403 })
   }
 
   const upsertData = {
