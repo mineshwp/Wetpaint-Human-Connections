@@ -1213,7 +1213,7 @@ function StaffRow({ employee, reviews, scores, reviewTemplates, onOpen }: {
 
 // ─── Employee Review Detail (single-person full view) ─────────────────────────────
 
-function EmployeeReviewDetail({ employee, reviews, scores, reviewTemplates, finalComments, allEmployees, currentEmployeeId, onScoreChange, onSaveFinalComment, onAddInvitee, onRemoveInvitee, onSetSections, onStatusChange, onDelete, onAddItem, onEditItem, onRemoveItem, onResetItem, onUpdateReviewDetails, onCreateReview, onBack, initialQuarter }: {
+function EmployeeReviewDetail({ employee, reviews, scores, reviewTemplates, finalComments, allEmployees, currentEmployeeId, onScoreChange, onSaveFinalComment, onAddInvitee, onRemoveInvitee, onSetSections, onStatusChange, onDelete, onAddItem, onEditItem, onRemoveItem, onResetItem, onUpdateReviewDetails, onCreateReview, onBack, initialQuarter, onExportScores }: {
   employee: Employee
   reviews: Review[]
   scores: Record<string, Score[]>
@@ -1236,7 +1236,9 @@ function EmployeeReviewDetail({ employee, reviews, scores, reviewTemplates, fina
   onCreateReview: (employeeId: string, quarter: Quarter) => void
   onBack: () => void
   initialQuarter?: Quarter
+  onExportScores: (format: "csv" | "xlsx", reviewId?: string) => Promise<void>
 }) {
+  const [exportingOne, setExportingOne] = useState(false)
   const reviewByQuarter = useMemo(() => {
     const map: Partial<Record<Quarter, Review>> = {}
     for (const r of reviews) {
@@ -1268,12 +1270,19 @@ function EmployeeReviewDetail({ employee, reviews, scores, reviewTemplates, fina
         </Button>
         <div className="flex items-center gap-3 flex-1 min-w-0 rounded-2xl border border-border bg-card px-4 py-2.5 shadow-sm">
           <Avatar name={name} size="md" />
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <div className="font-bold text-sm text-foreground truncate">{name}</div>
             <div className="text-xs text-muted-foreground truncate">
               {employee.job_title}{deptName ? ` · ${deptName}` : ""}
             </div>
           </div>
+          {activeReview && (
+            <Button size="sm" variant="outline" disabled={exportingOne}
+              onClick={async () => { setExportingOne(true); await onExportScores("xlsx", activeReview.id); setExportingOne(false) }}
+              className="gap-1.5 h-8 text-xs shrink-0">
+              {exportingOne ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />} Export
+            </Button>
+          )}
         </div>
       </div>
 
@@ -1341,7 +1350,7 @@ function EmployeeReviewDetail({ employee, reviews, scores, reviewTemplates, fina
 
 // ─── HR Admin View ──────────────────────────────────────────────────────────────
 
-function HRAdminView({ reviewTemplates, reviews, scores, finalComments, allEmployees, currentEmployeeId, onScoreChange, onSaveFinalComment, onAddInvitee, onRemoveInvitee, onSetSections, onStatusChange, onDelete, onAddItem, onEditItem, onRemoveItem, onResetItem, onUpdateReviewDetails, onShowCreate, onManageTemplate }: {
+function HRAdminView({ reviewTemplates, reviews, scores, finalComments, allEmployees, currentEmployeeId, onScoreChange, onSaveFinalComment, onAddInvitee, onRemoveInvitee, onSetSections, onStatusChange, onDelete, onAddItem, onEditItem, onRemoveItem, onResetItem, onUpdateReviewDetails, onShowCreate, onManageTemplate, onExportScores, onImportScores }: {
   reviewTemplates: Record<string, TemplateSection[]>
   reviews: Review[]
   scores: Record<string, Score[]>
@@ -1362,8 +1371,12 @@ function HRAdminView({ reviewTemplates, reviews, scores, finalComments, allEmplo
   onUpdateReviewDetails?: (reviewId: string, data: { title: string; period: string; deadline: string | null }) => Promise<void>
   onShowCreate: (employeeId?: string, quarter?: Quarter) => void
   onManageTemplate: () => void
+  onExportScores: (format: "csv" | "xlsx", reviewId?: string) => Promise<void>
+  onImportScores: (file: File) => Promise<void>
 }) {
   const [searchQ, setSearchQ]         = useState("")
+  const scoresFileRef = useRef<HTMLInputElement>(null)
+  const [scoresBusy, setScoresBusy]   = useState(false)
   const [deptFilter, setDeptFilter]   = useState("all")
   const [statusFilter, setStatusFilter] = useState("all")
   const [selectedId, setSelectedId]   = useState<string | null>(null)
@@ -1450,6 +1463,7 @@ function HRAdminView({ reviewTemplates, reviews, scores, finalComments, allEmplo
         onCreateReview={(empId, quarter) => onShowCreate(empId, quarter)}
         onBack={() => setSelectedId(null)}
         initialQuarter={selectedQuarter}
+        onExportScores={onExportScores}
       />
     )
   }
@@ -1464,7 +1478,31 @@ function HRAdminView({ reviewTemplates, reviews, scores, finalComments, allEmplo
             {totalStaff} staff member{totalStaff !== 1 ? "s" : ""} · Q1 in progress
           </p>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+          <input
+            ref={scoresFileRef}
+            type="file"
+            accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            className="hidden"
+            onChange={async (e) => {
+              const f = e.target.files?.[0]
+              e.target.value = ""
+              if (!f) return
+              setScoresBusy(true)
+              await onImportScores(f)
+              setScoresBusy(false)
+            }}
+          />
+          <Button size="sm" variant="outline" disabled={scoresBusy}
+            onClick={async () => { setScoresBusy(true); await onExportScores("xlsx"); setScoresBusy(false) }}
+            className="gap-1.5 h-9 text-xs">
+            <Download size={13} /> Export all scores
+          </Button>
+          <Button size="sm" variant="outline" disabled={scoresBusy}
+            onClick={() => scoresFileRef.current?.click()}
+            className="gap-1.5 h-9 text-xs">
+            {scoresBusy ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />} Import scores
+          </Button>
           <Button size="sm" variant="outline" onClick={onManageTemplate} className="gap-1.5 h-9 text-xs">
             <SlidersHorizontal size={13} /> Manage Template
           </Button>
@@ -2245,6 +2283,41 @@ export function KpiPageClient({ isHR, currentEmployeeId }: { isHR: boolean; curr
     }
   }
 
+  // Staff KPI scores round-trip — export one review (individual) or all at once.
+  async function handleExportScores(format: "csv" | "xlsx", reviewId?: string) {
+    const qs = new URLSearchParams({ format })
+    if (reviewId) qs.set("review_id", reviewId)
+    const res = await fetch(`/api/kpi/staff-scores/export?${qs.toString()}`)
+    if (!res.ok) {
+      const err = await res.json().catch(() => null)
+      showToast(err?.error ?? "Export failed")
+      return
+    }
+    const blob = await res.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `${reviewId ? "kpi-scores-review" : "kpi-scores-all"}.${format}`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+  }
+
+  async function handleImportScores(file: File) {
+    const fd = new FormData()
+    fd.append("file", file)
+    const res = await fetch("/api/kpi/staff-scores/import", { method: "POST", body: fd })
+    const data = await res.json().catch(() => null)
+    if (res.ok) {
+      showToast(data?.message ?? "Import complete")
+      if (Array.isArray(data?.errors) && data.errors.length) console.warn("[KPI scores import] row errors:", data.errors)
+      await loadAll({ silent: true })
+    } else {
+      showToast(data?.error ?? "Import failed")
+    }
+  }
+
   async function handleCreate(d: { employee_id: string; period: string; title: string; deadline: string }) {
     setCreating(true)
     const res = await fetch("/api/kpi/reviews", {
@@ -2336,6 +2409,8 @@ export function KpiPageClient({ isHR, currentEmployeeId }: { isHR: boolean; curr
               onUpdateReviewDetails={handleUpdateReviewDetails}
               onShowCreate={handleShowCreate}
               onManageTemplate={() => setShowManage(true)}
+              onExportScores={handleExportScores}
+              onImportScores={handleImportScores}
             />
           )}
 
