@@ -37,6 +37,9 @@ interface Score {
   id: string; review_id: string; item_id: string
   scorer_id: string | null; score: number | null; comments: string | null
 }
+interface FinalComment {
+  id: string; review_id: string; author_id: string | null; comment: string | null
+}
 interface Employee {
   id: string; first_name: string; last_name: string; job_title: string; email?: string
   department?: { name: string } | null
@@ -853,12 +856,100 @@ function CreateReviewModal({ employees, currentPeriod, preselectedEmployeeId, pr
   )
 }
 
+// ─── Final Comments ─────────────────────────────────────────────────────────────
+
+function FinalCommentRow({ name, role, comment, canEdit, onSave }: {
+  name: string; role: string; comment: string; canEdit: boolean
+  onSave: (text: string) => Promise<void>
+}) {
+  const [val, setVal] = useState(comment)
+  const [saving, setSaving] = useState(false)
+  // Re-sync the field when the saved comment changes (e.g. after reload) —
+  // React's "adjust state during render" pattern, no effect needed.
+  const [syncedComment, setSyncedComment] = useState(comment)
+  if (comment !== syncedComment) { setSyncedComment(comment); setVal(comment) }
+  const dirty = val !== comment
+
+  return (
+    <div className="px-5 py-3">
+      <div className="flex items-center gap-2 mb-1.5">
+        <Avatar name={name} size="sm" />
+        <span className="text-xs font-semibold">{name}</span>
+        <span className="text-[10px] text-muted-foreground">{role}</span>
+      </div>
+      {canEdit ? (
+        <>
+          <textarea
+            rows={2} value={val} onChange={e => setVal(e.target.value)}
+            placeholder="Add a final comment…"
+            className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-primary"
+          />
+          {dirty && (
+            <div className="mt-1.5 flex gap-2">
+              <Button size="sm" disabled={saving} onClick={async () => { setSaving(true); await onSave(val); setSaving(false) }} className="h-7 text-xs gap-1">
+                {saving ? <Loader2 size={10} className="animate-spin" /> : <Check size={10} />} Save
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setVal(comment)} className="h-7 text-xs">Cancel</Button>
+            </div>
+          )}
+        </>
+      ) : (
+        <p className="text-sm text-muted-foreground whitespace-pre-line">
+          {comment ? comment : <span className="italic">No final comment</span>}
+        </p>
+      )}
+    </div>
+  )
+}
+
+function FinalComments({ invitees, comments, isHR, currentEmployeeId, onSave }: {
+  invitees: ReviewInvitee[]; comments: FinalComment[]
+  isHR: boolean; currentEmployeeId: string | null
+  onSave: (authorId: string | null, comment: string) => Promise<void>
+}) {
+  const active = invitees.filter(i => i.status === "accepted" || i.status === "completed")
+  const byAuthor = new Map<string, FinalComment>()
+  for (const c of comments) byAuthor.set(c.author_id ?? "hr", c)
+
+  const rows: { key: string; authorId: string | null; name: string; role: string }[] = [
+    { key: "hr", authorId: null, name: "HR / Admin", role: "HR" },
+    ...active.map(i => ({ key: i.invitee_id, authorId: i.invitee_id as string | null, name: `${i.invitee.first_name} ${i.invitee.last_name}`, role: "Reviewer" })),
+  ]
+  // Reviewers (non-HR view) see their own editable row plus any comment already left.
+  const visible = isHR ? rows : rows.filter(r => r.authorId === currentEmployeeId || (byAuthor.get(r.authorId ?? "hr")?.comment ?? "") !== "")
+
+  return (
+    <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
+      <div className="px-5 py-4 border-b border-border bg-muted/20 flex items-center gap-2">
+        <FileText size={16} className="text-primary" />
+        <div>
+          <h3 className="font-bold text-[14px] leading-snug">Final Comments</h3>
+          <p className="text-xs text-muted-foreground mt-0.5">Closing remarks from each reviewer.</p>
+        </div>
+      </div>
+      <div className="divide-y divide-border">
+        {visible.length === 0 ? (
+          <p className="px-5 py-4 text-xs text-muted-foreground italic">No reviewers on this review yet.</p>
+        ) : visible.map(r => (
+          <FinalCommentRow
+            key={r.key} name={r.name} role={r.role}
+            comment={byAuthor.get(r.authorId ?? "hr")?.comment ?? ""}
+            canEdit={isHR || r.authorId === currentEmployeeId}
+            onSave={(text) => onSave(r.authorId, text)}
+          />
+        ))}
+      </div>
+    </div>
+  )
+}
+
 // ─── Quarter Panel (within staff row) ──────────────────────────────────────────
 
-function QuarterPanel({ review, template, scores, allEmployees, currentEmployeeId, isHR, onScoreChange, onAddInvitee, onRemoveInvitee, onSetSections, onStatusChange, onDelete, onAddItem, onEditItem, onRemoveItem, onResetItem, onUpdateReviewDetails }: {
-  review: Review; template: TemplateSection[]; scores: Score[]
+function QuarterPanel({ review, template, scores, finalComments, allEmployees, currentEmployeeId, isHR, onScoreChange, onSaveFinalComment, onAddInvitee, onRemoveInvitee, onSetSections, onStatusChange, onDelete, onAddItem, onEditItem, onRemoveItem, onResetItem, onUpdateReviewDetails }: {
+  review: Review; template: TemplateSection[]; scores: Score[]; finalComments: FinalComment[]
   allEmployees: Employee[]; currentEmployeeId: string | null; isHR: boolean
   onScoreChange: (reviewId: string, itemId: string, score: number | null, comments: string, scorerId: string | null) => Promise<void>
+  onSaveFinalComment: (reviewId: string, authorId: string | null, comment: string) => Promise<void>
   onAddInvitee: (reviewId: string, ids: string[], sendEmail: boolean, sectionIds: string[]) => Promise<void>
   onSetSections: (reviewId: string, reviewInviteeId: string, sectionIds: string[]) => Promise<void>
   onRemoveInvitee: (reviewId: string, id: string) => Promise<void>
@@ -1028,6 +1119,14 @@ function QuarterPanel({ review, template, scores, allEmployees, currentEmployeeI
           />
         ))}
       </div>
+
+      <FinalComments
+        invitees={review.kpi_review_invitees ?? []}
+        comments={finalComments}
+        isHR={isHR}
+        currentEmployeeId={currentEmployeeId}
+        onSave={(authorId, comment) => onSaveFinalComment(review.id, authorId, comment)}
+      />
     </div>
   )
 }
@@ -1114,14 +1213,16 @@ function StaffRow({ employee, reviews, scores, reviewTemplates, onOpen }: {
 
 // ─── Employee Review Detail (single-person full view) ─────────────────────────────
 
-function EmployeeReviewDetail({ employee, reviews, scores, reviewTemplates, allEmployees, currentEmployeeId, onScoreChange, onAddInvitee, onRemoveInvitee, onSetSections, onStatusChange, onDelete, onAddItem, onEditItem, onRemoveItem, onResetItem, onUpdateReviewDetails, onCreateReview, onBack, initialQuarter }: {
+function EmployeeReviewDetail({ employee, reviews, scores, reviewTemplates, finalComments, allEmployees, currentEmployeeId, onScoreChange, onSaveFinalComment, onAddInvitee, onRemoveInvitee, onSetSections, onStatusChange, onDelete, onAddItem, onEditItem, onRemoveItem, onResetItem, onUpdateReviewDetails, onCreateReview, onBack, initialQuarter }: {
   employee: Employee
   reviews: Review[]
   scores: Record<string, Score[]>
   reviewTemplates: Record<string, TemplateSection[]>
+  finalComments: Record<string, FinalComment[]>
   allEmployees: Employee[]
   currentEmployeeId: string | null
   onScoreChange: (reviewId: string, itemId: string, score: number | null, comments: string, scorerId: string | null) => Promise<void>
+  onSaveFinalComment: (reviewId: string, authorId: string | null, comment: string) => Promise<void>
   onAddInvitee: (reviewId: string, ids: string[], sendEmail: boolean, sectionIds: string[]) => Promise<void>
   onSetSections: (reviewId: string, reviewInviteeId: string, sectionIds: string[]) => Promise<void>
   onRemoveInvitee: (reviewId: string, id: string) => Promise<void>
@@ -1208,10 +1309,12 @@ function EmployeeReviewDetail({ employee, reviews, scores, reviewTemplates, allE
           review={activeReview}
           template={reviewTemplates[activeReview.id] ?? []}
           scores={scores[activeReview.id] ?? []}
+          finalComments={finalComments[activeReview.id] ?? []}
           allEmployees={allEmployees}
           currentEmployeeId={currentEmployeeId}
           isHR={true}
           onScoreChange={onScoreChange}
+          onSaveFinalComment={onSaveFinalComment}
           onAddInvitee={onAddInvitee}
           onRemoveInvitee={onRemoveInvitee}
           onSetSections={onSetSections}
@@ -1238,13 +1341,15 @@ function EmployeeReviewDetail({ employee, reviews, scores, reviewTemplates, allE
 
 // ─── HR Admin View ──────────────────────────────────────────────────────────────
 
-function HRAdminView({ reviewTemplates, reviews, scores, allEmployees, currentEmployeeId, onScoreChange, onAddInvitee, onRemoveInvitee, onSetSections, onStatusChange, onDelete, onAddItem, onEditItem, onRemoveItem, onResetItem, onUpdateReviewDetails, onShowCreate, onManageTemplate }: {
+function HRAdminView({ reviewTemplates, reviews, scores, finalComments, allEmployees, currentEmployeeId, onScoreChange, onSaveFinalComment, onAddInvitee, onRemoveInvitee, onSetSections, onStatusChange, onDelete, onAddItem, onEditItem, onRemoveItem, onResetItem, onUpdateReviewDetails, onShowCreate, onManageTemplate }: {
   reviewTemplates: Record<string, TemplateSection[]>
   reviews: Review[]
   scores: Record<string, Score[]>
+  finalComments: Record<string, FinalComment[]>
   allEmployees: Employee[]
   currentEmployeeId: string | null
   onScoreChange: (reviewId: string, itemId: string, score: number | null, comments: string, scorerId: string | null) => Promise<void>
+  onSaveFinalComment: (reviewId: string, authorId: string | null, comment: string) => Promise<void>
   onAddInvitee: (reviewId: string, ids: string[], sendEmail: boolean, sectionIds: string[]) => Promise<void>
   onSetSections: (reviewId: string, reviewInviteeId: string, sectionIds: string[]) => Promise<void>
   onRemoveInvitee: (reviewId: string, id: string) => Promise<void>
@@ -1327,9 +1432,11 @@ function HRAdminView({ reviewTemplates, reviews, scores, allEmployees, currentEm
         reviews={reviewsByEmployee[selectedEmp.id] ?? []}
         scores={scores}
         reviewTemplates={reviewTemplates}
+        finalComments={finalComments}
         allEmployees={allEmployees}
         currentEmployeeId={currentEmployeeId}
         onScoreChange={onScoreChange}
+        onSaveFinalComment={onSaveFinalComment}
         onAddInvitee={onAddInvitee}
         onRemoveInvitee={onRemoveInvitee}
         onSetSections={onSetSections}
@@ -1444,13 +1551,15 @@ function HRAdminView({ reviewTemplates, reviews, scores, allEmployees, currentEm
 
 // ─── My Assignments tab (non-HR / HR-as-invitee) ────────────────────────────────
 
-function MyAssignmentsView({ reviews, scores, reviewTemplates, currentEmployeeId, isHR, onScoreChange, loadAll, showToast }: {
+function MyAssignmentsView({ reviews, scores, reviewTemplates, finalComments, currentEmployeeId, isHR, onScoreChange, onSaveFinalComment, loadAll, showToast }: {
   reviews: Review[]
   scores: Record<string, Score[]>
   reviewTemplates: Record<string, TemplateSection[]>
+  finalComments: Record<string, FinalComment[]>
   currentEmployeeId: string | null
   isHR: boolean
   onScoreChange: (reviewId: string, itemId: string, score: number | null, comments: string, scorerId: string | null) => Promise<void>
+  onSaveFinalComment: (reviewId: string, authorId: string | null, comment: string) => Promise<void>
   loadAll: (opts?: { silent?: boolean }) => Promise<void>
   showToast: (msg: string) => void
 }) {
@@ -1522,6 +1631,13 @@ function MyAssignmentsView({ reviews, scores, reviewTemplates, currentEmployeeId
                       defaultOpen={idx === 0}
                     />
                   ))}
+                  <FinalComments
+                    invitees={review.kpi_review_invitees ?? []}
+                    comments={finalComments[review.id] ?? []}
+                    isHR={false}
+                    currentEmployeeId={currentEmployeeId}
+                    onSave={(authorId, comment) => onSaveFinalComment(review.id, authorId, comment)}
+                  />
                 </div>
               )
             })()}
@@ -1807,6 +1923,7 @@ export function KpiPageClient({ isHR, currentEmployeeId }: { isHR: boolean; curr
   const [reviewTemplates, setReviewTemplates] = useState<Record<string, TemplateSection[]>>({})
   const [reviews, setReviews]             = useState<Review[]>([])
   const [scores, setScores]               = useState<Record<string, Score[]>>({})
+  const [finalComments, setFinalComments] = useState<Record<string, FinalComment[]>>({})
   const [allEmployees, setAllEmployees]   = useState<Employee[]>([])
   const [loading, setLoading]             = useState(true)
   const [showCreate, setShowCreate]       = useState(false)
@@ -1847,7 +1964,7 @@ export function KpiPageClient({ isHR, currentEmployeeId }: { isHR: boolean; curr
       if (settData?.current_period) setCurrentPeriod(settData.current_period)
 
       if (revs.length > 0) {
-        const [scoreResults, tplResults] = await Promise.all([
+        const [scoreResults, tplResults, fcResults] = await Promise.all([
           Promise.all(revs.map(r =>
             fetch(`/api/kpi/reviews/${r.id}/scores`)
               .then(res => res.ok ? res.json() : [])
@@ -1858,6 +1975,11 @@ export function KpiPageClient({ isHR, currentEmployeeId }: { isHR: boolean; curr
               .then(res => res.ok ? res.json() : [])
               .then((data: TemplateSection[]) => ({ id: r.id, data }))
           )),
+          Promise.all(revs.map(r =>
+            fetch(`/api/kpi/reviews/${r.id}/final-comments`)
+              .then(res => res.ok ? res.json() : [])
+              .then((data: FinalComment[]) => ({ id: r.id, data }))
+          )),
         ])
         const smap: Record<string, Score[]> = {}
         scoreResults.forEach(({ id, data }) => { smap[id] = data })
@@ -1865,6 +1987,9 @@ export function KpiPageClient({ isHR, currentEmployeeId }: { isHR: boolean; curr
         const tmap: Record<string, TemplateSection[]> = {}
         tplResults.forEach(({ id, data }) => { tmap[id] = Array.isArray(data) ? data : [] })
         setReviewTemplates(tmap)
+        const fmap: Record<string, FinalComment[]> = {}
+        fcResults.forEach(({ id, data }) => { fmap[id] = Array.isArray(data) ? data : [] })
+        setFinalComments(fmap)
       }
     } catch {
       showToast("Failed to load data")
@@ -1890,6 +2015,21 @@ export function KpiPageClient({ isHR, currentEmployeeId }: { isHR: boolean; curr
     } else {
       showToast("Failed to save score — please try again")
     }
+  }
+
+  async function handleSaveFinalComment(reviewId: string, authorId: string | null, comment: string) {
+    const res = await fetch(`/api/kpi/reviews/${reviewId}/final-comments`, {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ author_id: authorId, comment }),
+    })
+    if (res.ok) {
+      const updated: FinalComment = await res.json()
+      setFinalComments(prev => {
+        const list = (prev[reviewId] ?? []).filter(c => (c.author_id ?? "hr") !== (updated.author_id ?? "hr"))
+        return { ...prev, [reviewId]: [...list, updated] }
+      })
+      showToast("Final comment saved")
+    } else showToast("Failed to save comment")
   }
 
   async function handleAddInvitee(reviewId: string, inviteeIds: string[], sendEmail: boolean, sectionIds: string[]) {
@@ -2179,9 +2319,11 @@ export function KpiPageClient({ isHR, currentEmployeeId }: { isHR: boolean; curr
               reviewTemplates={reviewTemplates}
               reviews={reviews}
               scores={scores}
+              finalComments={finalComments}
               allEmployees={allEmployees}
               currentEmployeeId={currentEmployeeId}
               onScoreChange={handleScoreChange}
+              onSaveFinalComment={handleSaveFinalComment}
               onAddInvitee={handleAddInvitee}
               onRemoveInvitee={handleRemoveInvitee}
               onSetSections={handleSetSections}
@@ -2211,9 +2353,11 @@ export function KpiPageClient({ isHR, currentEmployeeId }: { isHR: boolean; curr
                 reviews={reviews}
                 scores={scores}
                 reviewTemplates={reviewTemplates}
+                finalComments={finalComments}
                 currentEmployeeId={currentEmployeeId}
                 isHR={isHR}
                 onScoreChange={handleScoreChange}
+                onSaveFinalComment={handleSaveFinalComment}
                 loadAll={loadAll}
                 showToast={showToast}
               />
