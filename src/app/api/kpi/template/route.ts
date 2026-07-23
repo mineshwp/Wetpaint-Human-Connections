@@ -17,7 +17,9 @@ export async function GET() {
   const sections = (data ?? []).map((s) => ({
     ...s,
     kpi_template_items: (s.kpi_template_items ?? [])
-      .filter((i: { is_active: boolean }) => i.is_active)
+      // Global template only — per-review custom items (review_id set) are
+      // excluded here; they belong to a specific review.
+      .filter((i: { is_active: boolean; review_id: string | null }) => i.is_active && !i.review_id)
       .sort((a: { position: number }, b: { position: number }) => a.position - b.position),
   }))
 
