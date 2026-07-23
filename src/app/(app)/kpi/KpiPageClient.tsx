@@ -53,6 +53,9 @@ const AVATAR_COLORS = [
   "#3B82F6","#10B981","#F59E0B","#8B5CF6","#EC4899","#14B8A6","#F97316","#6366F1",
 ]
 
+// Show whole numbers plainly and half-points with one decimal (e.g. 9, 6.5).
+const fmtScore = (n: number) => (n % 1 === 0 ? String(n) : n.toFixed(1))
+
 // Section styling config
 const SECTION_CONFIG: Record<number, { icon: React.ElementType; colorClass: string; label: string }> = {
   1: { icon: Target,    colorClass: "text-blue-600",  label: "KPI Focus Areas: Personal & Department" },
@@ -156,7 +159,7 @@ function ScorerRow({ name, role, scoreObj, canEdit, item, onSave }: {
         </div>
         {canEdit && editing ? (
           <input
-            type="number" min={item.min_score} max={item.max_score}
+            type="number" min={item.min_score} max={item.max_score} step={0.5}
             value={val} onChange={e => setVal(e.target.value)} autoFocus
             className="w-full border border-primary rounded-md px-1.5 py-1 text-sm font-bold text-center bg-primary/5 text-primary focus:outline-none focus:ring-1 focus:ring-primary"
           />
@@ -488,7 +491,7 @@ function SectionAccordion({ section, sectionIndex, scores, invitees, isHR, curre
             <div className="h-full bg-primary rounded-full transition-all duration-300" style={{ width: `${progressPct}%` }} />
           </div>
           <span className="text-sm font-bold text-foreground min-w-[52px] text-right">
-            {Math.round(sectionCurrent)}<span className="text-muted-foreground font-medium text-xs">/{sectionMax}</span>
+            {fmtScore(sectionCurrent)}<span className="text-muted-foreground font-medium text-xs">/{sectionMax}</span>
           </span>
         </div>
         {isHR && (
@@ -822,7 +825,7 @@ function QuarterPanel({ review, template, scores, allEmployees, currentEmployeeI
             {inviteeNames && <div className="hidden sm:block w-px h-8 bg-border" />}
             <div className="flex flex-col gap-0.5">
               <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Total Score</span>
-              <span className="text-sm font-bold">{Math.round(overallCurrent)}<span className="text-muted-foreground font-medium text-xs"> / {overallMax}</span></span>
+              <span className="text-sm font-bold">{fmtScore(overallCurrent)}<span className="text-muted-foreground font-medium text-xs"> / {overallMax}</span></span>
             </div>
           </>
         )}
@@ -977,7 +980,7 @@ function StaffRow({ employee, reviews, scores, template, onOpen }: {
                     statusInfo.chipCls
                   )}
                 >
-                  Q{q} · {totalMax > 0 ? `${Math.round(current)}/${totalMax}` : "—"} · {statusInfo.label}
+                  Q{q} · {totalMax > 0 ? `${fmtScore(current)}/${totalMax}` : "—"} · {statusInfo.label}
                 </button>
               )
             }
