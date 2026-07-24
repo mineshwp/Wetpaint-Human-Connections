@@ -221,8 +221,8 @@ function ScorerRow({ name, role, scoreObj, canEdit, item, onSave }: {
 
 // ─── KPI Card ───────────────────────────────────────────────────────────────────
 
-function KpiCard({ item, itemIndex, sectionType, scores, invitees, isHR, currentEmployeeId, onScoreChange, onEditItem, onDeleteItem, onResetItem }: {
-  item: TemplateItem; itemIndex: number; sectionType: "invitee" | "hr"
+function KpiCard({ item, sectionType, sectionName, scores, invitees, isHR, currentEmployeeId, onScoreChange, onEditItem, onDeleteItem, onResetItem }: {
+  item: TemplateItem; sectionType: "invitee" | "hr"; sectionName: string
   scores: Score[]; invitees: ReviewInvitee[]; isHR: boolean; currentEmployeeId: string | null
   onScoreChange: (itemId: string, score: number | null, comments: string, scorerId: string | null) => Promise<void>
   onEditItem?: (itemId: string, data: { title: string; description: string; min_score: number; max_score: number }) => Promise<void>
@@ -292,7 +292,7 @@ function KpiCard({ item, itemIndex, sectionType, scores, invitees, isHR, current
           <div className="flex items-center gap-2 mb-1">
             <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
             <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-              KPI {itemIndex + 1} · Max {editMode ? editMax : item.max_score}
+              {sectionName} · Max {editMode ? editMax : item.max_score}
             </span>
             {item._custom && (
               <span className="text-[9px] font-bold uppercase tracking-wider rounded-full bg-blue-50 text-blue-700 border border-blue-200 px-1.5 py-0.5">This staff only</span>
@@ -541,9 +541,9 @@ function SectionAccordion({ section, sectionIndex, scores, invitees, isHR, curre
               {isHR && <button type="button" onClick={() => setShowAdd(true)} className="mt-2 text-xs text-primary hover:underline">+ Add a KPI for this staff member</button>}
             </div>
           ) : (
-            items.map((item, idx) => (
+            items.map((item) => (
               <KpiCard
-                key={item.id} item={item} itemIndex={idx} sectionType={section.type}
+                key={item.id} item={item} sectionType={section.type} sectionName={sectionLabel}
                 scores={scores} invitees={invitees} isHR={isHR} currentEmployeeId={currentEmployeeId}
                 onScoreChange={onScoreChange} onEditItem={onEditItem} onDeleteItem={onDeleteItem} onResetItem={onResetItem}
               />
