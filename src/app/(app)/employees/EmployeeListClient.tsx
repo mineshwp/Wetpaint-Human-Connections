@@ -1,7 +1,8 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useRef } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import {
   Search,
   LayoutGrid,
@@ -11,6 +12,10 @@ import {
   Briefcase,
   Mail,
   Phone,
+  ImagePlus,
+  Upload,
+  X,
+  Loader2,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Employee, Department, EmploymentStatus } from "@/lib/types"
@@ -107,12 +112,21 @@ function EmployeeCard({
       <div className="h-1" style={{ backgroundColor: dept?.colour ?? "#9ca3af" }} />
       <div className="p-4">
         <div className="flex items-start justify-between mb-3">
-          <div
-            className="flex h-12 w-12 items-center justify-center rounded-xl text-base font-bold text-white"
-            style={{ backgroundColor: avatarColor(emp.status) }}
-          >
-            {emp.avatarInitials}
-          </div>
+          {emp.profilePhotoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={emp.profilePhotoUrl}
+              alt={`${emp.firstName} ${emp.lastName}`}
+              className="h-12 w-12 rounded-xl object-cover"
+            />
+          ) : (
+            <div
+              className="flex h-12 w-12 items-center justify-center rounded-xl text-base font-bold text-white"
+              style={{ backgroundColor: avatarColor(emp.status) }}
+            >
+              {emp.avatarInitials}
+            </div>
+          )}
           <StatusBadge status={emp.status} />
         </div>
 
@@ -186,12 +200,21 @@ function EmployeeRow({
     <tr className="hover:bg-muted/20 transition-colors">
       <td className="px-4 py-3">
         <div className="flex items-center gap-3">
-          <div
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
-            style={{ backgroundColor: avatarColor(emp.status) }}
-          >
-            {emp.avatarInitials}
-          </div>
+          {emp.profilePhotoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={emp.profilePhotoUrl}
+              alt={`${emp.firstName} ${emp.lastName}`}
+              className="h-8 w-8 shrink-0 rounded-full object-cover"
+            />
+          ) : (
+            <div
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
+              style={{ backgroundColor: avatarColor(emp.status) }}
+            >
+              {emp.avatarInitials}
+            </div>
+          )}
           <div>
             <p className="text-sm font-semibold text-foreground">
               {emp.firstName} {emp.lastName}
@@ -240,14 +263,16 @@ interface Props {
   employees: Employee[]
   archivedEmployees: Employee[]
   departments: Department[]
+  isHR?: boolean
 }
 
-export function EmployeeListClient({ employees, archivedEmployees, departments }: Props) {
+export function EmployeeListClient({ employees, archivedEmployees, departments, isHR = false }: Props) {
   const [search, setSearch] = useState("")
   const [deptFilter, setDeptFilter] = useState("all")
   const [statusFilter, setStatusFilter] = useState("all")
   const [viewMode, setViewMode] = useState<"grid" | "list">("list")
   const [showArchived, setShowArchived] = useState(false)
+  const [showPhotoUpload, setShowPhotoUpload] = useState(false)
 
   const pool = showArchived ? archivedEmployees : employees
 
@@ -368,7 +393,16 @@ export function EmployeeListClient({ employees, archivedEmployees, departments }
           </button>
         )}
 
-        <div className="ml-auto flex items-center rounded-lg border border-border overflow-hidden">
+        {isHR && (
+          <button
+            onClick={() => setShowPhotoUpload(true)}
+            className="ml-auto h-9 rounded-lg border border-border bg-card px-3 text-sm text-foreground hover:bg-muted transition-colors flex items-center gap-1.5"
+          >
+            <ImagePlus size={15} /> Upload photos
+          </button>
+        )}
+
+        <div className={cn("flex items-center rounded-lg border border-border overflow-hidden", !isHR && "ml-auto")}>
           <button
             onClick={() => setViewMode("list")}
             className={cn(
@@ -477,7 +511,197 @@ export function EmployeeListClient({ employees, archivedEmployees, departments }
           </div>
         </div>
       )}
+
+      {showPhotoUpload && (
+        <BulkPhotoModal
+          employees={[...employees, ...archivedEmployees]}
+          onClose={() => setShowPhotoUpload(false)}
+        />
+      )}
     </>
+  )
+}
+
+// ─── Bulk photo upload ───────────────────────────────────────────────────────
+function photoNormalize(s: string) {
+  return s.toLowerCase().replace(/[^a-z0-9]/g, "")
+}
+
+type PhotoMatch = {
+  uid: string
+  file: File
+  previewUrl: string
+  employeeId: string // "" = skip
+  auto: boolean
+}
+
+function BulkPhotoModal({ employees, onClose }: { employees: Employee[]; onClose: () => void }) {
+  const router = useRouter()
+  const inputRef = useRef<HTMLInputElement>(null)
+  const [matches, setMatches] = useState<PhotoMatch[]>([])
+  const [uploading, setUploading] = useState(false)
+  const [progress, setProgress] = useState({ done: 0, total: 0 })
+  const [result, setResult] = useState<{ ok: number; failed: number } | null>(null)
+
+  // Lookup keys: employee number (primary), then full name, then email local part.
+  const keys = useMemo(() => {
+    const num = new Map<string, string>(), name = new Map<string, string>(), email = new Map<string, string>()
+    for (const e of employees) {
+      if (e.employeeNumber) { const k = photoNormalize(e.employeeNumber); if (k) num.set(k, e.id) }
+      const nk = photoNormalize(`${e.firstName}${e.lastName}`); if (nk && !name.has(nk)) name.set(nk, e.id)
+      const local = e.email?.split("@")[0]
+      if (local) { const lk = photoNormalize(local); if (lk && !email.has(lk)) email.set(lk, e.id) }
+    }
+    return { num, name, email }
+  }, [employees])
+
+  function matchFile(file: File): { id: string; auto: boolean } {
+    const k = photoNormalize(file.name.replace(/\.[^.]+$/, ""))
+    if (keys.num.has(k)) return { id: keys.num.get(k)!, auto: true }
+    if (keys.name.has(k)) return { id: keys.name.get(k)!, auto: true }
+    if (keys.email.has(k)) return { id: keys.email.get(k)!, auto: true }
+    return { id: "", auto: false }
+  }
+
+  function onFiles(files: FileList | null) {
+    if (!files) return
+    const next: PhotoMatch[] = []
+    for (const file of Array.from(files)) {
+      if (!file.type.startsWith("image/")) continue
+      const m = matchFile(file)
+      next.push({ uid: crypto.randomUUID(), file, previewUrl: URL.createObjectURL(file), employeeId: m.id, auto: m.auto })
+    }
+    setMatches((prev) => [...prev, ...next])
+  }
+
+  function setTarget(uid: string, id: string) {
+    setMatches((prev) => prev.map((m) => (m.uid === uid ? { ...m, employeeId: id, auto: false } : m)))
+  }
+  function removeRow(uid: string) {
+    setMatches((prev) => {
+      const m = prev.find((x) => x.uid === uid)
+      if (m) URL.revokeObjectURL(m.previewUrl)
+      return prev.filter((x) => x.uid !== uid)
+    })
+  }
+
+  const dupIds = useMemo(() => {
+    const count = new Map<string, number>()
+    for (const m of matches) if (m.employeeId) count.set(m.employeeId, (count.get(m.employeeId) ?? 0) + 1)
+    return new Set([...count.entries()].filter(([, c]) => c > 1).map(([id]) => id))
+  }, [matches])
+
+  const readyCount = matches.filter((m) => m.employeeId).length
+
+  async function handleUpload() {
+    const targets = matches.filter((m) => m.employeeId)
+    if (!targets.length) return
+    setUploading(true)
+    setProgress({ done: 0, total: targets.length })
+    let ok = 0, failed = 0
+    for (const m of targets) {
+      try {
+        const fd = new FormData()
+        fd.append("file", m.file)
+        const res = await fetch(`/api/employees/${m.employeeId}/photo`, { method: "POST", body: fd })
+        if (res.ok) ok++
+        else failed++
+      } catch {
+        failed++
+      }
+      setProgress((p) => ({ ...p, done: p.done + 1 }))
+    }
+    setUploading(false)
+    setResult({ ok, failed })
+    router.refresh()
+  }
+
+  function close() {
+    for (const m of matches) URL.revokeObjectURL(m.previewUrl)
+    onClose()
+  }
+
+  const empName = (id: string) => {
+    const e = employees.find((x) => x.id === id)
+    return e ? `${e.firstName} ${e.lastName}` : ""
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={close}>
+      <div className="w-full max-w-2xl max-h-[85vh] flex flex-col rounded-2xl border border-border bg-card shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+          <div>
+            <h2 className="font-bold text-lg">Upload staff photos</h2>
+            <p className="text-xs text-muted-foreground mt-0.5">Add many at once — files are matched to staff automatically. Review, then upload.</p>
+          </div>
+          <button onClick={close} className="text-muted-foreground hover:text-foreground"><X size={18} /></button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-5 space-y-4">
+          {result ? (
+            <div className="text-center py-8 space-y-2">
+              <p className="text-sm font-semibold">{result.ok} photo{result.ok !== 1 ? "s" : ""} uploaded{result.failed ? ` · ${result.failed} failed` : ""}</p>
+              <p className="text-xs text-muted-foreground">Photos now appear on employee cards and profiles.</p>
+            </div>
+          ) : (
+            <>
+              <input ref={inputRef} type="file" accept="image/*" multiple className="hidden"
+                onChange={(e) => { onFiles(e.target.files); e.target.value = "" }} />
+              <div className="rounded-xl border border-dashed border-border p-4 text-center">
+                <p className="text-xs text-muted-foreground mb-2">
+                  Name each file by the staff member&apos;s <strong>employee number</strong> (e.g. <code>WP061DA.jpg</code>) for the most reliable match. Name or email also work.
+                </p>
+                <button onClick={() => inputRef.current?.click()} className="inline-flex items-center gap-1.5 h-9 rounded-lg bg-primary text-primary-foreground px-4 text-sm font-semibold hover:bg-primary/90">
+                  <ImagePlus size={15} /> Choose images
+                </button>
+              </div>
+
+              {matches.length > 0 && (
+                <div className="space-y-2">
+                  {matches.map((m) => (
+                    <div key={m.uid} className={cn("flex items-center gap-3 rounded-lg border p-2", m.employeeId ? "border-border" : "border-amber-300 bg-amber-50")}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={m.previewUrl} alt="" className="h-10 w-10 rounded-full object-cover shrink-0" />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-medium truncate">{m.file.name}</p>
+                        <select value={m.employeeId} onChange={(e) => setTarget(m.uid, e.target.value)}
+                          className={cn("mt-1 w-full rounded border bg-card px-2 py-1 text-xs", m.employeeId ? "border-border" : "border-amber-400")}>
+                          <option value="">— Skip (no match) —</option>
+                          {employees.map((e) => (
+                            <option key={e.id} value={e.id}>{e.firstName} {e.lastName}{e.employeeNumber ? ` · ${e.employeeNumber}` : ""}</option>
+                          ))}
+                        </select>
+                        {m.employeeId && dupIds.has(m.employeeId) && (
+                          <p className="text-[10px] text-red-600 mt-0.5">⚠ {empName(m.employeeId)} is assigned to more than one file</p>
+                        )}
+                        {!m.employeeId && <p className="text-[10px] text-amber-700 mt-0.5">No match — pick a staff member or skip</p>}
+                        {m.employeeId && m.auto && <p className="text-[10px] text-emerald-600 mt-0.5">Auto-matched</p>}
+                      </div>
+                      <button onClick={() => removeRow(m.uid)} className="text-muted-foreground hover:text-foreground shrink-0"><X size={14} /></button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        <div className="flex items-center justify-between gap-3 px-5 py-4 border-t border-border">
+          <p className="text-xs text-muted-foreground">
+            {result ? "" : uploading ? `Uploading ${progress.done}/${progress.total}…` : matches.length ? `${readyCount} of ${matches.length} ready` : "No files selected"}
+          </p>
+          <div className="flex gap-2">
+            <button onClick={close} className="h-9 rounded-lg border border-border bg-card px-4 text-sm hover:bg-muted">{result ? "Done" : "Cancel"}</button>
+            {!result && (
+              <button onClick={handleUpload} disabled={uploading || readyCount === 0}
+                className="h-9 rounded-lg bg-primary text-primary-foreground px-4 text-sm font-semibold hover:bg-primary/90 disabled:opacity-50 flex items-center gap-1.5">
+                {uploading ? <Loader2 size={15} className="animate-spin" /> : <Upload size={15} />} Upload {readyCount || ""}
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
   )
 }
 

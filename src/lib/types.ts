@@ -21,6 +21,8 @@ export type Employee = {
   status: EmploymentStatus
   avatarInitials: string
   isArchived: boolean
+  employeeNumber?: string | null
+  profilePhotoUrl?: string | null
 }
 
 export type EmployeeFull = Employee & {

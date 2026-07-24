@@ -15,6 +15,7 @@ function mapRow(row: {
   phone: string | null; department_id: string | null; job_title: string
   manager_id: string | null; start_date: string | null; status: string
   avatar_initials: string | null; is_archived: boolean
+  employee_number: string | null; profile_photo_url: string | null
 }): Employee {
   return {
     id: row.id,
@@ -32,6 +33,8 @@ function mapRow(row: {
       row.avatar_initials ??
       `${row.first_name[0] ?? ""}${row.last_name[0] ?? ""}`.toUpperCase(),
     isArchived: row.is_archived ?? false,
+    employeeNumber: row.employee_number ?? null,
+    profilePhotoUrl: row.profile_photo_url ?? null,
   }
 }
 
@@ -66,7 +69,7 @@ export default async function EmployeesPage() {
     )
   }
 
-  const SELECT = "id, first_name, last_name, email, phone, department_id, job_title, manager_id, start_date, status, avatar_initials, is_archived"
+  const SELECT = "id, first_name, last_name, email, phone, department_id, job_title, manager_id, start_date, status, avatar_initials, is_archived, employee_number, profile_photo_url"
 
   let activeQuery = supabase.from("employees").select(SELECT).eq("is_archived", false).order("last_name")
   let archivedQuery = supabase.from("employees").select(SELECT).eq("is_archived", true).order("last_name")
@@ -117,6 +120,7 @@ export default async function EmployeesPage() {
         employees={employees}
         archivedEmployees={archivedEmployees}
         departments={departments}
+        isHR={role === "hr"}
       />
     </div>
   )

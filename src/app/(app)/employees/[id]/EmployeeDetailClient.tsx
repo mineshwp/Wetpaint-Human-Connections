@@ -1626,12 +1626,21 @@ export function EmployeeDetailClient({
       {/* ── Profile header ──────────────────────────────────────────────── */}
       <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
         <div className="flex flex-col sm:flex-row gap-5 items-start">
-          <div
-            className="w-20 h-20 rounded-full flex items-center justify-center text-white text-2xl font-bold shrink-0 shadow-md"
-            style={{ background: "var(--brand-primary)" }}
-          >
-            {emp.avatarInitials}
-          </div>
+          {emp.profilePhotoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={emp.profilePhotoUrl}
+              alt={`${emp.firstName} ${emp.lastName}`}
+              className="w-20 h-20 rounded-full object-cover shrink-0 shadow-md"
+            />
+          ) : (
+            <div
+              className="w-20 h-20 rounded-full flex items-center justify-center text-white text-2xl font-bold shrink-0 shadow-md"
+              style={{ background: "var(--brand-primary)" }}
+            >
+              {emp.avatarInitials}
+            </div>
+          )}
 
           <div className="flex-1 min-w-0">
             <div className="flex flex-wrap items-start justify-between gap-3">
