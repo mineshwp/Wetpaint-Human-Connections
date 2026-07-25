@@ -109,7 +109,8 @@ export function AddEmployeeClient({ departments, allEmployees }: Props) {
     email: "",
     jobTitle: "",
     status: "onboarding",
-    contractType: "",
+    onContract: false,
+    contractType: "contract",
     contractTermMonths: "",
     contractIsRenewable: false,
     departmentId: "",
@@ -150,14 +151,14 @@ export function AddEmployeeClient({ departments, allEmployees }: Props) {
           email: form.email,
           job_title: form.jobTitle,
           status: form.status,
-          contract_type: form.contractType,
-          contract_term_months: form.contractTermMonths === "" ? null : Number(form.contractTermMonths),
-          contract_is_renewable: form.contractIsRenewable,
+          contract_type: form.onContract ? form.contractType : "permanent",
+          contract_term_months: form.onContract && form.contractTermMonths !== "" ? Number(form.contractTermMonths) : null,
+          contract_is_renewable: form.onContract ? form.contractIsRenewable : false,
           department_id: form.departmentId,
           manager_id: form.managerId,
           employee_number: form.employeeNumber,
           start_date: form.startDate,
-          contract_end_date: form.contractEndDate,
+          contract_end_date: form.onContract ? form.contractEndDate : "",
           probation_end_date: form.probationEndDate,
           phone: form.phone,
           work_email: form.workEmail,
@@ -245,13 +246,16 @@ export function AddEmployeeClient({ departments, allEmployees }: Props) {
                 <option value="active">Active</option>
               </SelectField>
             </FormGroup>
-            <FormGroup label="Contract Type">
-              <SelectField value={form.contractType} onChange={set("contractType")}>
-                <option value="">— Select —</option>
-                <option value="permanent">Permanent</option>
-                <option value="temporary">Temporary</option>
-                <option value="contract">Contract</option>
-              </SelectField>
+            <FormGroup label="Employment Type">
+              <label className="inline-flex items-center gap-2 text-sm h-10">
+                <input
+                  type="checkbox"
+                  checked={form.onContract}
+                  onChange={(e) => setForm((prev) => ({ ...prev, onContract: e.target.checked }))}
+                  className="h-4 w-4 rounded border-border"
+                />
+                <span className="text-muted-foreground">On contract (fixed-term). Leave unticked for full-time / permanent.</span>
+              </label>
             </FormGroup>
             <FormGroup label="Department">
               <SelectField value={form.departmentId} onChange={set("departmentId")}>
@@ -277,23 +281,33 @@ export function AddEmployeeClient({ departments, allEmployees }: Props) {
             <FormGroup label="Start Date">
               <Input value={form.startDate} onChange={set("startDate")} type="date" />
             </FormGroup>
-            <FormGroup label="Contract End Date">
-              <Input value={form.contractEndDate} onChange={set("contractEndDate")} type="date" />
-            </FormGroup>
-            <FormGroup label="Contract Term (months)">
-              <Input value={form.contractTermMonths} onChange={set("contractTermMonths")} type="number" placeholder="e.g. 12" />
-            </FormGroup>
-            <FormGroup label="Renewable Contract">
-              <label className="inline-flex items-center gap-2 text-sm h-10">
-                <input
-                  type="checkbox"
-                  checked={form.contractIsRenewable}
-                  onChange={(e) => setForm((prev) => ({ ...prev, contractIsRenewable: e.target.checked }))}
-                  className="h-4 w-4 rounded border-border"
-                />
-                <span className="text-muted-foreground">This contract can be renewed</span>
-              </label>
-            </FormGroup>
+            {form.onContract && (
+              <>
+                <FormGroup label="Contract Type">
+                  <SelectField value={form.contractType} onChange={set("contractType")}>
+                    <option value="contract">Contract</option>
+                    <option value="temporary">Temporary</option>
+                  </SelectField>
+                </FormGroup>
+                <FormGroup label="Contract End Date">
+                  <Input value={form.contractEndDate} onChange={set("contractEndDate")} type="date" />
+                </FormGroup>
+                <FormGroup label="Contract Term (months)">
+                  <Input value={form.contractTermMonths} onChange={set("contractTermMonths")} type="number" placeholder="e.g. 12" />
+                </FormGroup>
+                <FormGroup label="Renewable Contract">
+                  <label className="inline-flex items-center gap-2 text-sm h-10">
+                    <input
+                      type="checkbox"
+                      checked={form.contractIsRenewable}
+                      onChange={(e) => setForm((prev) => ({ ...prev, contractIsRenewable: e.target.checked }))}
+                      className="h-4 w-4 rounded border-border"
+                    />
+                    <span className="text-muted-foreground">This contract can be renewed</span>
+                  </label>
+                </FormGroup>
+              </>
+            )}
             <FormGroup label="Probation End Date">
               <Input value={form.probationEndDate} onChange={set("probationEndDate")} type="date" />
             </FormGroup>
