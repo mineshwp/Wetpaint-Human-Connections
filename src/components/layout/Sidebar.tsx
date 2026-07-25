@@ -3,13 +3,14 @@
 import Link from "next/link"
 import Image from "next/image"
 import { usePathname } from "next/navigation"
-import { Users, BarChart3, X, LayoutGrid, Settings } from "lucide-react"
+import { Users, BarChart3, X, LayoutGrid, Settings, Contact } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 const ALL_NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutGrid, staffOnly: true },
   { href: "/employees", label: "Employees", icon: Users, staffOnly: false },
   { href: "/kpi", label: "KPI Reviews", icon: BarChart3, staffOnly: false },
+  { href: "/directory", label: "Staff Directory", icon: Contact, staffOnly: false },
 ]
 
 interface SidebarProps {
