@@ -45,7 +45,7 @@ export default async function DirectoryPage() {
     <div>
       <PageHeader
         title="Staff Directory"
-        subtitle={`${entries.length} ${entries.length === 1 ? "person" : "people"} · tap a number for WhatsApp or an email to write`}
+        subtitle={`${entries.length} ${entries.length === 1 ? "person" : "people"} · call, WhatsApp or email anyone with one tap`}
       />
       <DirectoryClient entries={entries} />
     </div>
