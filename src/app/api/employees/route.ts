@@ -114,6 +114,11 @@ export async function POST(req: Request) {
   for (const f of optionalDate) {
     if (f in body) insert[f] = toNull(body[f])
   }
+  if ("contract_is_renewable" in body) insert.contract_is_renewable = Boolean(body.contract_is_renewable)
+  if ("contract_term_months" in body) {
+    const n = Number(body.contract_term_months)
+    insert.contract_term_months = Number.isFinite(n) && n > 0 ? Math.round(n) : null
+  }
 
   // RLS on `employees` only exposes SELECT/UPDATE to authenticated users —
   // there is no INSERT policy, so creating a record must go through the

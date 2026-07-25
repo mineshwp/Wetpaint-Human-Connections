@@ -23,6 +23,8 @@ export type Employee = {
   isArchived: boolean
   employeeNumber?: string | null
   profilePhotoUrl?: string | null
+  contractType?: string | null
+  contractEndDate?: string | null
 }
 
 export type EmployeeFull = Employee & {
@@ -31,6 +33,8 @@ export type EmployeeFull = Employee & {
   profilePhotoUrl: string | null
   contractType: string | null
   contractEndDate: string | null
+  contractIsRenewable: boolean
+  contractTermMonths: number | null
   probationEndDate: string | null
   personalEmail: string | null
   workEmail: string | null

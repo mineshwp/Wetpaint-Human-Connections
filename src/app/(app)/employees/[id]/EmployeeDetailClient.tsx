@@ -50,6 +50,19 @@ function fmtDate(iso: string | null | undefined): string {
   })
 }
 
+// Contract-expiry badge: red once past the end date, amber within ~60 days.
+function contractExpiryInfo(endDate: string | null | undefined): { tone: "red" | "amber"; label: string } | null {
+  if (!endDate) return null
+  const end = new Date(endDate + "T00:00:00")
+  if (isNaN(end.getTime())) return null
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const days = Math.round((end.getTime() - today.getTime()) / 86400000)
+  if (days < 0) return { tone: "red", label: "Expired" }
+  if (days <= 60) return { tone: "amber", label: days === 0 ? "Ends today" : `${days}d left` }
+  return null
+}
+
 function tenure(startDate: string | null | undefined): string {
   if (!startDate) return "—"
   const start = new Date(startDate)
@@ -300,6 +313,23 @@ function PersonalTab({
     }
   }
 
+  const [renewing, setRenewing] = useState(false)
+  async function renewContract() {
+    setRenewing(true)
+    setError(null)
+    const res = await fetch(`/api/employees/${emp.id}/renew-contract`, { method: "POST" })
+    setRenewing(false)
+    const json = await res.json().catch(() => null)
+    if (!res.ok) {
+      setError(json?.error ?? "Failed to renew contract.")
+      return
+    }
+    setLocalEmp((prev) => ({ ...prev, contractEndDate: json.contractEndDate }))
+  }
+
+  const isContract = localEmp.contractType === "contract" || localEmp.contractType === "temporary" || !!localEmp.contractEndDate
+  const contractExpiry = contractExpiryInfo(localEmp.contractEndDate)
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <SectionCard title="Personal Information" subtitle="Identity & EE data">
@@ -442,13 +472,46 @@ function PersonalTab({
         />
         <FieldRow label="Start Date" value={fmtDate(localEmp.startDate)} />
         {localEmp.contractEndDate && (
-          <FieldRow label="Contract End" value={fmtDate(localEmp.contractEndDate)} />
+          <div className="flex items-center justify-between py-2 border-b border-border/60 last:border-0">
+            <span className="text-sm text-muted-foreground">Contract End</span>
+            <span className="text-sm font-medium text-right flex items-center gap-2">
+              {fmtDate(localEmp.contractEndDate)}
+              {contractExpiry && (
+                <span className={cn(
+                  "rounded-full border px-2 py-0.5 text-[10px] font-semibold",
+                  contractExpiry.tone === "red" ? "text-red-700 bg-red-50 border-red-200" : "text-amber-700 bg-amber-50 border-amber-200"
+                )}>
+                  {contractExpiry.label}
+                </span>
+              )}
+            </span>
+          </div>
+        )}
+        {isContract && localEmp.contractTermMonths != null && (
+          <FieldRow label="Contract Term" value={`${localEmp.contractTermMonths} month${localEmp.contractTermMonths === 1 ? "" : "s"}`} />
+        )}
+        {isContract && (
+          <FieldRow label="Renewable" value={localEmp.contractIsRenewable ? "Yes" : "No"} />
         )}
         {localEmp.probationEndDate && (
           <FieldRow label="Probation End" value={fmtDate(localEmp.probationEndDate)} />
         )}
         {isHR && localEmp.lastSalaryReviewDate && (
           <FieldRow label="Last Pay Review" value={fmtDate(localEmp.lastSalaryReviewDate)} />
+        )}
+        {isHR && isContract && localEmp.contractIsRenewable && (
+          <div className="pt-3">
+            <button
+              onClick={renewContract}
+              disabled={renewing || !localEmp.contractTermMonths}
+              className="inline-flex items-center gap-1.5 h-8 rounded-lg bg-primary text-primary-foreground px-3 text-xs font-semibold hover:bg-primary/90 disabled:opacity-50"
+            >
+              {renewing ? "Renewing…" : localEmp.contractTermMonths ? `Renew ${localEmp.contractTermMonths} months` : "Renew"}
+            </button>
+            {!localEmp.contractTermMonths && (
+              <p className="text-[11px] text-muted-foreground mt-1">Set a contract term in Edit to enable renewal.</p>
+            )}
+          </div>
         )}
       </SectionCard>
     </div>

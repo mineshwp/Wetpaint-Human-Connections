@@ -30,7 +30,7 @@ export async function GET(
     .select(`
       id, employee_number, first_name, last_name, email, phone, job_title,
       department_id, manager_id, status, start_date, avatar_initials, profile_photo_url,
-      contract_type, contract_end_date, probation_end_date, salary_band, last_salary_review_date,
+      contract_type, contract_end_date, contract_is_renewable, contract_term_months, probation_end_date, salary_band, last_salary_review_date,
       personal_email, work_email, alternate_phone, home_address,
       next_of_kin_name, next_of_kin_phone, next_of_kin_relationship,
       vat_number, date_of_birth, identity_number, gender, race, disability, citizenship_status,
@@ -72,6 +72,8 @@ export async function GET(
     profilePhotoUrl: row.profile_photo_url ?? null,
     contractType: row.contract_type ?? null,
     contractEndDate: row.contract_end_date ?? null,
+    contractIsRenewable: row.contract_is_renewable ?? false,
+    contractTermMonths: row.contract_term_months ?? null,
     probationEndDate: row.probation_end_date ?? null,
     personalEmail: row.personal_email ?? null,
     workEmail: row.work_email ?? null,
@@ -155,6 +157,11 @@ export async function PATCH(
       "last_salary_review_date", "date_of_birth", "resignation_date",
     ]
     if ("is_archived" in body) updates.is_archived = Boolean(body.is_archived)
+    if ("contract_is_renewable" in body) updates.contract_is_renewable = Boolean(body.contract_is_renewable)
+    if ("contract_term_months" in body) {
+      const n = Number(body.contract_term_months)
+      updates.contract_term_months = Number.isFinite(n) && n > 0 ? Math.round(n) : null
+    }
     for (const field of textFields) {
       if (field in body) updates[field] = toNull(body[field])
     }

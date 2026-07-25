@@ -16,6 +16,7 @@ function mapRow(row: {
   manager_id: string | null; start_date: string | null; status: string
   avatar_initials: string | null; is_archived: boolean
   employee_number: string | null; profile_photo_url: string | null
+  contract_type: string | null; contract_end_date: string | null
 }): Employee {
   return {
     id: row.id,
@@ -35,6 +36,8 @@ function mapRow(row: {
     isArchived: row.is_archived ?? false,
     employeeNumber: row.employee_number ?? null,
     profilePhotoUrl: row.profile_photo_url ?? null,
+    contractType: row.contract_type ?? null,
+    contractEndDate: row.contract_end_date ?? null,
   }
 }
 
@@ -69,7 +72,7 @@ export default async function EmployeesPage() {
     )
   }
 
-  const SELECT = "id, first_name, last_name, email, phone, department_id, job_title, manager_id, start_date, status, avatar_initials, is_archived, employee_number, profile_photo_url"
+  const SELECT = "id, first_name, last_name, email, phone, department_id, job_title, manager_id, start_date, status, avatar_initials, is_archived, employee_number, profile_photo_url, contract_type, contract_end_date"
 
   let activeQuery = supabase.from("employees").select(SELECT).eq("is_archived", false).order("last_name")
   let archivedQuery = supabase.from("employees").select(SELECT).eq("is_archived", true).order("last_name")

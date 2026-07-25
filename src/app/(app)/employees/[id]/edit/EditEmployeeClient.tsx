@@ -132,6 +132,8 @@ export function EditEmployeeClient({ employee, departments, allEmployees }: Prop
     salaryBand: employee.salaryBand ?? "",
     status: employee.status ?? "active",
     contractType: employee.contractType ?? "",
+    contractTermMonths: employee.contractTermMonths != null ? String(employee.contractTermMonths) : "",
+    contractIsRenewable: employee.contractIsRenewable ?? false,
     startDate: employee.startDate ?? "",
     contractEndDate: employee.contractEndDate ?? "",
     probationEndDate: employee.probationEndDate ?? "",
@@ -180,6 +182,8 @@ export function EditEmployeeClient({ employee, departments, allEmployees }: Prop
           salary_band: form.salaryBand,
           status: form.status,
           contract_type: form.contractType,
+          contract_term_months: form.contractTermMonths === "" ? null : Number(form.contractTermMonths),
+          contract_is_renewable: form.contractIsRenewable,
           start_date: form.startDate,
           contract_end_date: form.contractEndDate,
           probation_end_date: form.probationEndDate,
@@ -389,6 +393,20 @@ export function EditEmployeeClient({ employee, departments, allEmployees }: Prop
             </FormGroup>
             <FormGroup label="Contract End Date">
               <Input value={form.contractEndDate} onChange={set("contractEndDate")} type="date" />
+            </FormGroup>
+            <FormGroup label="Contract Term (months)">
+              <Input value={form.contractTermMonths} onChange={set("contractTermMonths")} type="number" placeholder="e.g. 12" />
+            </FormGroup>
+            <FormGroup label="Renewable Contract">
+              <label className="inline-flex items-center gap-2 text-sm h-10">
+                <input
+                  type="checkbox"
+                  checked={form.contractIsRenewable}
+                  onChange={(e) => setForm((prev) => ({ ...prev, contractIsRenewable: e.target.checked }))}
+                  className="h-4 w-4 rounded border-border"
+                />
+                <span className="text-muted-foreground">This contract can be renewed</span>
+              </label>
             </FormGroup>
             <FormGroup label="Probation End Date">
               <Input value={form.probationEndDate} onChange={set("probationEndDate")} type="date" />

@@ -71,6 +71,43 @@ function StatusBadge({ status }: { status: EmploymentStatus }) {
   )
 }
 
+function isContractEmp(e: Employee) {
+  return e.contractType === "contract" || e.contractType === "temporary" || !!e.contractEndDate
+}
+
+// Days-to-expiry badge: red once past the end date, amber within ~60 days.
+function contractExpiry(endDate?: string | null): { tone: "red" | "amber"; label: string } | null {
+  if (!endDate) return null
+  const end = new Date(endDate + "T00:00:00")
+  if (isNaN(end.getTime())) return null
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const days = Math.round((end.getTime() - today.getTime()) / 86400000)
+  if (days < 0) return { tone: "red", label: "Expired" }
+  if (days <= 60) return { tone: "amber", label: days === 0 ? "Ends today" : `${days}d left` }
+  return null
+}
+
+function ContractBadge({ emp }: { emp: Employee }) {
+  if (!isContractEmp(emp)) return null
+  const exp = contractExpiry(emp.contractEndDate)
+  return (
+    <span className="inline-flex items-center gap-1">
+      <span className="rounded-full border px-2 py-0.5 text-[10px] font-semibold text-violet-700 bg-violet-50 border-violet-200">
+        Contract
+      </span>
+      {exp && (
+        <span className={cn(
+          "rounded-full border px-2 py-0.5 text-[10px] font-semibold",
+          exp.tone === "red" ? "text-red-700 bg-red-50 border-red-200" : "text-amber-700 bg-amber-50 border-amber-200"
+        )}>
+          {exp.label}
+        </span>
+      )}
+    </span>
+  )
+}
+
 function fmtDate(d: string | null) {
   if (!d) return "—"
   return new Date(d).toLocaleDateString("en-ZA", {
@@ -134,6 +171,10 @@ function EmployeeCard({
           {emp.firstName} {emp.lastName}
         </p>
         <p className="text-xs text-muted-foreground mt-0.5">{emp.jobTitle}</p>
+
+        {isContractEmp(emp) && (
+          <div className="mt-1.5"><ContractBadge emp={emp} /></div>
+        )}
 
         <div className="mt-2 flex items-center gap-1.5">
           <div
@@ -216,8 +257,9 @@ function EmployeeRow({
             </div>
           )}
           <div>
-            <p className="text-sm font-semibold text-foreground">
+            <p className="text-sm font-semibold text-foreground flex items-center gap-2">
               {emp.firstName} {emp.lastName}
+              <ContractBadge emp={emp} />
             </p>
             <p className="text-xs text-muted-foreground">{emp.jobTitle}</p>
           </div>
@@ -270,6 +312,7 @@ export function EmployeeListClient({ employees, archivedEmployees, departments, 
   const [search, setSearch] = useState("")
   const [deptFilter, setDeptFilter] = useState("all")
   const [statusFilter, setStatusFilter] = useState("all")
+  const [contractFilter, setContractFilter] = useState("all")
   const [viewMode, setViewMode] = useState<"grid" | "list">("list")
   const [showArchived, setShowArchived] = useState(false)
   const [showPhotoUpload, setShowPhotoUpload] = useState(false)
@@ -296,8 +339,11 @@ export function EmployeeListClient({ employees, archivedEmployees, departments, 
     if (deptFilter !== "all") list = list.filter((e) => e.departmentId === deptFilter)
     if (statusFilter !== "all")
       list = list.filter((e) => e.status === statusFilter)
+    if (contractFilter === "contract") list = list.filter(isContractEmp)
+    else if (contractFilter === "expiring")
+      list = list.filter((e) => isContractEmp(e) && contractExpiry(e.contractEndDate) !== null)
     return list
-  }, [pool, search, deptFilter, statusFilter, departments, employees])
+  }, [pool, search, deptFilter, statusFilter, contractFilter, departments, employees])
 
   const activeCount = employees.filter((e) => e.status === "active").length
   const onboardingCount = employees.filter((e) => e.status === "onboarding").length
@@ -382,6 +428,16 @@ export function EmployeeListClient({ employees, archivedEmployees, departments, 
           <option value="terminated">Terminated</option>
           <option value="suspended">Suspended</option>
           <option value="resigned">Resigned</option>
+        </select>
+
+        <select
+          value={contractFilter}
+          onChange={(e) => setContractFilter(e.target.value)}
+          className="h-9 rounded-lg border border-border bg-card px-3 text-sm text-foreground outline-none focus:border-ring"
+        >
+          <option value="all">All contracts</option>
+          <option value="contract">Contract staff</option>
+          <option value="expiring">Expiring / expired</option>
         </select>
 
         {!showArchived && archivedEmployees.length > 0 && (

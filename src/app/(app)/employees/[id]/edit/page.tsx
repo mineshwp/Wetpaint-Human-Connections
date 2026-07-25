@@ -42,7 +42,7 @@ export default async function EditEmployeePage({
       .select(`
         id, employee_number, first_name, last_name, email, phone, job_title,
         department_id, manager_id, status, start_date, avatar_initials, profile_photo_url,
-        contract_type, contract_end_date, probation_end_date, salary_band, last_salary_review_date,
+        contract_type, contract_end_date, contract_is_renewable, contract_term_months, probation_end_date, salary_band, last_salary_review_date,
         personal_email, work_email, alternate_phone, home_address,
         next_of_kin_name, next_of_kin_phone, next_of_kin_relationship,
         vat_number, date_of_birth, identity_number, gender, race, disability, citizenship_status,
@@ -89,6 +89,8 @@ export default async function EditEmployeePage({
     profilePhotoUrl: row.profile_photo_url ?? null,
     contractType: row.contract_type ?? null,
     contractEndDate: row.contract_end_date ?? null,
+    contractIsRenewable: row.contract_is_renewable ?? false,
+    contractTermMonths: row.contract_term_months ?? null,
     probationEndDate: row.probation_end_date ?? null,
     personalEmail: row.personal_email ?? null,
     workEmail: row.work_email ?? null,
