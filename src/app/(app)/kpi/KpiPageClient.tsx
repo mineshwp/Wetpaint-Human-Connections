@@ -42,6 +42,7 @@ interface FinalComment {
 }
 interface Employee {
   id: string; first_name: string; last_name: string; job_title: string; email?: string
+  profile_photo_url?: string | null
   department?: { name: string } | null
 }
 
@@ -113,15 +114,23 @@ function InviteeStatusBadge({ status }: { status: string }) {
   )
 }
 
-function Avatar({ name, size = "md" }: { name: string; size?: "sm" | "md" | "lg" }) {
+function Avatar({ name, size = "md", photoUrl }: { name: string; size?: "sm" | "md" | "lg"; photoUrl?: string | null }) {
+  const sizeCls = size === "sm" ? "w-6 h-6 text-[10px]" : size === "lg" ? "w-11 h-11 text-sm" : "w-8 h-8 text-xs"
+  if (photoUrl) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={photoUrl}
+        alt={name}
+        className={cn("rounded-full object-cover shrink-0", sizeCls)}
+      />
+    )
+  }
   const initials = name.split(" ").map(n => n[0] ?? "").join("").slice(0, 2).toUpperCase()
   const bg = AVATAR_COLORS[(name.charCodeAt(0) + (name.charCodeAt(1) ?? 0)) % AVATAR_COLORS.length]
   return (
     <div
-      className={cn(
-        "rounded-full flex items-center justify-center font-bold shrink-0 text-white",
-        size === "sm" ? "w-6 h-6 text-[10px]" : size === "lg" ? "w-11 h-11 text-sm" : "w-8 h-8 text-xs",
-      )}
+      className={cn("rounded-full flex items-center justify-center font-bold shrink-0 text-white", sizeCls)}
       style={{ backgroundColor: bg }}
     >
       {initials}
@@ -706,7 +715,7 @@ function InviteePanel({ review, allEmployees, template, onAddInvitee, onRemoveIn
                 className={cn("flex items-center gap-2 rounded-lg border px-2 py-1.5 text-xs text-left transition-colors",
                   selected.includes(emp.id) ? "border-primary bg-primary/10 text-primary" : "border-border bg-card hover:bg-muted/40")}
               >
-                <Avatar name={`${emp.first_name} ${emp.last_name}`} size="sm" />
+                <Avatar name={`${emp.first_name} ${emp.last_name}`} size="sm" photoUrl={emp.profile_photo_url} />
                 {emp.first_name} {emp.last_name}
               </button>
             ))}
@@ -1158,7 +1167,7 @@ function StaffRow({ employee, reviews, scores, reviewTemplates, onOpen }: {
         className="flex items-center gap-3 px-4 py-3 hover:bg-muted/20 transition-colors cursor-pointer"
         onClick={() => onOpen(employee.id)}
       >
-        <Avatar name={name} size="md" />
+        <Avatar name={name} size="md" photoUrl={employee.profile_photo_url} />
         <div className="flex-1 min-w-0">
           <div className="font-semibold text-sm text-foreground">{name}</div>
           <div className="text-xs text-muted-foreground mt-0.5">
@@ -1269,7 +1278,7 @@ function EmployeeReviewDetail({ employee, reviews, scores, reviewTemplates, fina
           <ChevronLeft size={14} /> All employees
         </Button>
         <div className="flex items-center gap-3 flex-1 min-w-0 rounded-2xl border border-border bg-card px-4 py-2.5 shadow-sm">
-          <Avatar name={name} size="md" />
+          <Avatar name={name} size="md" photoUrl={employee.profile_photo_url} />
           <div className="min-w-0 flex-1">
             <div className="font-bold text-sm text-foreground truncate">{name}</div>
             <div className="text-xs text-muted-foreground truncate">
