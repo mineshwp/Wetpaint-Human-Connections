@@ -1359,7 +1359,7 @@ function EmployeeReviewDetail({ employee, reviews, scores, reviewTemplates, fina
 
 // ─── HR Admin View ──────────────────────────────────────────────────────────────
 
-function HRAdminView({ reviewTemplates, reviews, scores, finalComments, allEmployees, currentEmployeeId, onScoreChange, onSaveFinalComment, onAddInvitee, onRemoveInvitee, onSetSections, onStatusChange, onDelete, onAddItem, onEditItem, onRemoveItem, onResetItem, onUpdateReviewDetails, onShowCreate, onManageTemplate, onExportScores, onImportScores }: {
+function HRAdminView({ reviewTemplates, reviews, scores, finalComments, allEmployees, currentEmployeeId, onScoreChange, onSaveFinalComment, onAddInvitee, onRemoveInvitee, onSetSections, onStatusChange, onDelete, onAddItem, onEditItem, onRemoveItem, onResetItem, onUpdateReviewDetails, onShowCreate, onManageTemplate, onExportScores, onExportWorkbook, onImportScores }: {
   reviewTemplates: Record<string, TemplateSection[]>
   reviews: Review[]
   scores: Record<string, Score[]>
@@ -1381,6 +1381,7 @@ function HRAdminView({ reviewTemplates, reviews, scores, finalComments, allEmplo
   onShowCreate: (employeeId?: string, quarter?: Quarter) => void
   onManageTemplate: () => void
   onExportScores: (format: "csv" | "xlsx", reviewId?: string) => Promise<void>
+  onExportWorkbook: () => Promise<void>
   onImportScores: (file: File) => Promise<void>
 }) {
   const [searchQ, setSearchQ]         = useState("")
@@ -1502,6 +1503,11 @@ function HRAdminView({ reviewTemplates, reviews, scores, finalComments, allEmplo
               setScoresBusy(false)
             }}
           />
+          <Button size="sm" variant="outline" disabled={scoresBusy}
+            onClick={async () => { setScoresBusy(true); await onExportWorkbook(); setScoresBusy(false) }}
+            className="gap-1.5 h-9 text-xs">
+            <FileSpreadsheet size={13} /> Export staff workbook
+          </Button>
           <Button size="sm" variant="outline" disabled={scoresBusy}
             onClick={async () => { setScoresBusy(true); await onExportScores("xlsx"); setScoresBusy(false) }}
             className="gap-1.5 h-9 text-xs">
@@ -2313,6 +2319,26 @@ export function KpiPageClient({ isHR, currentEmployeeId }: { isHR: boolean; curr
     URL.revokeObjectURL(url)
   }
 
+  // Blank scoring workbook — one worksheet per active staff member, each with
+  // the KPI template rows and empty Q1–Q4 columns to fill in offline.
+  async function handleExportWorkbook() {
+    const res = await fetch(`/api/kpi/staff-workbook/export`)
+    if (!res.ok) {
+      const err = await res.json().catch(() => null)
+      showToast(err?.error ?? "Export failed")
+      return
+    }
+    const blob = await res.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = "kpi-staff-workbook.xlsx"
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+  }
+
   async function handleImportScores(file: File) {
     const fd = new FormData()
     fd.append("file", file)
@@ -2419,6 +2445,7 @@ export function KpiPageClient({ isHR, currentEmployeeId }: { isHR: boolean; curr
               onShowCreate={handleShowCreate}
               onManageTemplate={() => setShowManage(true)}
               onExportScores={handleExportScores}
+              onExportWorkbook={handleExportWorkbook}
               onImportScores={handleImportScores}
             />
           )}
