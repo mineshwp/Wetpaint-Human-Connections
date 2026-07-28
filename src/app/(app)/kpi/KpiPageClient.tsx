@@ -1359,7 +1359,7 @@ function EmployeeReviewDetail({ employee, reviews, scores, reviewTemplates, fina
 
 // ─── HR Admin View ──────────────────────────────────────────────────────────────
 
-function HRAdminView({ reviewTemplates, reviews, scores, finalComments, allEmployees, currentEmployeeId, onScoreChange, onSaveFinalComment, onAddInvitee, onRemoveInvitee, onSetSections, onStatusChange, onDelete, onAddItem, onEditItem, onRemoveItem, onResetItem, onUpdateReviewDetails, onShowCreate, onManageTemplate, onExportScores, onExportWorkbook, onImportScores }: {
+function HRAdminView({ reviewTemplates, reviews, scores, finalComments, allEmployees, currentEmployeeId, onScoreChange, onSaveFinalComment, onAddInvitee, onRemoveInvitee, onSetSections, onStatusChange, onDelete, onAddItem, onEditItem, onRemoveItem, onResetItem, onUpdateReviewDetails, onShowCreate, onManageTemplate, onExportScores, onExportWorkbook, onImportScores, onImportWorkbook }: {
   reviewTemplates: Record<string, TemplateSection[]>
   reviews: Review[]
   scores: Record<string, Score[]>
@@ -1383,9 +1383,11 @@ function HRAdminView({ reviewTemplates, reviews, scores, finalComments, allEmplo
   onExportScores: (format: "csv" | "xlsx", reviewId?: string) => Promise<void>
   onExportWorkbook: () => Promise<void>
   onImportScores: (file: File) => Promise<void>
+  onImportWorkbook: (file: File) => Promise<void>
 }) {
   const [searchQ, setSearchQ]         = useState("")
   const scoresFileRef = useRef<HTMLInputElement>(null)
+  const workbookFileRef = useRef<HTMLInputElement>(null)
   const [scoresBusy, setScoresBusy]   = useState(false)
   const [deptFilter, setDeptFilter]   = useState("all")
   const [statusFilter, setStatusFilter] = useState("all")
@@ -1503,10 +1505,29 @@ function HRAdminView({ reviewTemplates, reviews, scores, finalComments, allEmplo
               setScoresBusy(false)
             }}
           />
+          <input
+            ref={workbookFileRef}
+            type="file"
+            accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            className="hidden"
+            onChange={async (e) => {
+              const f = e.target.files?.[0]
+              e.target.value = ""
+              if (!f) return
+              setScoresBusy(true)
+              await onImportWorkbook(f)
+              setScoresBusy(false)
+            }}
+          />
           <Button size="sm" variant="outline" disabled={scoresBusy}
             onClick={async () => { setScoresBusy(true); await onExportWorkbook(); setScoresBusy(false) }}
             className="gap-1.5 h-9 text-xs">
             <FileSpreadsheet size={13} /> Export staff workbook
+          </Button>
+          <Button size="sm" variant="outline" disabled={scoresBusy}
+            onClick={() => workbookFileRef.current?.click()}
+            className="gap-1.5 h-9 text-xs">
+            {scoresBusy ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />} Import workbook
           </Button>
           <Button size="sm" variant="outline" disabled={scoresBusy}
             onClick={async () => { setScoresBusy(true); await onExportScores("xlsx"); setScoresBusy(false) }}
@@ -2353,6 +2374,21 @@ export function KpiPageClient({ isHR, currentEmployeeId }: { isHR: boolean; curr
     }
   }
 
+  // Re-import the filled per-staff workbook (Q1–Q4 scores + comments per tab).
+  async function handleImportWorkbook(file: File) {
+    const fd = new FormData()
+    fd.append("file", file)
+    const res = await fetch("/api/kpi/staff-workbook/import", { method: "POST", body: fd })
+    const data = await res.json().catch(() => null)
+    if (res.ok) {
+      showToast(data?.message ?? "Import complete")
+      if (Array.isArray(data?.errors) && data.errors.length) console.warn("[KPI workbook import] issues:", data.errors)
+      await loadAll({ silent: true })
+    } else {
+      showToast(data?.error ?? "Import failed")
+    }
+  }
+
   async function handleCreate(d: { employee_id: string; period: string; title: string; deadline: string }) {
     setCreating(true)
     const res = await fetch("/api/kpi/reviews", {
@@ -2447,6 +2483,7 @@ export function KpiPageClient({ isHR, currentEmployeeId }: { isHR: boolean; curr
               onExportScores={handleExportScores}
               onExportWorkbook={handleExportWorkbook}
               onImportScores={handleImportScores}
+              onImportWorkbook={handleImportWorkbook}
             />
           )}
 
