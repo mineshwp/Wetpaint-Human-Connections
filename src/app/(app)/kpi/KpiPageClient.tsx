@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo, useCallback } from "react"
+import { useState, useEffect, useMemo, useCallback, useRef } from "react"
 import {
   ChevronDown, ChevronRight, ChevronLeft, Plus, Trash2, X, Check,
   Users, UserPlus, Send, Clock, CheckCircle2, XCircle,
@@ -881,6 +881,16 @@ function FinalCommentRow({ name, role, comment, canEdit, onSave }: {
   if (comment !== syncedComment) { setSyncedComment(comment); setVal(comment) }
   const dirty = val !== comment
 
+  // Grow the textarea to fit its content so the whole comment is readable
+  // without an inner scrollbar.
+  const taRef = useRef<HTMLTextAreaElement>(null)
+  useEffect(() => {
+    const el = taRef.current
+    if (!el) return
+    el.style.height = "auto"
+    el.style.height = `${el.scrollHeight}px`
+  }, [val])
+
   return (
     <div className="px-5 py-3">
       <div className="flex items-center gap-2 mb-1.5">
@@ -891,9 +901,10 @@ function FinalCommentRow({ name, role, comment, canEdit, onSave }: {
       {canEdit ? (
         <>
           <textarea
-            rows={2} value={val} onChange={e => setVal(e.target.value)}
+            ref={taRef} rows={2} value={val} onChange={e => setVal(e.target.value)}
             placeholder="Add a final comment…"
-            className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-primary"
+            style={{ minHeight: "3.5rem" }}
+            className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm resize-none overflow-hidden focus:outline-none focus:ring-1 focus:ring-primary"
           />
           {dirty && (
             <div className="mt-1.5 flex gap-2">
@@ -932,28 +943,55 @@ function FinalComments({ invitees, comments, scores, isHR, currentEmployeeId, on
 
   // Reviewers (non-HR view) see their own editable row plus any comment already left.
   const visible = isHR ? rows : rows.filter(r => r.authorId === currentEmployeeId || (byAuthor.get(r.authorId)?.comment ?? "") !== "")
+  const withComment = visible.filter(r => (byAuthor.get(r.authorId)?.comment ?? "") !== "").length
+
+  return <FinalCommentsAccordion visible={visible} byAuthor={byAuthor} withComment={withComment} isHR={isHR} currentEmployeeId={currentEmployeeId} onSave={onSave} />
+}
+
+function FinalCommentsAccordion({ visible, byAuthor, withComment, isHR, currentEmployeeId, onSave }: {
+  visible: { key: string; authorId: string; name: string; role: string }[]
+  byAuthor: Map<string, FinalComment>
+  withComment: number
+  isHR: boolean; currentEmployeeId: string | null
+  onSave: (authorId: string | null, comment: string) => Promise<void>
+}) {
+  const [open, setOpen] = useState(true)
 
   return (
-    <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
-      <div className="px-5 py-4 border-b border-border bg-muted/20 flex items-center gap-2">
-        <FileText size={16} className="text-primary" />
-        <div>
+    <div className={cn("rounded-2xl border bg-card overflow-hidden transition-all", open ? "border-border shadow-md" : "border-border shadow-sm")}>
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={() => setOpen(o => !o)}
+        onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpen(o => !o) } }}
+        className={cn("w-full flex items-center gap-3 px-5 py-4 text-left transition-colors cursor-pointer select-none", open ? "border-b border-border bg-muted/20" : "hover:bg-muted/20")}
+      >
+        <FileText size={16} className="text-primary shrink-0" />
+        <div className="flex-1 min-w-0">
           <h3 className="font-bold text-[14px] leading-snug">Final Comments</h3>
-          <p className="text-xs text-muted-foreground mt-0.5">Closing remarks from each reviewer.</p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Closing remarks from each reviewer{visible.length > 0 ? ` · ${withComment}/${visible.length} written` : ""}.
+          </p>
+        </div>
+        <div className={cn("w-7 h-7 rounded-full border border-border flex items-center justify-center text-muted-foreground transition-transform shrink-0", !open && "-rotate-90")}>
+          <ChevronDown size={14} />
         </div>
       </div>
-      <div className="divide-y divide-border">
-        {visible.length === 0 ? (
-          <p className="px-5 py-4 text-xs text-muted-foreground italic">No reviewers have scored this review yet.</p>
-        ) : visible.map(r => (
-          <FinalCommentRow
-            key={r.key} name={r.name} role={r.role}
-            comment={byAuthor.get(r.authorId)?.comment ?? ""}
-            canEdit={isHR || r.authorId === currentEmployeeId}
-            onSave={(text) => onSave(r.authorId, text)}
-          />
-        ))}
-      </div>
+
+      {open && (
+        <div className="divide-y divide-border">
+          {visible.length === 0 ? (
+            <p className="px-5 py-4 text-xs text-muted-foreground italic">No reviewers have scored this review yet.</p>
+          ) : visible.map(r => (
+            <FinalCommentRow
+              key={r.key} name={r.name} role={r.role}
+              comment={byAuthor.get(r.authorId)?.comment ?? ""}
+              canEdit={isHR || r.authorId === currentEmployeeId}
+              onSave={(text) => onSave(r.authorId, text)}
+            />
+          ))}
+        </div>
+      )}
     </div>
   )
 }
