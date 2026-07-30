@@ -1,0 +1,465 @@
+- generic [active] [ref=f1e1]:
+  - generic [ref=f1e2]:
+    - complementary [ref=f1e3]:
+      - generic [ref=f1e5]:
+        - img "Wetpaint" [ref=f1e6]
+        - generic [ref=f1e7]:
+          - generic [ref=f1e8]: Human
+          - generic [ref=f1e9]: Connections
+      - generic [ref=f1e10]: HR / Admin
+      - navigation [ref=f1e12]:
+        - list [ref=f1e13]:
+          - listitem [ref=f1e14]:
+            - link "Employees" [ref=f1e15] [cursor=pointer]:
+              - /url: /employees
+          - listitem [ref=f1e22]:
+            - link "KPI Reviews" [ref=f1e23] [cursor=pointer]:
+              - /url: /kpi
+      - generic [ref=f1e27]:
+        - link "Settings" [ref=f1e28] [cursor=pointer]:
+          - /url: /settings
+        - paragraph [ref=f1e33]: © 2026 Wetpaint Advertising
+    - generic [ref=f1e34]:
+      - banner [ref=f1e35]:
+        - button "User menu" [ref=f1e38]: MS
+      - main [ref=f1e39]:
+        - generic [ref=f1e40]:
+          - generic [ref=f1e41]:
+            - generic [ref=f1e42]:
+              - heading "Employees" [level=2] [ref=f1e43]
+              - paragraph [ref=f1e44]: 24 active · 0 archived
+            - link "Add Employee" [ref=f1e46] [cursor=pointer]:
+              - /url: /employees/new
+          - generic [ref=f1e50]:
+            - generic [ref=f1e59]:
+              - paragraph [ref=f1e60]: "24"
+              - paragraph [ref=f1e61]: Total
+              - paragraph [ref=f1e62]: All employees
+            - generic [ref=f1e70]:
+              - paragraph [ref=f1e71]: "22"
+              - paragraph [ref=f1e72]: Active
+              - paragraph [ref=f1e73]: Currently working
+            - generic [ref=f1e80]:
+              - paragraph [ref=f1e81]: "2"
+              - paragraph [ref=f1e82]: Onboarding
+              - paragraph [ref=f1e83]: In progress
+          - generic [ref=f1e84]:
+            - searchbox "Search name, role, email, phone, department…" [ref=f1e86]
+            - combobox [ref=f1e87]:
+              - option "All departments" [selected]
+              - option "Admin"
+              - option "Admin / Client Services"
+              - option "Creative"
+              - option "Development"
+              - option "HR"
+              - option "Social"
+              - option "Studio"
+              - option "Studio / Creative"
+            - combobox [ref=f1e88]:
+              - option "All statuses" [selected]
+              - option "Active"
+              - option "Onboarding"
+              - option "Terminated"
+              - option "Suspended"
+              - option "Resigned"
+            - generic [ref=f1e89]:
+              - button "List view" [pressed] [ref=f1e90]
+              - button "Grid view" [ref=f1e92]
+          - paragraph [ref=f1e98]: 24 employees found
+          - table [ref=f1e101]:
+            - rowgroup [ref=f1e102]:
+              - row [ref=f1e103]:
+                - columnheader "Employee" [ref=f1e104]
+                - columnheader "Department" [ref=f1e105]
+                - columnheader "Email" [ref=f1e106]
+                - columnheader "Manager" [ref=f1e107]
+                - columnheader "Start Date" [ref=f1e108]
+                - columnheader "Tenure" [ref=f1e109]
+                - columnheader "Status" [ref=f1e110]
+                - columnheader "Actions" [ref=f1e111]
+            - rowgroup [ref=f1e112]:
+              - row [ref=f1e113]:
+                - cell "DA Divya Gauri Appalsamy Social Media Specialist" [ref=f1e114]:
+                  - generic [ref=f1e115]:
+                    - generic [ref=f1e116]: DA
+                    - generic [ref=f1e117]:
+                      - paragraph [ref=f1e118]: Divya Gauri Appalsamy
+                      - paragraph [ref=f1e119]: Social Media Specialist
+                - cell "Social" [ref=f1e120]
+                - cell "Divya@wetpaint.co.za" [ref=f1e124]
+                - cell "Suwilanji Kabwe" [ref=f1e125]
+                - cell "04 Aug 2025" [ref=f1e126]
+                - cell "11m" [ref=f1e127]
+                - cell "Active" [ref=f1e128]
+                - cell [ref=f1e129]:
+                  - link "View" [ref=f1e130] [cursor=pointer]:
+                    - /url: /employees/4421feaf-1721-43b3-824d-f48e5edcd1c4
+              - row [ref=f1e131]:
+                - cell "LB Lorna Ashley Banfield Executive Operations Specialist" [ref=f1e132]:
+                  - generic [ref=f1e133]:
+                    - generic [ref=f1e134]: LB
+                    - generic [ref=f1e135]:
+                      - paragraph [ref=f1e136]: Lorna Ashley Banfield
+                      - paragraph [ref=f1e137]: Executive Operations Specialist
+                - cell "Admin / Client Services" [ref=f1e138]
+                - cell "Lorna@wetpaint.co.za" [ref=f1e142]
+                - cell "Petra Mc Cardle" [ref=f1e143]
+                - cell "15 Feb 2024" [ref=f1e144]
+                - cell "2y" [ref=f1e145]
+                - cell "Active" [ref=f1e146]
+                - cell [ref=f1e147]:
+                  - link "View" [ref=f1e148] [cursor=pointer]:
+                    - /url: /employees/6b6dfc4e-9829-4e1d-962f-9e5d80cb0a17
+              - row [ref=f1e149]:
+                - cell "SK Suwilanji Kabwe Head of Digital and Communications" [ref=f1e150]:
+                  - generic [ref=f1e151]:
+                    - generic [ref=f1e152]: SK
+                    - generic [ref=f1e153]:
+                      - paragraph [ref=f1e154]: Suwilanji Kabwe
+                      - paragraph [ref=f1e155]: Head of Digital and Communications
+                - cell "Social" [ref=f1e156]
+                - cell "Suwi@wetpaint.co.za" [ref=f1e160]
+                - cell "Petra Mc Cardle" [ref=f1e161]
+                - cell "01 Jul 2022" [ref=f1e162]
+                - cell "4y" [ref=f1e163]
+                - cell "Active" [ref=f1e164]
+                - cell [ref=f1e165]:
+                  - link "View" [ref=f1e166] [cursor=pointer]:
+                    - /url: /employees/cfcca6c6-1400-49f9-b033-d458960da4b9
+              - row [ref=f1e167]:
+                - cell "MK Morne Kruger Creative Director" [ref=f1e168]:
+                  - generic [ref=f1e169]:
+                    - generic [ref=f1e170]: MK
+                    - generic [ref=f1e171]:
+                      - paragraph [ref=f1e172]: Morne Kruger
+                      - paragraph [ref=f1e173]: Creative Director
+                - cell "Studio / Creative" [ref=f1e174]
+                - cell "Morne@wetpaint.co.za" [ref=f1e178]
+                - cell "Einstein Mwaita" [ref=f1e179]
+                - cell "01 Dec 2023" [ref=f1e180]
+                - cell "2y" [ref=f1e181]
+                - cell "Active" [ref=f1e182]
+                - cell [ref=f1e183]:
+                  - link "View" [ref=f1e184] [cursor=pointer]:
+                    - /url: /employees/409a1737-5fec-4ad2-8eac-ba887a6888c8
+              - row [ref=f1e185]:
+                - cell "DL Darren Maxwell Lew Full Stack Web Developer" [ref=f1e186]:
+                  - generic [ref=f1e187]:
+                    - generic [ref=f1e188]: DL
+                    - generic [ref=f1e189]:
+                      - paragraph [ref=f1e190]: Darren Maxwell Lew
+                      - paragraph [ref=f1e191]: Full Stack Web Developer
+                - cell "Development" [ref=f1e192]
+                - cell "Darren@wetpaint.co.za" [ref=f1e196]
+                - cell "Kerry Ann Whyte" [ref=f1e197]
+                - cell "20 Nov 2025" [ref=f1e198]
+                - cell "8m" [ref=f1e199]
+                - cell "Active" [ref=f1e200]
+                - cell [ref=f1e201]:
+                  - link "View" [ref=f1e202] [cursor=pointer]:
+                    - /url: /employees/82db20a6-f17e-46c0-b467-976f952cab2c
+              - row [ref=f1e203]:
+                - cell "SM Samuel Sphiwe Maluleka Paid Media Lead" [ref=f1e204]:
+                  - generic [ref=f1e205]:
+                    - generic [ref=f1e206]: SM
+                    - generic [ref=f1e207]:
+                      - paragraph [ref=f1e208]: Samuel Sphiwe Maluleka
+                      - paragraph [ref=f1e209]: Paid Media Lead
+                - cell "Social" [ref=f1e210]
+                - cell "Sphiwe@wetpaint.co.za" [ref=f1e214]
+                - cell "Suwilanji Kabwe" [ref=f1e215]
+                - cell "12 Sept 2024" [ref=f1e216]
+                - cell "1y" [ref=f1e217]
+                - cell "Active" [ref=f1e218]
+                - cell [ref=f1e219]:
+                  - link "View" [ref=f1e220] [cursor=pointer]:
+                    - /url: /employees/594deceb-df2a-466f-a051-a445ed85128e
+              - row [ref=f1e221]:
+                - cell "VM Virginia Mahlatse Malungane Office Cleaner" [ref=f1e222]:
+                  - generic [ref=f1e223]:
+                    - generic [ref=f1e224]: VM
+                    - generic [ref=f1e225]:
+                      - paragraph [ref=f1e226]: Virginia Mahlatse Malungane
+                      - paragraph [ref=f1e227]: Office Cleaner
+                - cell "Admin" [ref=f1e228]
+                - cell "Virginia@wetpaint.co.za" [ref=f1e232]
+                - cell "Petra Mc Cardle" [ref=f1e233]
+                - cell "01 Mar 2026" [ref=f1e234]
+                - cell "4m" [ref=f1e235]
+                - cell "Active" [ref=f1e236]
+                - cell [ref=f1e237]:
+                  - link "View" [ref=f1e238] [cursor=pointer]:
+                    - /url: /employees/c18e4e04-20ee-4c35-a92a-c5eb6d3f4cde
+              - row [ref=f1e239]:
+                - cell "KM Kgaogelo Mamabolo Paid Media Specialist" [ref=f1e240]:
+                  - generic [ref=f1e241]:
+                    - generic [ref=f1e242]: KM
+                    - generic [ref=f1e243]:
+                      - paragraph [ref=f1e244]: Kgaogelo Mamabolo
+                      - paragraph [ref=f1e245]: Paid Media Specialist
+                - cell "Social" [ref=f1e246]
+                - cell "Kgaogelo@wetpaint.co.za" [ref=f1e250]
+                - cell "Suwilanji Kabwe" [ref=f1e251]
+                - cell "07 Apr 2026" [ref=f1e252]
+                - cell "3m" [ref=f1e253]
+                - cell "Onboarding" [ref=f1e254]
+                - cell [ref=f1e255]:
+                  - link "View" [ref=f1e256] [cursor=pointer]:
+                    - /url: /employees/c86b3c07-9a8e-46ba-9c36-268977ac807b
+              - row [ref=f1e257]:
+                - cell "PM Petra Mc Cardle CEO" [ref=f1e258]:
+                  - generic [ref=f1e259]:
+                    - generic [ref=f1e260]: PM
+                    - generic [ref=f1e261]:
+                      - paragraph [ref=f1e262]: Petra Mc Cardle
+                      - paragraph [ref=f1e263]: CEO
+                - cell "—" [ref=f1e264]
+                - cell "Petra@wetpaint.co.za" [ref=f1e268]
+                - cell "—" [ref=f1e269]
+                - cell "01 Sept 1997" [ref=f1e270]
+                - cell "28y" [ref=f1e271]
+                - cell "Active" [ref=f1e272]
+                - cell [ref=f1e273]:
+                  - link "View" [ref=f1e274] [cursor=pointer]:
+                    - /url: /employees/818a6ba6-776b-415b-a483-40249453a91e
+              - row [ref=f1e275]:
+                - cell "SM Sophia Lenyalo Menoe Senior Traffic Manager" [ref=f1e276]:
+                  - generic [ref=f1e277]:
+                    - generic [ref=f1e278]: SM
+                    - generic [ref=f1e279]:
+                      - paragraph [ref=f1e280]: Sophia Lenyalo Menoe
+                      - paragraph [ref=f1e281]: Senior Traffic Manager
+                - cell "Admin / Client Services" [ref=f1e282]
+                - cell "Mmabatho@wetpaint.co.za" [ref=f1e286]
+                - cell "Susan Nohumba" [ref=f1e287]
+                - cell "12 Jan 2026" [ref=f1e288]
+                - cell "6m" [ref=f1e289]
+                - cell "Active" [ref=f1e290]
+                - cell [ref=f1e291]:
+                  - link "View" [ref=f1e292] [cursor=pointer]:
+                    - /url: /employees/1c4c2698-6010-4a2b-9d51-69608009848b
+              - row [ref=f1e293]:
+                - cell "RM Reatlegile Rarabetswe Meso Motion Designer" [ref=f1e294]:
+                  - generic [ref=f1e295]:
+                    - generic [ref=f1e296]: RM
+                    - generic [ref=f1e297]:
+                      - paragraph [ref=f1e298]: Reatlegile Rarabetswe Meso
+                      - paragraph [ref=f1e299]: Motion Designer
+                - cell "Studio" [ref=f1e300]
+                - cell "Rea@wetpaint.co.za" [ref=f1e304]
+                - cell "Einstein Mwaita" [ref=f1e305]
+                - cell "01 Feb 2025" [ref=f1e306]
+                - cell "1y" [ref=f1e307]
+                - cell "Active" [ref=f1e308]
+                - cell [ref=f1e309]:
+                  - link "View" [ref=f1e310] [cursor=pointer]:
+                    - /url: /employees/9923c71d-752a-43a1-bec5-26e5a0f630c1
+              - row [ref=f1e311]:
+                - cell "TM Thato Botse Mfumadi Account Manager" [ref=f1e312]:
+                  - generic [ref=f1e313]:
+                    - generic [ref=f1e314]: TM
+                    - generic [ref=f1e315]:
+                      - paragraph [ref=f1e316]: Thato Botse Mfumadi
+                      - paragraph [ref=f1e317]: Account Manager
+                - cell "Admin / Client Services" [ref=f1e318]
+                - cell "Thato@wetpaint.co.za" [ref=f1e322]
+                - cell "Susan Nohumba" [ref=f1e323]
+                - cell "01 Sept 2024" [ref=f1e324]
+                - cell "1y" [ref=f1e325]
+                - cell "Active" [ref=f1e326]
+                - cell [ref=f1e327]:
+                  - link "View" [ref=f1e328] [cursor=pointer]:
+                    - /url: /employees/d48889c1-09e9-4826-9144-eb1e14b3279c
+              - row [ref=f1e329]:
+                - cell "KM Keegan Moffatt Content Producer" [ref=f1e330]:
+                  - generic [ref=f1e331]:
+                    - generic [ref=f1e332]: KM
+                    - generic [ref=f1e333]:
+                      - paragraph [ref=f1e334]: Keegan Moffatt
+                      - paragraph [ref=f1e335]: Content Producer
+                - cell "Studio" [ref=f1e336]
+                - cell "Keegan@wetpaint.co.za" [ref=f1e340]
+                - cell "Einstein Mwaita" [ref=f1e341]
+                - cell "01 Sept 2025" [ref=f1e342]
+                - cell "10m" [ref=f1e343]
+                - cell "Active" [ref=f1e344]
+                - cell [ref=f1e345]:
+                  - link "View" [ref=f1e346] [cursor=pointer]:
+                    - /url: /employees/cd387a1a-d28f-4209-91b2-6b64cff9f25d
+              - row [ref=f1e347]:
+                - cell "MM Motshidisi Mokoena Strategic Copywriter" [ref=f1e348]:
+                  - generic [ref=f1e349]:
+                    - generic [ref=f1e350]: MM
+                    - generic [ref=f1e351]:
+                      - paragraph [ref=f1e352]: Motshidisi Mokoena
+                      - paragraph [ref=f1e353]: Strategic Copywriter
+                - cell "Creative" [ref=f1e354]
+                - cell "Motshidisi@wetpaint.co.za" [ref=f1e358]
+                - cell "Einstein Mwaita" [ref=f1e359]
+                - cell "23 Jul 2025" [ref=f1e360]
+                - cell "12m" [ref=f1e361]
+                - cell "Active" [ref=f1e362]
+                - cell [ref=f1e363]:
+                  - link "View" [ref=f1e364] [cursor=pointer]:
+                    - /url: /employees/8971a4df-3a13-44b0-96bc-c338234346f4
+              - row [ref=f1e365]:
+                - cell "NM Nyakallo Moleko Community Manager" [ref=f1e366]:
+                  - generic [ref=f1e367]:
+                    - generic [ref=f1e368]: NM
+                    - generic [ref=f1e369]:
+                      - paragraph [ref=f1e370]: Nyakallo Moleko
+                      - paragraph [ref=f1e371]: Community Manager
+                - cell "Social" [ref=f1e372]
+                - cell "Nyakallo@wetpaint.co.za" [ref=f1e376]
+                - cell "Suwilanji Kabwe" [ref=f1e377]
+                - cell "18 Aug 2025" [ref=f1e378]
+                - cell "11m" [ref=f1e379]
+                - cell "Active" [ref=f1e380]
+                - cell [ref=f1e381]:
+                  - link "View" [ref=f1e382] [cursor=pointer]:
+                    - /url: /employees/af4c5f79-8893-4e22-a721-684cbe1b88f9
+              - row [ref=f1e383]:
+                - cell "UM Ujala Moodley Human Resources Manager" [ref=f1e384]:
+                  - generic [ref=f1e385]:
+                    - generic [ref=f1e386]: UM
+                    - generic [ref=f1e387]:
+                      - paragraph [ref=f1e388]: Ujala Moodley
+                      - paragraph [ref=f1e389]: Human Resources Manager
+                - cell "HR" [ref=f1e390]
+                - cell "Ujala@wetpaint.co.za" [ref=f1e394]
+                - cell "Petra Mc Cardle" [ref=f1e395]
+                - cell "12 Apr 2024" [ref=f1e396]
+                - cell "2y" [ref=f1e397]
+                - cell "Active" [ref=f1e398]
+                - cell [ref=f1e399]:
+                  - link "View" [ref=f1e400] [cursor=pointer]:
+                    - /url: /employees/b165be94-34a4-4a38-ac53-244867fe3733
+              - row [ref=f1e401]:
+                - cell "LM Lungelo Christian Mazwi Msibi Content Producer" [ref=f1e402]:
+                  - generic [ref=f1e403]:
+                    - generic [ref=f1e404]: LM
+                    - generic [ref=f1e405]:
+                      - paragraph [ref=f1e406]: Lungelo Christian Mazwi Msibi
+                      - paragraph [ref=f1e407]: Content Producer
+                - cell "Studio" [ref=f1e408]
+                - cell "Lungelo@wetpaint.co.za" [ref=f1e412]
+                - cell "Einstein Mwaita" [ref=f1e413]
+                - cell "11 Aug 2025" [ref=f1e414]
+                - cell "11m" [ref=f1e415]
+                - cell "Active" [ref=f1e416]
+                - cell [ref=f1e417]:
+                  - link "View" [ref=f1e418] [cursor=pointer]:
+                    - /url: /employees/dfa04f5d-16fe-42ab-a6c2-a3435f6de461
+              - row [ref=f1e419]:
+                - cell "EM Einstein Mwaita Chief Creative Officer" [ref=f1e420]:
+                  - generic [ref=f1e421]:
+                    - generic [ref=f1e422]: EM
+                    - generic [ref=f1e423]:
+                      - paragraph [ref=f1e424]: Einstein Mwaita
+                      - paragraph [ref=f1e425]: Chief Creative Officer
+                - cell "Studio / Creative" [ref=f1e426]
+                - cell "Einstein@wetpaint.co.za" [ref=f1e430]
+                - cell "Petra Mc Cardle" [ref=f1e431]
+                - cell "01 Feb 2013" [ref=f1e432]
+                - cell "13y" [ref=f1e433]
+                - cell "Active" [ref=f1e434]
+                - cell [ref=f1e435]:
+                  - link "View" [ref=f1e436] [cursor=pointer]:
+                    - /url: /employees/f79deb45-0359-4573-b3cd-d6eca692efe5
+              - row [ref=f1e437]:
+                - cell "PN Philiswa Senzelweyinkosi Ndzoyiya Social Media Specialist" [ref=f1e438]:
+                  - generic [ref=f1e439]:
+                    - generic [ref=f1e440]: PN
+                    - generic [ref=f1e441]:
+                      - paragraph [ref=f1e442]: Philiswa Senzelweyinkosi Ndzoyiya
+                      - paragraph [ref=f1e443]: Social Media Specialist
+                - cell "Social" [ref=f1e444]
+                - cell "Philiswa@wetpaint.co.za" [ref=f1e448]
+                - cell "Suwilanji Kabwe" [ref=f1e449]
+                - cell "23 Mar 2026" [ref=f1e450]
+                - cell "3m" [ref=f1e451]
+                - cell "Onboarding" [ref=f1e452]
+                - cell [ref=f1e453]:
+                  - link "View" [ref=f1e454] [cursor=pointer]:
+                    - /url: /employees/87b03b81-385c-4b23-a4cd-4b1cf66ba26a
+              - row [ref=f1e455]:
+                - cell "SN Susan Nohumba Account Manager" [ref=f1e456]:
+                  - generic [ref=f1e457]:
+                    - generic [ref=f1e458]: SN
+                    - generic [ref=f1e459]:
+                      - paragraph [ref=f1e460]: Susan Nohumba
+                      - paragraph [ref=f1e461]: Account Manager
+                - cell "Admin / Client Services" [ref=f1e462]
+                - cell "Susan@wetpaint.co.za" [ref=f1e466]
+                - cell "Petra Mc Cardle" [ref=f1e467]
+                - cell "01 Apr 2018" [ref=f1e468]
+                - cell "8y" [ref=f1e469]
+                - cell "Active" [ref=f1e470]
+                - cell [ref=f1e471]:
+                  - link "View" [ref=f1e472] [cursor=pointer]:
+                    - /url: /employees/3624a087-e166-4866-bafa-b657275b7414
+              - row [ref=f1e473]:
+                - cell "GP Gloria Phetoe Receptionist" [ref=f1e474]:
+                  - generic [ref=f1e475]:
+                    - generic [ref=f1e476]: GP
+                    - generic [ref=f1e477]:
+                      - paragraph [ref=f1e478]: Gloria Phetoe
+                      - paragraph [ref=f1e479]: Receptionist
+                - cell "Admin / Client Services" [ref=f1e480]
+                - cell "Gloria@wetpaint.co.za" [ref=f1e484]
+                - cell "Lorna Ashley Banfield" [ref=f1e485]
+                - cell "01 May 2011" [ref=f1e486]
+                - cell "15y" [ref=f1e487]
+                - cell "Active" [ref=f1e488]
+                - cell [ref=f1e489]:
+                  - link "View" [ref=f1e490] [cursor=pointer]:
+                    - /url: /employees/d6672c16-5605-439c-a34b-1c3eab052438
+              - row [ref=f1e491]:
+                - cell "SR Sechaba Rataemane Content Producer" [ref=f1e492]:
+                  - generic [ref=f1e493]:
+                    - generic [ref=f1e494]: SR
+                    - generic [ref=f1e495]:
+                      - paragraph [ref=f1e496]: Sechaba Rataemane
+                      - paragraph [ref=f1e497]: Content Producer
+                - cell "Studio" [ref=f1e498]
+                - cell "Sechaba@wetpaint.co.za" [ref=f1e502]
+                - cell "Einstein Mwaita" [ref=f1e503]
+                - cell "07 Apr 2025" [ref=f1e504]
+                - cell "1y" [ref=f1e505]
+                - cell "Active" [ref=f1e506]
+                - cell [ref=f1e507]:
+                  - link "View" [ref=f1e508] [cursor=pointer]:
+                    - /url: /employees/3d5c596e-fbc4-4fae-92bb-b6561cdbd1b2
+              - row [ref=f1e509]:
+                - cell "MS Minesh Singh Web Developer" [ref=f1e510]:
+                  - generic [ref=f1e511]:
+                    - generic [ref=f1e512]: MS
+                    - generic [ref=f1e513]:
+                      - paragraph [ref=f1e514]: Minesh Singh
+                      - paragraph [ref=f1e515]: Web Developer
+                - cell "Development" [ref=f1e516]
+                - cell "Minesh@wetpaint.co.za" [ref=f1e520]
+                - cell "Kerry Ann Whyte" [ref=f1e521]
+                - cell "06 Jul 2015" [ref=f1e522]
+                - cell "11y" [ref=f1e523]
+                - cell "Active" [ref=f1e524]
+                - cell [ref=f1e525]:
+                  - link "View" [ref=f1e526] [cursor=pointer]:
+                    - /url: /employees/bfe33140-d31a-4756-95d2-431747f0b069
+              - row [ref=f1e527]:
+                - cell "KW Kerry Ann Whyte Executive Director" [ref=f1e528]:
+                  - generic [ref=f1e529]:
+                    - generic [ref=f1e530]: KW
+                    - generic [ref=f1e531]:
+                      - paragraph [ref=f1e532]: Kerry Ann Whyte
+                      - paragraph [ref=f1e533]: Executive Director
+                - cell "Development" [ref=f1e534]
+                - cell "Kerry@wetpaint.co.za" [ref=f1e538]
+                - cell "Petra Mc Cardle" [ref=f1e539]
+                - cell "21 May 2002" [ref=f1e540]
+                - cell "24y" [ref=f1e541]
+                - cell "Active" [ref=f1e542]
+                - cell [ref=f1e543]:
+                  - link "View" [ref=f1e544] [cursor=pointer]:
+                    - /url: /employees/2e2ab762-db93-424b-8890-f8f8bf46beff
+  - button "Open Next.js Dev Tools" [ref=f1e550] [cursor=pointer]

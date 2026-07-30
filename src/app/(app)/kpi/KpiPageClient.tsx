@@ -1,11 +1,11 @@
 "use client"
 
-import { useState, useEffect, useMemo, useCallback, useRef } from "react"
+import { useState, useEffect, useMemo, useCallback } from "react"
 import {
   ChevronDown, ChevronRight, ChevronLeft, Plus, Trash2, X, Check,
   Users, UserPlus, Send, Clock, CheckCircle2, XCircle,
   Loader2, BarChart3, FileText, Target, Heart, Building2,
-  Upload, Search, Pencil, SlidersHorizontal, ArrowUp, ArrowDown, Download, FileSpreadsheet, RotateCcw,
+  Search, Pencil, SlidersHorizontal, ArrowUp, ArrowDown, RotateCcw,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -1229,7 +1229,7 @@ function StaffRow({ employee, reviews, scores, reviewTemplates, onOpen }: {
 
 // ─── Employee Review Detail (single-person full view) ─────────────────────────────
 
-function EmployeeReviewDetail({ employee, reviews, scores, reviewTemplates, finalComments, allEmployees, currentEmployeeId, onScoreChange, onSaveFinalComment, onAddInvitee, onRemoveInvitee, onSetSections, onStatusChange, onDelete, onAddItem, onEditItem, onRemoveItem, onResetItem, onUpdateReviewDetails, onCreateReview, onBack, initialQuarter, onExportScores }: {
+function EmployeeReviewDetail({ employee, reviews, scores, reviewTemplates, finalComments, allEmployees, currentEmployeeId, onScoreChange, onSaveFinalComment, onAddInvitee, onRemoveInvitee, onSetSections, onStatusChange, onDelete, onAddItem, onEditItem, onRemoveItem, onResetItem, onUpdateReviewDetails, onCreateReview, onBack, initialQuarter }: {
   employee: Employee
   reviews: Review[]
   scores: Record<string, Score[]>
@@ -1252,9 +1252,7 @@ function EmployeeReviewDetail({ employee, reviews, scores, reviewTemplates, fina
   onCreateReview: (employeeId: string, quarter: Quarter) => void
   onBack: () => void
   initialQuarter?: Quarter
-  onExportScores: (format: "csv" | "xlsx", reviewId?: string) => Promise<void>
 }) {
-  const [exportingOne, setExportingOne] = useState(false)
   const reviewByQuarter = useMemo(() => {
     const map: Partial<Record<Quarter, Review>> = {}
     for (const r of reviews) {
@@ -1292,13 +1290,6 @@ function EmployeeReviewDetail({ employee, reviews, scores, reviewTemplates, fina
               {employee.job_title}{deptName ? ` · ${deptName}` : ""}
             </div>
           </div>
-          {activeReview && (
-            <Button size="sm" variant="outline" disabled={exportingOne}
-              onClick={async () => { setExportingOne(true); await onExportScores("xlsx", activeReview.id); setExportingOne(false) }}
-              className="gap-1.5 h-8 text-xs shrink-0">
-              {exportingOne ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />} Export
-            </Button>
-          )}
         </div>
       </div>
 
@@ -1366,7 +1357,7 @@ function EmployeeReviewDetail({ employee, reviews, scores, reviewTemplates, fina
 
 // ─── HR Admin View ──────────────────────────────────────────────────────────────
 
-function HRAdminView({ reviewTemplates, reviews, scores, finalComments, allEmployees, currentEmployeeId, onScoreChange, onSaveFinalComment, onAddInvitee, onRemoveInvitee, onSetSections, onStatusChange, onDelete, onAddItem, onEditItem, onRemoveItem, onResetItem, onUpdateReviewDetails, onShowCreate, onManageTemplate, onExportScores, onExportWorkbook, onImportScores, onImportWorkbook }: {
+function HRAdminView({ reviewTemplates, reviews, scores, finalComments, allEmployees, currentEmployeeId, onScoreChange, onSaveFinalComment, onAddInvitee, onRemoveInvitee, onSetSections, onStatusChange, onDelete, onAddItem, onEditItem, onRemoveItem, onResetItem, onUpdateReviewDetails, onShowCreate, onManageTemplate }: {
   reviewTemplates: Record<string, TemplateSection[]>
   reviews: Review[]
   scores: Record<string, Score[]>
@@ -1387,15 +1378,8 @@ function HRAdminView({ reviewTemplates, reviews, scores, finalComments, allEmplo
   onUpdateReviewDetails?: (reviewId: string, data: { title: string; period: string; deadline: string | null }) => Promise<void>
   onShowCreate: (employeeId?: string, quarter?: Quarter) => void
   onManageTemplate: () => void
-  onExportScores: (format: "csv" | "xlsx", reviewId?: string) => Promise<void>
-  onExportWorkbook: () => Promise<void>
-  onImportScores: (file: File) => Promise<void>
-  onImportWorkbook: (file: File) => Promise<void>
 }) {
   const [searchQ, setSearchQ]         = useState("")
-  const scoresFileRef = useRef<HTMLInputElement>(null)
-  const workbookFileRef = useRef<HTMLInputElement>(null)
-  const [scoresBusy, setScoresBusy]   = useState(false)
   const [deptFilter, setDeptFilter]   = useState("all")
   const [statusFilter, setStatusFilter] = useState("all")
   const [selectedId, setSelectedId]   = useState<string | null>(null)
@@ -1482,7 +1466,6 @@ function HRAdminView({ reviewTemplates, reviews, scores, finalComments, allEmplo
         onCreateReview={(empId, quarter) => onShowCreate(empId, quarter)}
         onBack={() => setSelectedId(null)}
         initialQuarter={selectedQuarter}
-        onExportScores={onExportScores}
       />
     )
   }
@@ -1498,54 +1481,6 @@ function HRAdminView({ reviewTemplates, reviews, scores, finalComments, allEmplo
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
-          <input
-            ref={scoresFileRef}
-            type="file"
-            accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            className="hidden"
-            onChange={async (e) => {
-              const f = e.target.files?.[0]
-              e.target.value = ""
-              if (!f) return
-              setScoresBusy(true)
-              await onImportScores(f)
-              setScoresBusy(false)
-            }}
-          />
-          <input
-            ref={workbookFileRef}
-            type="file"
-            accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            className="hidden"
-            onChange={async (e) => {
-              const f = e.target.files?.[0]
-              e.target.value = ""
-              if (!f) return
-              setScoresBusy(true)
-              await onImportWorkbook(f)
-              setScoresBusy(false)
-            }}
-          />
-          <Button size="sm" variant="outline" disabled={scoresBusy}
-            onClick={async () => { setScoresBusy(true); await onExportWorkbook(); setScoresBusy(false) }}
-            className="gap-1.5 h-9 text-xs">
-            <FileSpreadsheet size={13} /> Export staff workbook
-          </Button>
-          <Button size="sm" variant="outline" disabled={scoresBusy}
-            onClick={() => workbookFileRef.current?.click()}
-            className="gap-1.5 h-9 text-xs">
-            {scoresBusy ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />} Import workbook
-          </Button>
-          <Button size="sm" variant="outline" disabled={scoresBusy}
-            onClick={async () => { setScoresBusy(true); await onExportScores("xlsx"); setScoresBusy(false) }}
-            className="gap-1.5 h-9 text-xs">
-            <Download size={13} /> Export all scores
-          </Button>
-          <Button size="sm" variant="outline" disabled={scoresBusy}
-            onClick={() => scoresFileRef.current?.click()}
-            className="gap-1.5 h-9 text-xs">
-            {scoresBusy ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />} Import scores
-          </Button>
           <Button size="sm" variant="outline" onClick={onManageTemplate} className="gap-1.5 h-9 text-xs">
             <SlidersHorizontal size={13} /> Manage Template
           </Button>
@@ -1791,7 +1726,7 @@ function GlobalItemsEditor({ section, onAdd, onEdit, onDelete }: {
   )
 }
 
-function ManageTemplateModal({ template, currentPeriod, onClose, onSetPeriod, onCreateSection, onRenameSection, onReorderSection, onDeleteSection, onExport, onImport, onAddGlobalItem, onEditGlobalItem, onDeleteGlobalItem }: {
+function ManageTemplateModal({ template, currentPeriod, onClose, onSetPeriod, onCreateSection, onRenameSection, onReorderSection, onDeleteSection, onAddGlobalItem, onEditGlobalItem, onDeleteGlobalItem }: {
   template: TemplateSection[]
   currentPeriod: string
   onClose: () => void
@@ -1800,8 +1735,6 @@ function ManageTemplateModal({ template, currentPeriod, onClose, onSetPeriod, on
   onRenameSection: (id: string, title: string) => Promise<void>
   onReorderSection: (id: string, direction: "up" | "down") => Promise<void>
   onDeleteSection: (id: string, title: string) => void
-  onExport: (format: "csv" | "xlsx") => Promise<void>
-  onImport: (file: File) => Promise<void>
   onAddGlobalItem: (sectionId: string, data: { title: string; description: string; min_score: number; max_score: number }) => Promise<void>
   onEditGlobalItem: (itemId: string, data: { title: string; description: string; min_score: number; max_score: number }) => Promise<void>
   onDeleteGlobalItem: (itemId: string, title: string) => void
@@ -1817,9 +1750,6 @@ function ManageTemplateModal({ template, currentPeriod, onClose, onSetPeriod, on
   const [editId, setEditId]           = useState<string | null>(null)
   const [editVal, setEditVal]         = useState("")
   const [savingEdit, setSavingEdit]   = useState(false)
-  const [importing, setImporting]     = useState(false)
-  const [exporting, setExporting]     = useState(false)
-  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) { if (e.key === "Escape") onClose() }
@@ -1858,51 +1788,6 @@ function ManageTemplateModal({ template, currentPeriod, onClose, onSetPeriod, on
               className="h-9 text-xs gap-1"
             >
               {savingPeriod ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} />} Save
-            </Button>
-          </div>
-        </div>
-
-        {/* Import / Export */}
-        <div className="rounded-xl border border-border bg-muted/10 p-4 space-y-3">
-          <div className="flex items-center gap-2">
-            <FileSpreadsheet size={15} className="text-primary" />
-            <p className="text-sm font-semibold">Import / Export template</p>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Export the current template as a spreadsheet, add the rest of your sections and KPIs in the
-            same columns, then import it back. Matching is by section &amp; KPI name — existing rows are
-            updated, new ones added, and anything not in the file is left untouched.
-          </p>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button size="sm" variant="outline" disabled={exporting}
-              onClick={async () => { setExporting(true); await onExport("csv"); setExporting(false) }}
-              className="h-8 text-xs gap-1.5">
-              <Download size={12} /> Export CSV
-            </Button>
-            <Button size="sm" variant="outline" disabled={exporting}
-              onClick={async () => { setExporting(true); await onExport("xlsx"); setExporting(false) }}
-              className="h-8 text-xs gap-1.5">
-              <Download size={12} /> Export XLSX
-            </Button>
-            <div className="w-px h-6 bg-border mx-1" />
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-              className="hidden"
-              onChange={async (e) => {
-                const f = e.target.files?.[0]
-                if (!f) return
-                setImporting(true)
-                await onImport(f)
-                setImporting(false)
-                if (fileInputRef.current) fileInputRef.current.value = ""
-              }}
-            />
-            <Button size="sm" disabled={importing}
-              onClick={() => fileInputRef.current?.click()}
-              className="h-8 text-xs gap-1.5">
-              {importing ? <Loader2 size={12} className="animate-spin" /> : <Upload size={12} />} Import file
             </Button>
           </div>
         </div>
@@ -2299,104 +2184,6 @@ export function KpiPageClient({ isHR, currentEmployeeId }: { isHR: boolean; curr
     else showToast("Failed to delete section")
   }
 
-  async function handleExportTemplate(format: "csv" | "xlsx") {
-    const res = await fetch(`/api/kpi/template/export?format=${format}`)
-    if (!res.ok) { showToast("Export failed"); return }
-    const blob = await res.blob()
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = `kpi-template.${format}`
-    document.body.appendChild(a)
-    a.click()
-    a.remove()
-    URL.revokeObjectURL(url)
-  }
-
-  async function handleImportTemplate(file: File) {
-    const fd = new FormData()
-    fd.append("file", file)
-    const res = await fetch("/api/kpi/template/import", { method: "POST", body: fd })
-    const data = await res.json().catch(() => null)
-    if (res.ok) {
-      showToast(data?.message ?? "Import complete")
-      if (Array.isArray(data?.errors) && data.errors.length) console.warn("[KPI import] row errors:", data.errors)
-      await loadAll({ silent: true })
-    } else {
-      showToast(data?.error ?? "Import failed")
-    }
-  }
-
-  // Staff KPI scores round-trip — export one review (individual) or all at once.
-  async function handleExportScores(format: "csv" | "xlsx", reviewId?: string) {
-    const qs = new URLSearchParams({ format })
-    if (reviewId) qs.set("review_id", reviewId)
-    const res = await fetch(`/api/kpi/staff-scores/export?${qs.toString()}`)
-    if (!res.ok) {
-      const err = await res.json().catch(() => null)
-      showToast(err?.error ?? "Export failed")
-      return
-    }
-    const blob = await res.blob()
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = `${reviewId ? "kpi-scores-review" : "kpi-scores-all"}.${format}`
-    document.body.appendChild(a)
-    a.click()
-    a.remove()
-    URL.revokeObjectURL(url)
-  }
-
-  // Blank scoring workbook — one worksheet per active staff member, each with
-  // the KPI template rows and empty Q1–Q4 columns to fill in offline.
-  async function handleExportWorkbook() {
-    const res = await fetch(`/api/kpi/staff-workbook/export`)
-    if (!res.ok) {
-      const err = await res.json().catch(() => null)
-      showToast(err?.error ?? "Export failed")
-      return
-    }
-    const blob = await res.blob()
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = "kpi-staff-workbook.xlsx"
-    document.body.appendChild(a)
-    a.click()
-    a.remove()
-    URL.revokeObjectURL(url)
-  }
-
-  async function handleImportScores(file: File) {
-    const fd = new FormData()
-    fd.append("file", file)
-    const res = await fetch("/api/kpi/staff-scores/import", { method: "POST", body: fd })
-    const data = await res.json().catch(() => null)
-    if (res.ok) {
-      showToast(data?.message ?? "Import complete")
-      if (Array.isArray(data?.errors) && data.errors.length) console.warn("[KPI scores import] row errors:", data.errors)
-      await loadAll({ silent: true })
-    } else {
-      showToast(data?.error ?? "Import failed")
-    }
-  }
-
-  // Re-import the filled per-staff workbook (Q1–Q4 scores + comments per tab).
-  async function handleImportWorkbook(file: File) {
-    const fd = new FormData()
-    fd.append("file", file)
-    const res = await fetch("/api/kpi/staff-workbook/import", { method: "POST", body: fd })
-    const data = await res.json().catch(() => null)
-    if (res.ok) {
-      showToast(data?.message ?? "Import complete")
-      if (Array.isArray(data?.errors) && data.errors.length) console.warn("[KPI workbook import] issues:", data.errors)
-      await loadAll({ silent: true })
-    } else {
-      showToast(data?.error ?? "Import failed")
-    }
-  }
-
   async function handleCreate(d: { employee_id: string; period: string; title: string; deadline: string }) {
     setCreating(true)
     const res = await fetch("/api/kpi/reviews", {
@@ -2488,10 +2275,6 @@ export function KpiPageClient({ isHR, currentEmployeeId }: { isHR: boolean; curr
               onUpdateReviewDetails={handleUpdateReviewDetails}
               onShowCreate={handleShowCreate}
               onManageTemplate={() => setShowManage(true)}
-              onExportScores={handleExportScores}
-              onExportWorkbook={handleExportWorkbook}
-              onImportScores={handleImportScores}
-              onImportWorkbook={handleImportWorkbook}
             />
           )}
 
@@ -2552,8 +2335,6 @@ export function KpiPageClient({ isHR, currentEmployeeId }: { isHR: boolean; curr
           onRenameSection={handleRenameSection}
           onReorderSection={handleReorderSection}
           onDeleteSection={handleDeleteSection}
-          onExport={handleExportTemplate}
-          onImport={handleImportTemplate}
           onAddGlobalItem={handleAddItem}
           onEditGlobalItem={handleEditItem}
           onDeleteGlobalItem={handleDeleteItem}

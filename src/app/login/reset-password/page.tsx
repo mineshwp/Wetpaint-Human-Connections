@@ -190,8 +190,8 @@ export default function ResetPasswordPage() {
             <Image
               src="/wp-logo.png"
               alt="Wetpaint"
-              width={200}
-              height={200}
+              width={320}
+              height={214}
               className="object-contain h-auto w-auto"
               priority
             />
