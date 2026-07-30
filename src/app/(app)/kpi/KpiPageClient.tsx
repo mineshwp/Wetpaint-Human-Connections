@@ -1229,7 +1229,22 @@ function StaffRow({ employee, reviews, scores, reviewTemplates, onOpen }: {
               const reviewScores = scores[review.id] ?? []
               const rtpl = reviewTemplates[review.id] ?? []
               const totalMax = rtpl.reduce((a, s) => a + (s.kpi_template_items ?? []).reduce((b, i) => b + i.max_score, 0), 0)
-              const current = reviewScores.reduce((a, s) => a + (s.score ?? 0), 0)
+              // Per item, the score is the AVERAGE of all submitted scores (not
+              // the raw sum of every reviewer's row) — then summed across items,
+              // matching the detail view. A naive sum overshoots the max.
+              const scoresByItem = new Map<string, number[]>()
+              for (const s of reviewScores) {
+                if (s.score != null) {
+                  const arr = scoresByItem.get(s.item_id) ?? []
+                  arr.push(s.score)
+                  scoresByItem.set(s.item_id, arr)
+                }
+              }
+              const current = rtpl.reduce((total, s) =>
+                total + (s.kpi_template_items ?? []).reduce((b, i) => {
+                  const vals = scoresByItem.get(i.id)
+                  return b + (vals && vals.length ? vals.reduce((x, y) => x + y, 0) / vals.length : 0)
+                }, 0), 0)
               return (
                 <button
                   key={q}
