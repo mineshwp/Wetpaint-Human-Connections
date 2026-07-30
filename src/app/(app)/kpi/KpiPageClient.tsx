@@ -451,8 +451,8 @@ function KpiCard({ item, sectionName, scores, invitees, isHR, currentEmployeeId,
 
 // ─── Section Accordion ──────────────────────────────────────────────────────────
 
-function SectionAccordion({ section, sectionIndex, scores, invitees, isHR, currentEmployeeId, onScoreChange, onAddItem, onEditItem, onDeleteItem, onResetItem, defaultOpen }: {
-  section: TemplateSection; sectionIndex: number; scores: Score[]; invitees: ReviewInvitee[]
+function SectionAccordion({ section, scores, invitees, isHR, currentEmployeeId, onScoreChange, onAddItem, onEditItem, onDeleteItem, onResetItem, defaultOpen }: {
+  section: TemplateSection; scores: Score[]; invitees: ReviewInvitee[]
   isHR: boolean; currentEmployeeId: string | null
   onScoreChange: (itemId: string, score: number | null, comments: string, scorerId: string | null) => Promise<void>
   onAddItem?: (sectionId: string, data: { title: string; description: string; min_score: number; max_score: number }) => Promise<void>
@@ -461,7 +461,7 @@ function SectionAccordion({ section, sectionIndex, scores, invitees, isHR, curre
   onResetItem?: (itemId: string) => void
   defaultOpen?: boolean
 }) {
-  const [open, setOpen]           = useState(defaultOpen ?? sectionIndex === 0)
+  const [open, setOpen]           = useState(defaultOpen ?? false)
   const [showAdd, setShowAdd]     = useState(false)
   const [newTitle, setNewTitle]   = useState("")
   const [newDesc, setNewDesc]     = useState("")
@@ -955,7 +955,7 @@ function FinalCommentsAccordion({ visible, byAuthor, withComment, isHR, currentE
   isHR: boolean; currentEmployeeId: string | null
   onSave: (authorId: string | null, comment: string) => Promise<void>
 }) {
-  const [open, setOpen] = useState(true)
+  const [open, setOpen] = useState(false)
 
   return (
     <div className={cn("rounded-2xl border bg-card overflow-hidden transition-all", open ? "border-border shadow-md" : "border-border shadow-sm")}>
@@ -1158,9 +1158,9 @@ function QuarterPanel({ review, template, scores, finalComments, allEmployees, c
             <BarChart3 size={28} className="opacity-30" />
             <p className="text-sm">No KPI template configured yet.</p>
           </div>
-        ) : reviewTemplate.map((section, idx) => (
+        ) : reviewTemplate.map((section) => (
           <SectionAccordion
-            key={section.id} section={section} sectionIndex={idx}
+            key={section.id} section={section}
             scores={scores} invitees={review.kpi_review_invitees ?? []}
             isHR={isHR} currentEmployeeId={currentEmployeeId}
             onScoreChange={(itemId, score, comments, scorerId) => onScoreChange(review.id, itemId, score, comments, scorerId)}
@@ -1168,7 +1168,7 @@ function QuarterPanel({ review, template, scores, finalComments, allEmployees, c
             onEditItem={onEditItem ? (itemId, data) => onEditItem(review.id, itemId, data) : undefined}
             onDeleteItem={onRemoveItem ? (itemId, title) => onRemoveItem(review.id, itemId, title) : undefined}
             onResetItem={onResetItem ? (itemId) => onResetItem(review.id, itemId) : undefined}
-            defaultOpen={idx === 0}
+            defaultOpen={false}
           />
         ))}
       </div>
@@ -1676,13 +1676,13 @@ function MyAssignmentsView({ reviews, scores, reviewTemplates, finalComments, cu
               if (!inviteeActive && !subjectReadOnly) return null
               return (
                 <div className="px-5 py-5 space-y-3">
-                  {(reviewTemplates[review.id] ?? []).map((section, idx) => (
+                  {(reviewTemplates[review.id] ?? []).map((section) => (
                     <SectionAccordion
-                      key={section.id} section={section} sectionIndex={idx}
+                      key={section.id} section={section}
                       scores={scores[review.id] ?? []} invitees={review.kpi_review_invitees ?? []}
                       isHR={false} currentEmployeeId={currentEmployeeId}
                       onScoreChange={(itemId, score, comments, scorerId) => onScoreChange(review.id, itemId, score, comments, scorerId)}
-                      defaultOpen={idx === 0}
+                      defaultOpen={false}
                     />
                   ))}
                   <FinalComments
