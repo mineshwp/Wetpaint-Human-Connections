@@ -230,8 +230,8 @@ function ScorerRow({ name, role, scoreObj, canEdit, item, onSave }: {
 
 // ─── KPI Card ───────────────────────────────────────────────────────────────────
 
-function KpiCard({ item, sectionType, sectionName, scores, invitees, isHR, currentEmployeeId, onScoreChange, onEditItem, onDeleteItem, onResetItem }: {
-  item: TemplateItem; sectionType: "invitee" | "hr"; sectionName: string
+function KpiCard({ item, sectionName, scores, invitees, isHR, currentEmployeeId, onScoreChange, onEditItem, onDeleteItem, onResetItem }: {
+  item: TemplateItem; sectionName: string
   scores: Score[]; invitees: ReviewInvitee[]; isHR: boolean; currentEmployeeId: string | null
   onScoreChange: (itemId: string, score: number | null, comments: string, scorerId: string | null) => Promise<void>
   onEditItem?: (itemId: string, data: { title: string; description: string; min_score: number; max_score: number }) => Promise<void>
@@ -248,12 +248,13 @@ function KpiCard({ item, sectionType, sectionName, scores, invitees, isHR, curre
   const scoreMap = new Map<string, Score>()
   for (const s of scores) scoreMap.set(`${s.item_id}::${s.scorer_id ?? "hr"}`, s)
 
-  // Only reviewers assigned to this item's section can score it. An HR/Admin
-  // row (scorer_id null) is also shown for HR sections and wherever an
-  // HR/Admin score already exists (preserves historical/imported data).
+  // Only reviewers assigned to this item's section can score it. There is no
+  // generic "HR / Admin" scorer — HR scores under their own name as a named
+  // reviewer. The legacy HR row is shown ONLY if a null-scorer score already
+  // exists, so historical/imported data is never hidden.
   const reviewers = assignedReviewers(invitees, item.section_id)
   const hrScoreObj = scoreMap.get(`${item.id}::hr`)
-  const showHrRow = sectionType === "hr" || hrScoreObj !== undefined
+  const showHrRow = hrScoreObj !== undefined
 
   const numericScores: number[] = []
   if (hrScoreObj?.score != null) numericScores.push(hrScoreObj.score)
@@ -475,7 +476,8 @@ function SectionAccordion({ section, sectionIndex, scores, invitees, isHR, curre
   // Reviewers assigned to this section score every item in it. An HR/Admin
   // score (scorer_id null) also counts where present or on HR sections.
   const reviewers = assignedReviewers(invitees, section.id)
-  const sectionHasHr = section.type === "hr" || items.some(i => scoreMap.get(`${i.id}::hr`) !== undefined)
+  // No generic HR/Admin scorer — only surface it if a legacy null-scorer score exists.
+  const sectionHasHr = items.some(i => scoreMap.get(`${i.id}::hr`) !== undefined)
 
   const sectionCurrent = items.reduce((total, item) => {
     const vals: number[] = []
@@ -552,7 +554,7 @@ function SectionAccordion({ section, sectionIndex, scores, invitees, isHR, curre
           ) : (
             items.map((item) => (
               <KpiCard
-                key={item.id} item={item} sectionType={section.type} sectionName={sectionLabel}
+                key={item.id} item={item} sectionName={sectionLabel}
                 scores={scores} invitees={invitees} isHR={isHR} currentEmployeeId={currentEmployeeId}
                 onScoreChange={onScoreChange} onEditItem={onEditItem} onDeleteItem={onDeleteItem} onResetItem={onResetItem}
               />
@@ -911,21 +913,25 @@ function FinalCommentRow({ name, role, comment, canEdit, onSave }: {
   )
 }
 
-function FinalComments({ invitees, comments, isHR, currentEmployeeId, onSave }: {
-  invitees: ReviewInvitee[]; comments: FinalComment[]
+function FinalComments({ invitees, comments, scores, isHR, currentEmployeeId, onSave }: {
+  invitees: ReviewInvitee[]; comments: FinalComment[]; scores: Score[]
   isHR: boolean; currentEmployeeId: string | null
   onSave: (authorId: string | null, comment: string) => Promise<void>
 }) {
-  const active = invitees.filter(i => i.status === "accepted" || i.status === "completed")
   const byAuthor = new Map<string, FinalComment>()
-  for (const c of comments) byAuthor.set(c.author_id ?? "hr", c)
+  for (const c of comments) if (c.author_id) byAuthor.set(c.author_id, c)
 
-  const rows: { key: string; authorId: string | null; name: string; role: string }[] = [
-    { key: "hr", authorId: null, name: "HR / Admin", role: "HR" },
-    ...active.map(i => ({ key: i.invitee_id, authorId: i.invitee_id as string | null, name: `${i.invitee.first_name} ${i.invitee.last_name}`, role: "Reviewer" })),
-  ]
+  // Only reviewers who submitted at least one numeric score can leave a final
+  // comment. Anyone who already left one is always kept (never hide saved data).
+  const scoredIds = new Set(
+    scores.filter(s => s.scorer_id != null && s.score != null).map(s => s.scorer_id as string)
+  )
+  const rows = invitees
+    .filter(i => scoredIds.has(i.invitee_id) || (byAuthor.get(i.invitee_id)?.comment ?? "") !== "")
+    .map(i => ({ key: i.invitee_id, authorId: i.invitee_id, name: `${i.invitee.first_name} ${i.invitee.last_name}`, role: "Reviewer" }))
+
   // Reviewers (non-HR view) see their own editable row plus any comment already left.
-  const visible = isHR ? rows : rows.filter(r => r.authorId === currentEmployeeId || (byAuthor.get(r.authorId ?? "hr")?.comment ?? "") !== "")
+  const visible = isHR ? rows : rows.filter(r => r.authorId === currentEmployeeId || (byAuthor.get(r.authorId)?.comment ?? "") !== "")
 
   return (
     <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
@@ -938,11 +944,11 @@ function FinalComments({ invitees, comments, isHR, currentEmployeeId, onSave }: 
       </div>
       <div className="divide-y divide-border">
         {visible.length === 0 ? (
-          <p className="px-5 py-4 text-xs text-muted-foreground italic">No reviewers on this review yet.</p>
+          <p className="px-5 py-4 text-xs text-muted-foreground italic">No reviewers have scored this review yet.</p>
         ) : visible.map(r => (
           <FinalCommentRow
             key={r.key} name={r.name} role={r.role}
-            comment={byAuthor.get(r.authorId ?? "hr")?.comment ?? ""}
+            comment={byAuthor.get(r.authorId)?.comment ?? ""}
             canEdit={isHR || r.authorId === currentEmployeeId}
             onSave={(text) => onSave(r.authorId, text)}
           />
@@ -1132,6 +1138,7 @@ function QuarterPanel({ review, template, scores, finalComments, allEmployees, c
       <FinalComments
         invitees={review.kpi_review_invitees ?? []}
         comments={finalComments}
+        scores={scores}
         isHR={isHR}
         currentEmployeeId={currentEmployeeId}
         onSave={(authorId, comment) => onSaveFinalComment(review.id, authorId, comment)}
@@ -1708,6 +1715,7 @@ function MyAssignmentsView({ reviews, scores, reviewTemplates, finalComments, cu
                   <FinalComments
                     invitees={review.kpi_review_invitees ?? []}
                     comments={finalComments[review.id] ?? []}
+                    scores={scores[review.id] ?? []}
                     isHR={false}
                     currentEmployeeId={currentEmployeeId}
                     onSave={(authorId, comment) => onSaveFinalComment(review.id, authorId, comment)}
