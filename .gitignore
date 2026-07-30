@@ -44,3 +44,7 @@ next-env.d.ts
 # HR data files — never commit
 /supplied-by-hr/
 tmp/
+
+# local debug scripts & playwright logs (not for repo)
+.playwright-mcp/
+scripts/
