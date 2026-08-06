@@ -136,7 +136,9 @@ POST   /api/employees/[id]/invite            → send Supabase invite email (HR 
 
 ```
 kpi_template_sections
-  id, title, type ("hr" | "invitee"), position, is_active
+  id, title, type ("hr" | "invitee"), position, is_active, period
+  # period scopes a template to one review period, e.g. "Q2 2026".
+  # Items inherit their period via section_id. Each period is its own template.
 
 kpi_template_items
   id, section_id, title, description, min_score, max_score, position, is_active
@@ -157,7 +159,8 @@ kpi_settings
 ### API routes needed
 
 ```
-GET    /api/kpi/template                           → all active sections + items
+GET    /api/kpi/template?period=Q2%202026          → one period's sections + items, plus { periods } list (defaults to current_period)
+POST   /api/kpi/template/clone                      → copy a period's template structure into a new period (HR only)
 GET    /api/kpi/reviews                            → all reviews (HR) or own assignments (staff/invitee)
 POST   /api/kpi/reviews                            → create review (HR only)
 GET    /api/kpi/reviews/[id]                       → single review with invitees
@@ -165,6 +168,7 @@ PATCH  /api/kpi/reviews/[id]                       → update status (HR only)
 DELETE /api/kpi/reviews/[id]                       → delete review (HR only)
 GET    /api/kpi/reviews/[id]/scores                → all scores for a review
 PUT    /api/kpi/reviews/[id]/scores                → upsert a score entry
+POST   /api/kpi/reviews/[id]/items/copy            → copy a staff member's custom KPIs (titles/descriptions only) from another of their reviews (HR only)
 POST   /api/kpi/reviews/[id]/invitees              → add invitees (HR only)
 DELETE /api/kpi/reviews/[id]/invitees              → remove invitee (HR only)
 POST   /api/kpi/invitees/[id]/respond              → accept or decline invite
@@ -307,6 +311,7 @@ Always return proper HTTP status codes: 400, 401, 403, 404, 500.
 | `PATCH/DELETE /api/employees/[id]/training/[id]` | ✅ Done |
 | KPI inline accordion on Training & KPIs tab | ✅ Done |
 | Leave tab removed (future phase) | ✅ Done |
+| KPI per-period templates (select/edit a period's template; new period copies from another) | ✅ Done |
 
 Update this table as features are completed.
 

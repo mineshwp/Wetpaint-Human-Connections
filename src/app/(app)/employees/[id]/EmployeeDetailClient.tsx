@@ -598,7 +598,9 @@ function KpiDetailPanel({ reviewId }: { reviewId: string }) {
       setError(null)
       try {
         const [tplRes, scoresRes] = await Promise.all([
-          fetch("/api/kpi/template"),
+          // Templates are per-period — use this review's own period template
+          // (so item IDs line up with its scores) rather than the global one.
+          fetch(`/api/kpi/reviews/${reviewId}/template`),
           fetch(`/api/kpi/reviews/${reviewId}/scores`),
         ])
         if (!tplRes.ok || !scoresRes.ok) throw new Error("Failed to load")

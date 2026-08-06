@@ -35,11 +35,24 @@ export async function GET(
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
+  // Templates are per-period: a review reads the template for its own period.
+  const { data: review, error: revErr } = await supabase
+    .from("kpi_reviews")
+    .select("period")
+    .eq("id", reviewId)
+    .maybeSingle()
+  if (revErr) {
+    console.error("[GET /api/kpi/reviews/[id]/template] review lookup", revErr)
+    return NextResponse.json({ error: "Failed to load template" }, { status: 500 })
+  }
+  if (!review) return NextResponse.json({ error: "Review not found" }, { status: 404 })
+
   const [{ data: sections, error: secErr }, { data: overrides }] = await Promise.all([
     supabase
       .from("kpi_template_sections")
       .select("id, title, type, position, is_active, kpi_template_items(id, section_id, title, description, min_score, max_score, position, is_active, review_id)")
       .eq("is_active", true)
+      .eq("period", review.period)
       .order("position"),
     supabase
       .from("kpi_review_item_overrides")

@@ -5,7 +5,7 @@ import {
   ChevronDown, ChevronRight, ChevronLeft, Plus, Trash2, X, Check,
   Users, UserPlus, Send, Clock, CheckCircle2, XCircle,
   Loader2, BarChart3, FileText, Target, Heart, Building2,
-  Search, Pencil, SlidersHorizontal, ArrowUp, ArrowDown, RotateCcw,
+  Search, Pencil, SlidersHorizontal, ArrowUp, ArrowDown, RotateCcw, Copy,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -451,7 +451,7 @@ function KpiCard({ item, sectionName, scores, invitees, isHR, currentEmployeeId,
 
 // ─── Section Accordion ──────────────────────────────────────────────────────────
 
-function SectionAccordion({ section, scores, invitees, isHR, currentEmployeeId, onScoreChange, onAddItem, onEditItem, onDeleteItem, onResetItem, defaultOpen }: {
+function SectionAccordion({ section, scores, invitees, isHR, currentEmployeeId, onScoreChange, onAddItem, onEditItem, onDeleteItem, onResetItem, onCopyItems, copySources, defaultOpen }: {
   section: TemplateSection; scores: Score[]; invitees: ReviewInvitee[]
   isHR: boolean; currentEmployeeId: string | null
   onScoreChange: (itemId: string, score: number | null, comments: string, scorerId: string | null) => Promise<void>
@@ -459,6 +459,8 @@ function SectionAccordion({ section, scores, invitees, isHR, currentEmployeeId, 
   onEditItem?: (itemId: string, data: { title: string; description: string; min_score: number; max_score: number }) => Promise<void>
   onDeleteItem?: (itemId: string, title: string) => void
   onResetItem?: (itemId: string) => void
+  onCopyItems?: (fromReviewId: string, sectionId: string) => Promise<void>
+  copySources?: { reviewId: string; period: string; count: number }[]
   defaultOpen?: boolean
 }) {
   const [open, setOpen]           = useState(defaultOpen ?? false)
@@ -467,6 +469,7 @@ function SectionAccordion({ section, scores, invitees, isHR, currentEmployeeId, 
   const [newDesc, setNewDesc]     = useState("")
   const [newMax, setNewMax]       = useState(10)
   const [addSaving, setAddSaving] = useState(false)
+  const [copyBusy, setCopyBusy]   = useState<string | null>(null)
 
   const items = section.kpi_template_items ?? []
   const sectionMax = items.reduce((a, i) => a + i.max_score, 0)
@@ -543,6 +546,19 @@ function SectionAccordion({ section, scores, invitees, isHR, currentEmployeeId, 
 
       {open && (
         <div className="bg-[#FAFBFC] p-5 flex flex-col gap-4">
+          {isHR && onCopyItems && copySources && copySources.length > 0 && (
+            <div className="rounded-xl border border-dashed border-primary/30 bg-primary/5 p-3 flex flex-wrap items-center gap-2">
+              <Copy size={13} className="text-primary shrink-0" />
+              <span className="text-xs text-muted-foreground">Copy this staff member&apos;s KPIs (titles &amp; descriptions only) from:</span>
+              {copySources.map(cs => (
+                <Button key={cs.reviewId} size="sm" variant="outline" disabled={copyBusy !== null}
+                  onClick={async () => { setCopyBusy(cs.reviewId); await onCopyItems(cs.reviewId, section.id); setCopyBusy(null) }}
+                  className="h-7 text-xs gap-1">
+                  {copyBusy === cs.reviewId ? <Loader2 size={10} className="animate-spin" /> : <Copy size={10} />} {cs.period} ({cs.count})
+                </Button>
+              ))}
+            </div>
+          )}
           {items.length === 0 && !showAdd ? (
             <div className="border-2 border-dashed border-border rounded-xl p-8 text-center bg-card">
               <div className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center mx-auto mb-3">
@@ -998,7 +1014,7 @@ function FinalCommentsAccordion({ visible, byAuthor, withComment, isHR, currentE
 
 // ─── Quarter Panel (within staff row) ──────────────────────────────────────────
 
-function QuarterPanel({ review, template, scores, finalComments, allEmployees, currentEmployeeId, isHR, onScoreChange, onSaveFinalComment, onAddInvitee, onRemoveInvitee, onSetSections, onStatusChange, onDelete, onAddItem, onEditItem, onRemoveItem, onResetItem, onUpdateReviewDetails }: {
+function QuarterPanel({ review, template, scores, finalComments, allEmployees, currentEmployeeId, isHR, onScoreChange, onSaveFinalComment, onAddInvitee, onRemoveInvitee, onSetSections, onStatusChange, onDelete, onAddItem, onEditItem, onRemoveItem, onResetItem, onCopyItems, otherReviews, onUpdateReviewDetails }: {
   review: Review; template: TemplateSection[]; scores: Score[]; finalComments: FinalComment[]
   allEmployees: Employee[]; currentEmployeeId: string | null; isHR: boolean
   onScoreChange: (reviewId: string, itemId: string, score: number | null, comments: string, scorerId: string | null) => Promise<void>
@@ -1012,6 +1028,8 @@ function QuarterPanel({ review, template, scores, finalComments, allEmployees, c
   onEditItem?: (reviewId: string, itemId: string, data: { title: string; description: string; min_score: number; max_score: number }) => Promise<void>
   onRemoveItem?: (reviewId: string, itemId: string, title: string) => void
   onResetItem?: (reviewId: string, itemId: string) => void
+  onCopyItems?: (reviewId: string, fromReviewId: string, sectionId: string) => Promise<void>
+  otherReviews?: { id: string; period: string; sections: { title: string; count: number }[] }[]
   onUpdateReviewDetails?: (reviewId: string, data: { title: string; period: string; deadline: string | null }) => Promise<void>
 }) {
   const invitees       = review.kpi_review_invitees ?? []
@@ -1158,7 +1176,17 @@ function QuarterPanel({ review, template, scores, finalComments, allEmployees, c
             <BarChart3 size={28} className="opacity-30" />
             <p className="text-sm">No KPI template configured yet.</p>
           </div>
-        ) : reviewTemplate.map((section) => (
+        ) : reviewTemplate.map((section) => {
+          // Which of this employee's other reviews have custom KPIs in a
+          // section with the same title — offered as copy sources.
+          const copySources = (otherReviews ?? [])
+            .map(or => ({
+              reviewId: or.id,
+              period: or.period,
+              count: or.sections.find(s => (s.title ?? "").trim().toLowerCase() === (section.title ?? "").trim().toLowerCase())?.count ?? 0,
+            }))
+            .filter(cs => cs.count > 0)
+          return (
           <SectionAccordion
             key={section.id} section={section}
             scores={scores} invitees={review.kpi_review_invitees ?? []}
@@ -1168,9 +1196,12 @@ function QuarterPanel({ review, template, scores, finalComments, allEmployees, c
             onEditItem={onEditItem ? (itemId, data) => onEditItem(review.id, itemId, data) : undefined}
             onDeleteItem={onRemoveItem ? (itemId, title) => onRemoveItem(review.id, itemId, title) : undefined}
             onResetItem={onResetItem ? (itemId) => onResetItem(review.id, itemId) : undefined}
+            onCopyItems={onCopyItems ? (fromReviewId, sectionId) => onCopyItems(review.id, fromReviewId, sectionId) : undefined}
+            copySources={copySources}
             defaultOpen={false}
           />
-        ))}
+          )
+        })}
       </div>
 
       <FinalComments
@@ -1282,7 +1313,7 @@ function StaffRow({ employee, reviews, scores, reviewTemplates, onOpen }: {
 
 // ─── Employee Review Detail (single-person full view) ─────────────────────────────
 
-function EmployeeReviewDetail({ employee, reviews, scores, reviewTemplates, finalComments, allEmployees, currentEmployeeId, onScoreChange, onSaveFinalComment, onAddInvitee, onRemoveInvitee, onSetSections, onStatusChange, onDelete, onAddItem, onEditItem, onRemoveItem, onResetItem, onUpdateReviewDetails, onCreateReview, onBack, initialQuarter }: {
+function EmployeeReviewDetail({ employee, reviews, scores, reviewTemplates, finalComments, allEmployees, currentEmployeeId, onScoreChange, onSaveFinalComment, onAddInvitee, onRemoveInvitee, onSetSections, onStatusChange, onDelete, onAddItem, onEditItem, onRemoveItem, onResetItem, onCopyItems, onUpdateReviewDetails, onCreateReview, onBack, initialQuarter }: {
   employee: Employee
   reviews: Review[]
   scores: Record<string, Score[]>
@@ -1301,6 +1332,7 @@ function EmployeeReviewDetail({ employee, reviews, scores, reviewTemplates, fina
   onEditItem?: (reviewId: string, itemId: string, data: { title: string; description: string; min_score: number; max_score: number }) => Promise<void>
   onRemoveItem?: (reviewId: string, itemId: string, title: string) => void
   onResetItem?: (reviewId: string, itemId: string) => void
+  onCopyItems?: (reviewId: string, fromReviewId: string, sectionId: string) => Promise<void>
   onUpdateReviewDetails?: (reviewId: string, data: { title: string; period: string; deadline: string | null }) => Promise<void>
   onCreateReview: (employeeId: string, quarter: Quarter) => void
   onBack: () => void
@@ -1327,6 +1359,22 @@ function EmployeeReviewDetail({ employee, reviews, scores, reviewTemplates, fina
 
   const [activeQuarter, setActiveQuarter] = useState<Quarter>(initialQuarter ?? visibleQuarters[0] ?? 1)
   const activeReview = reviewByQuarter[activeQuarter]
+
+  // This employee's OTHER reviews, with per-section custom-KPI counts — used to
+  // offer "copy from a previous quarter" on sections that hold per-staff KPIs.
+  const otherReviews = useMemo(() => {
+    if (!activeReview) return []
+    return reviews
+      .filter(r => r.id !== activeReview.id)
+      .map(r => ({
+        id: r.id,
+        period: r.period,
+        sections: (reviewTemplates[r.id] ?? []).map(s => ({
+          title: s.title,
+          count: (s.kpi_template_items ?? []).filter(i => i._custom).length,
+        })),
+      }))
+  }, [reviews, reviewTemplates, activeReview])
 
   return (
     <div className="space-y-4">
@@ -1393,6 +1441,8 @@ function EmployeeReviewDetail({ employee, reviews, scores, reviewTemplates, fina
           onEditItem={onEditItem}
           onRemoveItem={onRemoveItem}
           onResetItem={onResetItem}
+          onCopyItems={onCopyItems}
+          otherReviews={otherReviews}
           onUpdateReviewDetails={onUpdateReviewDetails}
         />
       ) : (
@@ -1410,7 +1460,7 @@ function EmployeeReviewDetail({ employee, reviews, scores, reviewTemplates, fina
 
 // ─── HR Admin View ──────────────────────────────────────────────────────────────
 
-function HRAdminView({ reviewTemplates, reviews, scores, finalComments, allEmployees, currentEmployeeId, onScoreChange, onSaveFinalComment, onAddInvitee, onRemoveInvitee, onSetSections, onStatusChange, onDelete, onAddItem, onEditItem, onRemoveItem, onResetItem, onUpdateReviewDetails, onShowCreate, onManageTemplate }: {
+function HRAdminView({ reviewTemplates, reviews, scores, finalComments, allEmployees, currentEmployeeId, onScoreChange, onSaveFinalComment, onAddInvitee, onRemoveInvitee, onSetSections, onStatusChange, onDelete, onAddItem, onEditItem, onRemoveItem, onResetItem, onCopyItems, onUpdateReviewDetails, onShowCreate, onManageTemplate }: {
   reviewTemplates: Record<string, TemplateSection[]>
   reviews: Review[]
   scores: Record<string, Score[]>
@@ -1428,6 +1478,7 @@ function HRAdminView({ reviewTemplates, reviews, scores, finalComments, allEmplo
   onEditItem?: (reviewId: string, itemId: string, data: { title: string; description: string; min_score: number; max_score: number }) => Promise<void>
   onRemoveItem?: (reviewId: string, itemId: string, title: string) => void
   onResetItem?: (reviewId: string, itemId: string) => void
+  onCopyItems?: (reviewId: string, fromReviewId: string, sectionId: string) => Promise<void>
   onUpdateReviewDetails?: (reviewId: string, data: { title: string; period: string; deadline: string | null }) => Promise<void>
   onShowCreate: (employeeId?: string, quarter?: Quarter) => void
   onManageTemplate: () => void
@@ -1515,6 +1566,7 @@ function HRAdminView({ reviewTemplates, reviews, scores, finalComments, allEmplo
         onEditItem={onEditItem}
         onRemoveItem={onRemoveItem}
         onResetItem={onResetItem}
+        onCopyItems={onCopyItems}
         onUpdateReviewDetails={onUpdateReviewDetails}
         onCreateReview={(empId, quarter) => onShowCreate(empId, quarter)}
         onBack={() => setSelectedId(null)}
@@ -1779,30 +1831,55 @@ function GlobalItemsEditor({ section, onAdd, onEdit, onDelete }: {
   )
 }
 
-function ManageTemplateModal({ template, currentPeriod, onClose, onSetPeriod, onCreateSection, onRenameSection, onReorderSection, onDeleteSection, onAddGlobalItem, onEditGlobalItem, onDeleteGlobalItem }: {
-  template: TemplateSection[]
+function ManageTemplateModal({ currentPeriod, onClose, onCurrentPeriodChange, showToast }: {
   currentPeriod: string
   onClose: () => void
-  onSetPeriod: (value: string) => Promise<void>
-  onCreateSection: (title: string, type: "hr" | "invitee") => Promise<void>
-  onRenameSection: (id: string, title: string) => Promise<void>
-  onReorderSection: (id: string, direction: "up" | "down") => Promise<void>
-  onDeleteSection: (id: string, title: string) => void
-  onAddGlobalItem: (sectionId: string, data: { title: string; description: string; min_score: number; max_score: number }) => Promise<void>
-  onEditGlobalItem: (itemId: string, data: { title: string; description: string; min_score: number; max_score: number }) => Promise<void>
-  onDeleteGlobalItem: (itemId: string, title: string) => void
+  onCurrentPeriodChange: (value: string) => void
+  showToast: (msg: string) => void
 }) {
   const [expandedSection, setExpandedSection] = useState<string | null>(null)
-  const sorted = [...template].sort((a, b) => a.position - b.position)
 
-  const [period, setPeriod]           = useState(currentPeriod)
-  const [savingPeriod, setSavingPeriod] = useState(false)
+  // Which template (period) is being edited, and its data.
+  const [periods, setPeriods]         = useState<string[]>([])
+  const [selectedPeriod, setSelectedPeriod] = useState(currentPeriod)
+  const [sections, setSections]       = useState<TemplateSection[]>([])
+  const [loading, setLoading]         = useState(true)
+  const [curPeriod, setCurPeriod]     = useState(currentPeriod)
+
   const [newTitle, setNewTitle]       = useState("")
   const [newType, setNewType]         = useState<"hr" | "invitee">("invitee")
   const [addingSection, setAddingSection] = useState(false)
   const [editId, setEditId]           = useState<string | null>(null)
   const [editVal, setEditVal]         = useState("")
   const [savingEdit, setSavingEdit]   = useState(false)
+  const [savingCurrent, setSavingCurrent] = useState(false)
+
+  // New-period (copy-from) panel.
+  const [showNewPeriod, setShowNewPeriod] = useState(false)
+  const [newPeriodName, setNewPeriodName] = useState("")
+  const [sourcePeriod, setSourcePeriod]   = useState(currentPeriod)
+  const [cloning, setCloning]             = useState(false)
+
+  const sorted = [...sections].sort((a, b) => a.position - b.position)
+
+  const load = useCallback(async (period: string) => {
+    setLoading(true)
+    try {
+      const res = await fetch(`/api/kpi/template?period=${encodeURIComponent(period)}`)
+      if (!res.ok) { showToast("Failed to load template"); return }
+      const data = await res.json()
+      setSections(Array.isArray(data.sections) ? data.sections : [])
+      const list: string[] = Array.isArray(data.periods) ? data.periods : []
+      // Keep the selected period visible even if it has no sections yet.
+      setPeriods(list.includes(period) ? list : [...list, period])
+      if (data.currentPeriod) setCurPeriod(data.currentPeriod)
+    } finally {
+      setLoading(false)
+    }
+  }, [showToast])
+
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { void load(selectedPeriod) }, [selectedPeriod, load])
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) { if (e.key === "Escape") onClose() }
@@ -1810,10 +1887,103 @@ function ManageTemplateModal({ template, currentPeriod, onClose, onSetPeriod, on
     return () => document.removeEventListener("keydown", onKey)
   }, [onClose])
 
+  async function createSection(title: string, type: "hr" | "invitee") {
+    const res = await fetch("/api/kpi/template/sections", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title, type, period: selectedPeriod }),
+    })
+    if (res.ok) { showToast("Section added"); await load(selectedPeriod) }
+    else showToast("Failed to add section")
+  }
+
+  async function renameSection(id: string, title: string) {
+    const res = await fetch(`/api/kpi/template/sections/${id}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title }),
+    })
+    if (res.ok) { showToast("Section renamed"); await load(selectedPeriod) }
+    else showToast("Failed to rename section")
+  }
+
+  async function reorderSection(id: string, direction: "up" | "down") {
+    const idx = sorted.findIndex(s => s.id === id)
+    const swapIdx = direction === "up" ? idx - 1 : idx + 1
+    if (idx < 0 || swapIdx < 0 || swapIdx >= sorted.length) return
+    const a = sorted[idx], b = sorted[swapIdx]
+    const results = await Promise.all([
+      fetch(`/api/kpi/template/sections/${a.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ position: b.position }) }),
+      fetch(`/api/kpi/template/sections/${b.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ position: a.position }) }),
+    ])
+    if (results.every(r => r.ok)) await load(selectedPeriod)
+    else showToast("Failed to reorder sections")
+  }
+
+  async function deleteSection(id: string, title: string) {
+    if (!window.confirm(`Delete section "${title || "(untitled)"}" and all its KPI items from the ${selectedPeriod} template? Existing scores are kept but the section will no longer appear in ${selectedPeriod} reviews.`)) return
+    const res = await fetch(`/api/kpi/template/sections/${id}`, { method: "DELETE" })
+    if (res.ok) { showToast("Section deleted"); await load(selectedPeriod) }
+    else showToast("Failed to delete section")
+  }
+
+  async function addItem(sectionId: string, data: { title: string; description: string; min_score: number; max_score: number }) {
+    const res = await fetch(`/api/kpi/template/sections/${sectionId}`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data),
+    })
+    if (res.ok) { showToast("KPI added"); await load(selectedPeriod) }
+    else showToast("Failed to add KPI")
+  }
+
+  async function editItem(itemId: string, data: { title: string; description: string; min_score: number; max_score: number }) {
+    const res = await fetch(`/api/kpi/template/items/${itemId}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data),
+    })
+    if (res.ok) { showToast("KPI updated"); await load(selectedPeriod) }
+    else showToast("Failed to update KPI")
+  }
+
+  async function deleteItem(itemId: string, title: string) {
+    if (!window.confirm(`Delete KPI "${title}" from the ${selectedPeriod} template? It will be removed for ALL staff in ${selectedPeriod}. Existing scores are kept.`)) return
+    const res = await fetch(`/api/kpi/template/items/${itemId}`, { method: "DELETE" })
+    if (res.ok) { showToast("KPI deleted"); await load(selectedPeriod) }
+    else showToast("Failed to delete KPI")
+  }
+
+  async function setAsCurrent() {
+    setSavingCurrent(true)
+    const res = await fetch("/api/kpi/settings", {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key: "current_period", value: selectedPeriod }),
+    })
+    if (res.ok) { setCurPeriod(selectedPeriod); onCurrentPeriodChange(selectedPeriod); showToast(`Current period set to ${selectedPeriod}`) }
+    else showToast("Failed to update current period")
+    setSavingCurrent(false)
+  }
+
+  async function createPeriod() {
+    const name = newPeriodName.trim()
+    if (!name) return
+    if (periods.includes(name)) { showToast(`A template for "${name}" already exists`); return }
+    setCloning(true)
+    const res = await fetch("/api/kpi/template/clone", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ from_period: sourcePeriod, to_period: name }),
+    })
+    if (res.ok) {
+      showToast(`Created ${name} from ${sourcePeriod}`)
+      setShowNewPeriod(false)
+      setNewPeriodName("")
+      setSelectedPeriod(name) // triggers load()
+    } else {
+      const err = await res.json().catch(() => ({}))
+      showToast(err.error ?? "Failed to create period")
+    }
+    setCloning(false)
+  }
+
   async function saveRename(id: string) {
     if (!editVal.trim()) { setEditId(null); return }
     setSavingEdit(true)
-    await onRenameSection(id, editVal.trim())
+    await renameSection(id, editVal.trim())
     setSavingEdit(false)
     setEditId(null)
   }
@@ -1824,41 +1994,76 @@ function ManageTemplateModal({ template, currentPeriod, onClose, onSetPeriod, on
         <div className="flex items-center justify-between">
           <div>
             <h2 className="font-bold text-lg">Manage KPI Template</h2>
-            <p className="text-xs text-muted-foreground mt-0.5">Sections, KPI items and the active review period</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Select a period to edit its sections and KPIs, or start a new period from an existing one</p>
           </div>
           <button type="button" onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors"><X size={18} /></button>
         </div>
 
-        {/* Current period */}
-        <div className="rounded-xl border border-border bg-muted/10 p-4 space-y-2">
-          <p className="text-sm font-semibold">Current Period</p>
-          <p className="text-xs text-muted-foreground">The period new reviews default to (e.g. &quot;Q3 2026&quot;).</p>
-          <div className="flex gap-2">
-            <input value={period} onChange={e => setPeriod(e.target.value)} placeholder="e.g. Q3 2026"
-              className="flex-1 rounded-lg border border-border bg-card px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary" />
-            <Button size="sm" disabled={!period.trim() || savingPeriod}
-              onClick={async () => { setSavingPeriod(true); await onSetPeriod(period.trim()); setSavingPeriod(false) }}
-              className="h-9 text-xs gap-1"
-            >
-              {savingPeriod ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} />} Save
-            </Button>
+        {/* Template / period selector */}
+        <div className="rounded-xl border border-border bg-muted/10 p-4 space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-sm font-semibold">Editing template</p>
+            <button type="button" onClick={() => { setSourcePeriod(selectedPeriod); setShowNewPeriod(v => !v) }}
+              className="h-7 px-2 rounded-lg border border-border flex items-center gap-1 text-[11px] text-muted-foreground hover:text-primary hover:border-primary/60 transition-colors">
+              <Plus size={11} /> New period
+            </button>
           </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <select value={selectedPeriod} onChange={e => setSelectedPeriod(e.target.value)}
+              className="flex-1 min-w-[140px] rounded-lg border border-border bg-card px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary">
+              {periods.map(p => (
+                <option key={p} value={p}>{p}{p === curPeriod ? "  •  current" : ""}</option>
+              ))}
+            </select>
+            {selectedPeriod === curPeriod ? (
+              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 px-2">
+                <Check size={12} /> Current period
+              </span>
+            ) : (
+              <Button size="sm" variant="outline" disabled={savingCurrent} onClick={setAsCurrent} className="h-9 text-xs gap-1">
+                {savingCurrent ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} />} Set as current
+              </Button>
+            )}
+          </div>
+          <p className="text-[11px] text-muted-foreground">The current period is what new reviews default to. Editing a template updates every review in that period.</p>
+
+          {showNewPeriod && (
+            <div className="rounded-lg border border-dashed border-primary/40 bg-primary/5 p-3 space-y-2 mt-1">
+              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">New period</p>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <input value={newPeriodName} onChange={e => setNewPeriodName(e.target.value)} placeholder="Name, e.g. Q1 2027"
+                  className="flex-1 rounded-lg border border-border bg-card px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary" />
+                <select value={sourcePeriod} onChange={e => setSourcePeriod(e.target.value)}
+                  className="rounded-lg border border-border bg-card px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary">
+                  {periods.map(p => <option key={p} value={p}>Copy from {p}</option>)}
+                </select>
+                <Button size="sm" disabled={!newPeriodName.trim() || cloning} onClick={createPeriod} className="h-9 text-xs gap-1">
+                  {cloning ? <Loader2 size={11} className="animate-spin" /> : <Plus size={11} />} Create
+                </Button>
+              </div>
+              <p className="text-[11px] text-muted-foreground">Copies section titles and KPI titles/descriptions only — no reviews or scores.</p>
+            </div>
+          )}
         </div>
 
         {/* Sections */}
         <div className="space-y-3">
-          <p className="text-sm font-semibold">Sections</p>
-          {sorted.length === 0 && <p className="text-xs text-muted-foreground italic">No sections yet — add one below.</p>}
+          <p className="text-sm font-semibold">Sections <span className="text-muted-foreground font-normal">· {selectedPeriod}</span></p>
+          {loading ? (
+            <div className="flex items-center justify-center py-6"><Loader2 size={20} className="animate-spin text-muted-foreground" /></div>
+          ) : sorted.length === 0 ? (
+            <p className="text-xs text-muted-foreground italic">No sections in this period yet — add one below, or use “New period” to copy from another.</p>
+          ) : null}
           <div className="space-y-2">
             {sorted.map((section, idx) => (
               <div key={section.id} className="rounded-xl border border-border bg-card">
                <div className="flex items-center gap-2 px-3 py-2.5">
                 <div className="flex flex-col">
-                  <button type="button" disabled={idx === 0} onClick={() => onReorderSection(section.id, "up")}
+                  <button type="button" disabled={idx === 0} onClick={() => reorderSection(section.id, "up")}
                     className="text-muted-foreground hover:text-primary disabled:opacity-20 disabled:cursor-not-allowed">
                     <ArrowUp size={13} />
                   </button>
-                  <button type="button" disabled={idx === sorted.length - 1} onClick={() => onReorderSection(section.id, "down")}
+                  <button type="button" disabled={idx === sorted.length - 1} onClick={() => reorderSection(section.id, "down")}
                     className="text-muted-foreground hover:text-primary disabled:opacity-20 disabled:cursor-not-allowed">
                     <ArrowDown size={13} />
                   </button>
@@ -1892,7 +2097,7 @@ function ManageTemplateModal({ template, currentPeriod, onClose, onSetPeriod, on
                       className="w-7 h-7 rounded-lg border border-border flex items-center justify-center text-muted-foreground hover:text-primary hover:border-primary/60 transition-colors">
                       <Pencil size={12} />
                     </button>
-                    <button type="button" onClick={() => onDeleteSection(section.id, section.title)}
+                    <button type="button" onClick={() => deleteSection(section.id, section.title)}
                       className="w-7 h-7 rounded-lg border border-destructive/30 flex items-center justify-center text-destructive hover:bg-destructive/5 transition-colors">
                       <Trash2 size={12} />
                     </button>
@@ -1901,7 +2106,7 @@ function ManageTemplateModal({ template, currentPeriod, onClose, onSetPeriod, on
                </div>
                {expandedSection === section.id && (
                  <div className="px-3 pb-3">
-                   <GlobalItemsEditor section={section} onAdd={onAddGlobalItem} onEdit={onEditGlobalItem} onDelete={onDeleteGlobalItem} />
+                   <GlobalItemsEditor section={section} onAdd={addItem} onEdit={editItem} onDelete={deleteItem} />
                  </div>
                )}
               </div>
@@ -1920,7 +2125,7 @@ function ManageTemplateModal({ template, currentPeriod, onClose, onSetPeriod, on
                 <option value="hr">Scored by HR</option>
               </select>
               <Button size="sm" disabled={!newTitle.trim() || addingSection}
-                onClick={async () => { setAddingSection(true); await onCreateSection(newTitle.trim(), newType); setNewTitle(""); setNewType("invitee"); setAddingSection(false) }}
+                onClick={async () => { setAddingSection(true); await createSection(newTitle.trim(), newType); setNewTitle(""); setNewType("invitee"); setAddingSection(false) }}
                 className="h-9 text-xs gap-1">
                 {addingSection ? <Loader2 size={11} className="animate-spin" /> : <Plus size={11} />} Add
               </Button>
@@ -1939,7 +2144,6 @@ type Tab = "reviews" | "myassignments"
 
 export function KpiPageClient({ isHR, currentEmployeeId }: { isHR: boolean; currentEmployeeId: string | null }) {
   const [tab, setTab]                     = useState<Tab>(isHR ? "reviews" : "myassignments")
-  const [template, setTemplate]           = useState<TemplateSection[]>([])
   const [reviewTemplates, setReviewTemplates] = useState<Record<string, TemplateSection[]>>({})
   const [reviews, setReviews]             = useState<Review[]>([])
   const [scores, setScores]               = useState<Record<string, Score[]>>({})
@@ -1965,20 +2169,17 @@ export function KpiPageClient({ isHR, currentEmployeeId }: { isHR: boolean; curr
     // expanded staff row) stays mounted and keeps its open state.
     if (!opts?.silent) setLoading(true)
     try {
-      const [tRes, rRes, eRes, settRes] = await Promise.all([
-        fetch("/api/kpi/template"),
+      const [rRes, eRes, settRes] = await Promise.all([
         fetch("/api/kpi/reviews"),
         isHR ? fetch("/api/employees/active") : Promise.resolve(null),
         isHR ? fetch("/api/kpi/settings") : Promise.resolve(null),
       ])
-      const [tData, rData, eData, settData] = await Promise.all([
-        tRes.ok ? tRes.json() : { sections: [] },
+      const [rData, eData, settData] = await Promise.all([
         rRes.ok ? rRes.json() : [],
         eRes?.ok ? eRes!.json() : [],
         settRes?.ok ? settRes!.json() : null,
       ])
       const revs: Review[] = Array.isArray(rData) ? rData : []
-      setTemplate(tData.sections ?? tData)
       setReviews(revs)
       setAllEmployees(Array.isArray(eData) ? eData : [])
       if (settData?.current_period) setCurrentPeriod(settData.current_period)
@@ -2114,31 +2315,6 @@ export function KpiPageClient({ isHR, currentEmployeeId }: { isHR: boolean; curr
     }
   }
 
-  async function handleAddItem(sectionId: string, data: { title: string; description: string; min_score: number; max_score: number }) {
-    const res = await fetch(`/api/kpi/template/sections/${sectionId}`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
-    })
-    if (res.ok) { showToast("KPI item added"); await loadAll({ silent: true }) }
-    else showToast("Failed to add KPI item")
-  }
-
-  async function handleEditItem(itemId: string, data: { title: string; description: string; min_score: number; max_score: number }) {
-    const res = await fetch(`/api/kpi/template/items/${itemId}`, {
-      method: "PATCH", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
-    })
-    if (res.ok) { showToast("KPI item updated"); await loadAll({ silent: true }) }
-    else showToast("Failed to update KPI item")
-  }
-
-  async function handleDeleteItem(itemId: string, title: string) {
-    if (!window.confirm(`Delete KPI "${title}" from the global template? It will be removed for ALL staff. Existing scores are kept.`)) return
-    const res = await fetch(`/api/kpi/template/items/${itemId}`, { method: "DELETE" })
-    if (res.ok) { showToast("KPI item deleted"); await loadAll({ silent: true }) }
-    else showToast("Failed to delete KPI item")
-  }
-
   // ── Per-review (per-staff) KPI edits ──────────────────────────────────
   async function handleReviewEditItem(reviewId: string, itemId: string, data: { title: string; description: string; min_score: number; max_score: number }) {
     const res = await fetch(`/api/kpi/reviews/${reviewId}/items/${itemId}`, {
@@ -2171,6 +2347,23 @@ export function KpiPageClient({ isHR, currentEmployeeId }: { isHR: boolean; curr
     else showToast("Failed to reset KPI")
   }
 
+  // Copy this staff member's custom KPIs (titles/descriptions only, no scores)
+  // from another of their reviews into this review's matching section.
+  async function handleCopyReviewItems(reviewId: string, fromReviewId: string, sectionId: string) {
+    const res = await fetch(`/api/kpi/reviews/${reviewId}/items/copy`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ from_review_id: fromReviewId, section_id: sectionId }),
+    })
+    if (res.ok) {
+      const { copied } = await res.json()
+      showToast(copied > 0 ? `Copied ${copied} KPI${copied === 1 ? "" : "s"}` : "Nothing new to copy — all KPIs already present")
+      await loadAll({ silent: true })
+    } else {
+      const err = await res.json().catch(() => ({}))
+      showToast(err.error ?? "Failed to copy KPIs")
+    }
+  }
+
   async function handleUpdateReviewDetails(reviewId: string, data: { title: string; period: string; deadline: string | null }) {
     const res = await fetch(`/api/kpi/reviews/${reviewId}`, {
       method: "PATCH", headers: { "Content-Type": "application/json" },
@@ -2180,61 +2373,6 @@ export function KpiPageClient({ isHR, currentEmployeeId }: { isHR: boolean; curr
       setReviews(rs => rs.map(r => r.id === reviewId ? { ...r, ...data } : r))
       showToast("Review details updated")
     } else showToast("Failed to update review details")
-  }
-
-  async function handleSetPeriod(value: string) {
-    const res = await fetch("/api/kpi/settings", {
-      method: "PUT", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ key: "current_period", value }),
-    })
-    if (res.ok) { setCurrentPeriod(value); showToast("Current period updated") }
-    else showToast("Failed to update period")
-  }
-
-  async function handleCreateSection(title: string, type: "hr" | "invitee") {
-    const res = await fetch("/api/kpi/template/sections", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title, type }),
-    })
-    if (res.ok) { showToast("Section added"); await loadAll({ silent: true }) }
-    else showToast("Failed to add section")
-  }
-
-  async function handleRenameSection(id: string, title: string) {
-    const res = await fetch(`/api/kpi/template/sections/${id}`, {
-      method: "PATCH", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title }),
-    })
-    if (res.ok) { showToast("Section renamed"); await loadAll({ silent: true }) }
-    else showToast("Failed to rename section")
-  }
-
-  async function handleReorderSection(id: string, direction: "up" | "down") {
-    const sorted = [...template].sort((a, b) => a.position - b.position)
-    const idx = sorted.findIndex(s => s.id === id)
-    const swapIdx = direction === "up" ? idx - 1 : idx + 1
-    if (idx < 0 || swapIdx < 0 || swapIdx >= sorted.length) return
-    const a = sorted[idx], b = sorted[swapIdx]
-    // Swap their positions
-    const results = await Promise.all([
-      fetch(`/api/kpi/template/sections/${a.id}`, {
-        method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ position: b.position }),
-      }),
-      fetch(`/api/kpi/template/sections/${b.id}`, {
-        method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ position: a.position }),
-      }),
-    ])
-    if (results.every(r => r.ok)) await loadAll({ silent: true })
-    else showToast("Failed to reorder sections")
-  }
-
-  async function handleDeleteSection(id: string, title: string) {
-    if (!window.confirm(`Delete section "${title || "(untitled)"}" and all its KPI items? Existing scores are kept but the section will no longer appear in reviews.`)) return
-    const res = await fetch(`/api/kpi/template/sections/${id}`, { method: "DELETE" })
-    if (res.ok) { showToast("Section deleted"); await loadAll({ silent: true }) }
-    else showToast("Failed to delete section")
   }
 
   async function handleCreate(d: { employee_id: string; period: string; title: string; deadline: string }) {
@@ -2322,6 +2460,7 @@ export function KpiPageClient({ isHR, currentEmployeeId }: { isHR: boolean; curr
               onStatusChange={handleStatusChange}
               onDelete={handleDeleteReview}
               onAddItem={handleReviewAddItem}
+              onCopyItems={handleCopyReviewItems}
               onEditItem={handleReviewEditItem}
               onRemoveItem={handleReviewRemoveItem}
               onResetItem={handleReviewResetItem}
@@ -2380,17 +2519,10 @@ export function KpiPageClient({ isHR, currentEmployeeId }: { isHR: boolean; curr
 
       {showManage && isHR && (
         <ManageTemplateModal
-          template={template}
           currentPeriod={currentPeriod}
-          onClose={() => setShowManage(false)}
-          onSetPeriod={handleSetPeriod}
-          onCreateSection={handleCreateSection}
-          onRenameSection={handleRenameSection}
-          onReorderSection={handleReorderSection}
-          onDeleteSection={handleDeleteSection}
-          onAddGlobalItem={handleAddItem}
-          onEditGlobalItem={handleEditItem}
-          onDeleteGlobalItem={handleDeleteItem}
+          onClose={() => { setShowManage(false); void loadAll({ silent: true }) }}
+          onCurrentPeriodChange={setCurrentPeriod}
+          showToast={showToast}
         />
       )}
     </div>

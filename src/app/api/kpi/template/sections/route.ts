@@ -14,12 +14,26 @@ export async function POST(req: Request) {
   const body = await req.json()
   const title = typeof body.title === "string" ? body.title.trim() : ""
   const type = body.type === "hr" ? "hr" : "invitee"
+  let period = typeof body.period === "string" ? body.period.trim() : ""
   if (!title) return NextResponse.json({ error: "title is required" }, { status: 400 })
 
-  // Append after the current highest position among active sections.
+  // Fall back to the current period if the caller didn't specify one.
+  if (!period) {
+    const { data: setting } = await supabase
+      .from("kpi_settings")
+      .select("value")
+      .eq("key", "current_period")
+      .maybeSingle()
+    period = setting?.value ?? ""
+  }
+  if (!period) return NextResponse.json({ error: "period is required" }, { status: 400 })
+
+  // Append after the current highest position among active sections IN THIS PERIOD.
   const { data: existing } = await supabase
     .from("kpi_template_sections")
     .select("position")
+    .eq("period", period)
+    .eq("is_active", true)
     .order("position", { ascending: false })
     .limit(1)
 
@@ -27,7 +41,7 @@ export async function POST(req: Request) {
 
   const { data, error } = await supabase
     .from("kpi_template_sections")
-    .insert({ title, type, position, is_active: true })
+    .insert({ title, type, position, is_active: true, period })
     .select()
     .single()
 
