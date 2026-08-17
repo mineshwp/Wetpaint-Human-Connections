@@ -105,6 +105,103 @@ function quarterToPeriod(q: Quarter): string {
   return `Q${q} 2026`
 }
 
+// A review's overall score: per item, average the submitted scores (HR + the
+// section's assigned reviewers), then sum across items. Matches the detail
+// view's Total Score. `hasScores` is false when no numeric score exists yet.
+function computeReviewScore(
+  template: TemplateSection[],
+  reviewScores: Score[],
+  invitees: ReviewInvitee[],
+): { current: number; max: number; pct: number; hasScores: boolean } {
+  const max = template.reduce((a, s) => a + (s.kpi_template_items ?? []).reduce((b, i) => b + i.max_score, 0), 0)
+  const scoreMap = new Map<string, Score>()
+  for (const s of reviewScores) scoreMap.set(`${s.item_id}::${s.scorer_id ?? "hr"}`, s)
+  let hasScores = false
+  const current = template.reduce((total, section) => {
+    const revs = assignedReviewers(invitees, section.id)
+    return total + (section.kpi_template_items ?? []).reduce((a, item) => {
+      const vals: number[] = []
+      const hrv = scoreMap.get(`${item.id}::hr`)?.score
+      if (hrv != null) vals.push(hrv)
+      for (const inv of revs) {
+        const v = scoreMap.get(`${item.id}::${inv.invitee_id}`)?.score
+        if (v != null) vals.push(v)
+      }
+      if (vals.length > 0) hasScores = true
+      return a + (vals.length > 0 ? vals.reduce((x, y) => x + y, 0) / vals.length : 0)
+    }, 0)
+  }, 0)
+  const pct = max > 0 ? (current / max) * 100 : 0
+  return { current, max, pct, hasScores }
+}
+
+// Quarter-by-quarter + year summary for one employee. The year score is the
+// average of the scored quarters' percentages, shown as a % and as an out-of-10
+// rating (with the rating-guide band label when available).
+function QuarterScoresSummary({ reviews, scores, reviewTemplates, ratingScale }: {
+  reviews: Review[]
+  scores: Record<string, Score[]>
+  reviewTemplates: Record<string, TemplateSection[]>
+  ratingScale: RatingRow[]
+}) {
+  const perQuarter = QUARTERS.map((q) => {
+    const review = reviews.find((r) => periodToQuarter(r.period) === q)
+    if (!review) return { q, review: null as Review | null, pct: null as number | null, hasScores: false }
+    const { pct, hasScores } = computeReviewScore(
+      reviewTemplates[review.id] ?? [],
+      scores[review.id] ?? [],
+      review.kpi_review_invitees ?? [],
+    )
+    return { q, review, pct: hasScores ? pct : null, hasScores }
+  })
+
+  const scored = perQuarter.filter((x) => x.pct !== null) as { q: Quarter; pct: number }[]
+  const yearPct = scored.length > 0 ? scored.reduce((a, x) => a + x.pct, 0) / scored.length : null
+  const yearOutOf10 = yearPct !== null ? yearPct / 10 : null
+  const band = yearOutOf10 !== null
+    ? ratingScale.find((r) => r.score === Math.min(10, Math.max(1, Math.round(yearOutOf10))))?.label ?? ""
+    : ""
+
+  return (
+    <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
+      <div className="px-4 py-2.5 border-b border-border">
+        <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Performance by quarter</p>
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-5 divide-y sm:divide-y-0 sm:divide-x divide-border">
+        {perQuarter.map(({ q, review, pct }) => (
+          <div key={q} className="px-4 py-3 flex flex-col gap-0.5">
+            <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Q{q}</span>
+            {pct !== null ? (
+              <span className="text-lg font-bold text-foreground leading-tight">{fmtScore(pct)}<span className="text-xs font-medium text-muted-foreground">%</span></span>
+            ) : (
+              <span className="text-lg font-bold text-muted-foreground/40 leading-tight">—</span>
+            )}
+            <span className="text-[10px] text-muted-foreground">
+              {review ? (STATUS_DISPLAY[review.status]?.label ?? "") : "Not set up"}
+            </span>
+          </div>
+        ))}
+        <div className="px-4 py-3 flex flex-col gap-0.5 bg-primary/5 col-span-2 sm:col-span-1">
+          <span className="text-[11px] font-semibold text-primary uppercase tracking-wider">Year</span>
+          {yearPct !== null ? (
+            <>
+              <span className="text-lg font-bold text-foreground leading-tight">{fmtScore(yearPct)}<span className="text-xs font-medium text-muted-foreground">%</span></span>
+              <span className="text-[10px] text-muted-foreground">
+                ≈ {fmtScore(yearOutOf10!)}/10{band ? ` · ${band}` : ""} · avg of {scored.length} quarter{scored.length !== 1 ? "s" : ""}
+              </span>
+            </>
+          ) : (
+            <>
+              <span className="text-lg font-bold text-muted-foreground/40 leading-tight">—</span>
+              <span className="text-[10px] text-muted-foreground">No scores yet</span>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function InviteeStatusBadge({ status }: { status: string }) {
   const m = INVITEE_STATUS[status] ?? INVITEE_STATUS.pending
   const Icon = m.icon as React.ElementType
@@ -1372,7 +1469,7 @@ function StaffRow({ employee, reviews, scores, reviewTemplates, onOpen }: {
 
 // ─── Employee Review Detail (single-person full view) ─────────────────────────────
 
-function EmployeeReviewDetail({ employee, reviews, scores, reviewTemplates, finalComments, allEmployees, currentEmployeeId, onScoreChange, onSaveFinalComment, onAddInvitee, onRemoveInvitee, onSetSections, onStatusChange, onDelete, onAddItem, onEditItem, onRemoveItem, onResetItem, onCopyItems, onUpdateReviewDetails, onCreateReview, onBack, initialQuarter }: {
+function EmployeeReviewDetail({ employee, reviews, scores, reviewTemplates, finalComments, allEmployees, currentEmployeeId, onScoreChange, onSaveFinalComment, onAddInvitee, onRemoveInvitee, onSetSections, onStatusChange, onDelete, onAddItem, onEditItem, onRemoveItem, onResetItem, onCopyItems, onUpdateReviewDetails, onCreateReview, onBack, initialQuarter, ratingScale }: {
   employee: Employee
   reviews: Review[]
   scores: Record<string, Score[]>
@@ -1396,6 +1493,7 @@ function EmployeeReviewDetail({ employee, reviews, scores, reviewTemplates, fina
   onCreateReview: (employeeId: string, quarter: Quarter) => void
   onBack: () => void
   initialQuarter?: Quarter
+  ratingScale: RatingRow[]
 }) {
   const reviewByQuarter = useMemo(() => {
     const map: Partial<Record<Quarter, Review>> = {}
@@ -1452,6 +1550,8 @@ function EmployeeReviewDetail({ employee, reviews, scores, reviewTemplates, fina
           </div>
         </div>
       </div>
+
+      <QuarterScoresSummary reviews={reviews} scores={scores} reviewTemplates={reviewTemplates} ratingScale={ratingScale} />
 
       {/* Quarter tab bar */}
       <div className="flex items-center gap-0 border-b border-border">
@@ -1519,7 +1619,7 @@ function EmployeeReviewDetail({ employee, reviews, scores, reviewTemplates, fina
 
 // ─── HR Admin View ──────────────────────────────────────────────────────────────
 
-function HRAdminView({ reviewTemplates, reviews, scores, finalComments, allEmployees, currentEmployeeId, onScoreChange, onSaveFinalComment, onAddInvitee, onRemoveInvitee, onSetSections, onStatusChange, onDelete, onAddItem, onEditItem, onRemoveItem, onResetItem, onCopyItems, onUpdateReviewDetails, onShowCreate, onManageTemplate, onShowRatingGuide }: {
+function HRAdminView({ reviewTemplates, reviews, scores, finalComments, allEmployees, currentEmployeeId, onScoreChange, onSaveFinalComment, onAddInvitee, onRemoveInvitee, onSetSections, onStatusChange, onDelete, onAddItem, onEditItem, onRemoveItem, onResetItem, onCopyItems, onUpdateReviewDetails, onShowCreate, onManageTemplate, onShowRatingGuide, ratingScale }: {
   reviewTemplates: Record<string, TemplateSection[]>
   reviews: Review[]
   scores: Record<string, Score[]>
@@ -1542,6 +1642,7 @@ function HRAdminView({ reviewTemplates, reviews, scores, finalComments, allEmplo
   onShowCreate: (employeeId?: string, quarter?: Quarter) => void
   onManageTemplate: () => void
   onShowRatingGuide: () => void
+  ratingScale: RatingRow[]
 }) {
   const [searchQ, setSearchQ]         = useState("")
   const [deptFilter, setDeptFilter]   = useState("all")
@@ -1637,6 +1738,7 @@ function HRAdminView({ reviewTemplates, reviews, scores, finalComments, allEmplo
         onCreateReview={(empId, quarter) => onShowCreate(empId, quarter)}
         onBack={() => setSelectedId(null)}
         initialQuarter={selectedQuarter}
+        ratingScale={ratingScale}
       />
     )
   }
@@ -1750,7 +1852,7 @@ function HRAdminView({ reviewTemplates, reviews, scores, finalComments, allEmplo
 
 // ─── My Assignments tab (non-HR / HR-as-invitee) ────────────────────────────────
 
-function MyAssignmentsView({ reviews, scores, reviewTemplates, finalComments, currentEmployeeId, isHR, onScoreChange, onSaveFinalComment, loadAll, showToast }: {
+function MyAssignmentsView({ reviews, scores, reviewTemplates, finalComments, currentEmployeeId, isHR, onScoreChange, onSaveFinalComment, loadAll, showToast, ratingScale }: {
   reviews: Review[]
   scores: Record<string, Score[]>
   reviewTemplates: Record<string, TemplateSection[]>
@@ -1761,13 +1863,21 @@ function MyAssignmentsView({ reviews, scores, reviewTemplates, finalComments, cu
   onSaveFinalComment: (reviewId: string, authorId: string | null, comment: string) => Promise<void>
   loadAll: (opts?: { silent?: boolean }) => Promise<void>
   showToast: (msg: string) => void
+  ratingScale: RatingRow[]
 }) {
   const myAssignments = isHR
     ? reviews.filter(r => r.kpi_review_invitees?.some(i => i.invitee_id === currentEmployeeId))
     : reviews
 
+  // The current user's own KPI reviews (where they are the subject) — for the
+  // quarter/year performance summary.
+  const myOwnReviews = reviews.filter(r => r.employee_id === currentEmployeeId)
+
   return (
     <div className="space-y-4">
+      {myOwnReviews.length > 0 && (
+        <QuarterScoresSummary reviews={myOwnReviews} scores={scores} reviewTemplates={reviewTemplates} ratingScale={ratingScale} />
+      )}
       {myAssignments.length === 0 ? (
         <div className="flex flex-col items-center justify-center h-48 text-muted-foreground gap-3">
           <FileText size={36} className="opacity-30" />
@@ -2375,6 +2485,7 @@ export function KpiPageClient({ isHR, currentEmployeeId }: { isHR: boolean; curr
   const [deleting, setDeleting]           = useState(false)
   const [showManage, setShowManage]       = useState(false)
   const [showRatingGuide, setShowRatingGuide] = useState(false)
+  const [ratingScale, setRatingScale]     = useState<RatingRow[]>([])
 
   function showToast(msg: string) {
     setToast(msg)
@@ -2386,19 +2497,22 @@ export function KpiPageClient({ isHR, currentEmployeeId }: { isHR: boolean; curr
     // expanded staff row) stays mounted and keeps its open state.
     if (!opts?.silent) setLoading(true)
     try {
-      const [rRes, eRes, settRes] = await Promise.all([
+      const [rRes, eRes, settRes, rsRes] = await Promise.all([
         fetch("/api/kpi/reviews"),
         isHR ? fetch("/api/employees/active") : Promise.resolve(null),
         isHR ? fetch("/api/kpi/settings") : Promise.resolve(null),
+        fetch("/api/kpi/rating-scale"),
       ])
-      const [rData, eData, settData] = await Promise.all([
+      const [rData, eData, settData, rsData] = await Promise.all([
         rRes.ok ? rRes.json() : [],
         eRes?.ok ? eRes!.json() : [],
         settRes?.ok ? settRes!.json() : null,
+        rsRes.ok ? rsRes.json() : [],
       ])
       const revs: Review[] = Array.isArray(rData) ? rData : []
       setReviews(revs)
       setAllEmployees(Array.isArray(eData) ? eData : [])
+      setRatingScale(Array.isArray(rsData) ? rsData : [])
       if (settData?.current_period) setCurrentPeriod(settData.current_period)
 
       if (revs.length > 0) {
@@ -2692,6 +2806,7 @@ export function KpiPageClient({ isHR, currentEmployeeId }: { isHR: boolean; curr
               onShowCreate={handleShowCreate}
               onManageTemplate={() => setShowManage(true)}
               onShowRatingGuide={() => setShowRatingGuide(true)}
+              ratingScale={ratingScale}
             />
           )}
 
@@ -2719,6 +2834,7 @@ export function KpiPageClient({ isHR, currentEmployeeId }: { isHR: boolean; curr
                 onSaveFinalComment={handleSaveFinalComment}
                 loadAll={loadAll}
                 showToast={showToast}
+                ratingScale={ratingScale}
               />
             </>
           )}
