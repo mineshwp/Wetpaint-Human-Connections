@@ -2538,7 +2538,14 @@ export function KpiPageClient({ isHR, currentEmployeeId }: { isHR: boolean; curr
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify(d),
     })
-    if (res.ok) { showToast("Review created"); setShowCreate(false); setCreatePreselect({}); await loadAll({ silent: true }) }
+    if (res.ok) {
+      const created = await res.json().catch(() => null)
+      const inh = created?.inherited as { baseline: string | null; sectionsCreated: number; itemsCopied: number } | undefined
+      let msg = "Review created"
+      if (inh?.itemsCopied) msg = `Review created — copied ${inh.itemsCopied} KPI${inh.itemsCopied === 1 ? "" : "s"} from ${inh.baseline}`
+      else if (inh?.sectionsCreated) msg = `Review created — template set up from ${inh.baseline}`
+      showToast(msg); setShowCreate(false); setCreatePreselect({}); await loadAll({ silent: true })
+    }
     else { const err = await res.json(); showToast(err.error ?? "Failed to create review") }
     setCreating(false)
   }

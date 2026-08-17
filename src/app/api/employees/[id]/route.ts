@@ -204,5 +204,16 @@ export async function PATCH(
     return NextResponse.json({ error: "Failed to update employee" }, { status: 500 })
   }
 
+  // Cascade archive state to the employee's KPI reviews (HR only)
+  if (isHR && "is_archived" in updates) {
+    const { error: kpiError } = await supabase
+      .from("kpi_reviews")
+      .update({ is_archived: updates.is_archived })
+      .eq("employee_id", id)
+    if (kpiError) {
+      console.error("[PATCH /api/employees/[id]] KPI archive cascade", kpiError)
+    }
+  }
+
   return NextResponse.json({ success: true })
 }

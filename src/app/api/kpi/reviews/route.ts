@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { getUserRole, getEmployeeIdForUser } from "@/lib/auth"
 import { getImpersonationContext } from "@/lib/impersonation"
+import { inheritForNewReview } from "@/lib/kpi/inherit"
 
 export async function GET() {
   const supabase = await createClient()
@@ -33,11 +34,13 @@ export async function GET() {
         .from("kpi_reviews")
         .select(selectClause)
         .eq("employee_id", effectiveEmployeeId)
+        .eq("is_archived", false)
         .order("created_at", { ascending: false }),
       supabase
         .from("kpi_reviews")
         .select(selectClause)
         .eq("kpi_review_invitees.invitee_id", effectiveEmployeeId)
+        .eq("is_archived", false)
         .order("created_at", { ascending: false }),
     ])
 
@@ -65,6 +68,7 @@ export async function GET() {
   const { data, error } = await supabase
     .from("kpi_reviews")
     .select(selectClause)
+    .eq("is_archived", false)
     .order("created_at", { ascending: false })
 
   if (error) {
@@ -98,5 +102,10 @@ export async function POST(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: "Failed to create review" }, { status: 500 })
 
-  return NextResponse.json(data, { status: 201 })
+  // Q1-as-default: a new Q2/Q3/Q4 review inherits its period's template (cloned
+  // from the same-year baseline) and the staff member's baseline-quarter custom
+  // KPIs. Admins can still edit everything afterward. Best-effort.
+  const inherited = await inheritForNewReview(supabase, { id: data.id, employee_id, period })
+
+  return NextResponse.json({ ...data, inherited }, { status: 201 })
 }

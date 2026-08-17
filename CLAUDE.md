@@ -322,6 +322,8 @@ Always return proper HTTP status codes: 400, 401, 403, 404, 500.
 | KPI per-period templates (select/edit a period's template; new period copies from another) | ✅ Done |
 | KPI rating guide (global 1–10 rubric; HR edits, all view) | ✅ Done |
 | Alphabetical A–Z / Z–A sort on Employees + KPI lists | ✅ Done |
+| KPI Q1-as-default inheritance (new Q2/Q3/Q4 review auto-inherits period template + staff's baseline-quarter KPIs; baseline = same-year Q1, else earliest existing quarter; editable after) | ✅ Done |
+| Archive cascade (archiving an employee archives their KPI reviews; archived reviews hidden from lists) | ✅ Done |
 
 Update this table as features are completed.
 
