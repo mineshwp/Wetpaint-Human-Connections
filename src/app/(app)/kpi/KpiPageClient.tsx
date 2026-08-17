@@ -1486,6 +1486,7 @@ function HRAdminView({ reviewTemplates, reviews, scores, finalComments, allEmplo
   const [searchQ, setSearchQ]         = useState("")
   const [deptFilter, setDeptFilter]   = useState("all")
   const [statusFilter, setStatusFilter] = useState("all")
+  const [sortOrder, setSortOrder]     = useState<"az" | "za">("az")
   const [selectedId, setSelectedId]   = useState<string | null>(null)
   const [selectedQuarter, setSelectedQuarter] = useState<Quarter | undefined>(undefined)
 
@@ -1519,7 +1520,7 @@ function HRAdminView({ reviewTemplates, reviews, scores, finalComments, allEmplo
 
   // Filtered staff list
   const filteredEmployees = useMemo(() => {
-    return allEmployees.filter(emp => {
+    const list = allEmployees.filter(emp => {
       const deptName = (emp as { department?: { name: string } | null }).department?.name ?? ""
       if (deptFilter !== "all" && deptName !== deptFilter) return false
 
@@ -1540,7 +1541,12 @@ function HRAdminView({ reviewTemplates, reviews, scores, finalComments, allEmplo
 
       return true
     })
-  }, [allEmployees, deptFilter, statusFilter, searchQ, reviewsByEmployee])
+    return [...list].sort((a, b) => {
+      const an = `${a.first_name} ${a.last_name}`.trim().toLowerCase()
+      const bn = `${b.first_name} ${b.last_name}`.trim().toLowerCase()
+      return sortOrder === "az" ? an.localeCompare(bn) : bn.localeCompare(an)
+    })
+  }, [allEmployees, deptFilter, statusFilter, searchQ, reviewsByEmployee, sortOrder])
 
   // Detail view — a single person, full screen, with a Back button.
   const selectedEmp = selectedId ? allEmployees.find(e => e.id === selectedId) : undefined
@@ -1643,6 +1649,15 @@ function HRAdminView({ reviewTemplates, reviews, scores, finalComments, allEmplo
           <option value="published">Published</option>
           <option value="draft">Draft</option>
           <option value="notstarted">Not started</option>
+        </select>
+        <select
+          value={sortOrder}
+          onChange={e => setSortOrder(e.target.value as "az" | "za")}
+          className="rounded-xl border border-border bg-card px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary sm:w-40"
+          aria-label="Sort by name"
+        >
+          <option value="az">Name A–Z</option>
+          <option value="za">Name Z–A</option>
         </select>
       </div>
 

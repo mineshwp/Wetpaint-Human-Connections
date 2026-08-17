@@ -315,6 +315,7 @@ export function EmployeeListClient({ employees, archivedEmployees, departments, 
   const [deptFilter, setDeptFilter] = useState("all")
   const [statusFilter, setStatusFilter] = useState("all")
   const [contractFilter, setContractFilter] = useState("all")
+  const [sortOrder, setSortOrder] = useState<"az" | "za">("az")
   const [viewMode, setViewMode] = useState<"grid" | "list">("list")
   const [showArchived, setShowArchived] = useState(false)
   const [showPhotoUpload, setShowPhotoUpload] = useState(false)
@@ -345,8 +346,12 @@ export function EmployeeListClient({ employees, archivedEmployees, departments, 
     if (contractFilter === "contract") list = list.filter(isContractEmp)
     else if (contractFilter === "expiring")
       list = list.filter((e) => isContractEmp(e) && contractExpiry(e.contractEndDate) !== null)
-    return list
-  }, [pool, search, deptFilter, statusFilter, contractFilter, departments, employees])
+    return [...list].sort((a, b) => {
+      const an = `${a.firstName} ${a.lastName}`.trim().toLowerCase()
+      const bn = `${b.firstName} ${b.lastName}`.trim().toLowerCase()
+      return sortOrder === "az" ? an.localeCompare(bn) : bn.localeCompare(an)
+    })
+  }, [pool, search, deptFilter, statusFilter, contractFilter, sortOrder, departments, employees])
 
   const activeCount = employees.filter((e) => e.status === "active").length
   const onboardingCount = employees.filter((e) => e.status === "onboarding").length
@@ -441,6 +446,16 @@ export function EmployeeListClient({ employees, archivedEmployees, departments, 
           <option value="all">All contracts</option>
           <option value="contract">Contract staff</option>
           <option value="expiring">Expiring / expired</option>
+        </select>
+
+        <select
+          value={sortOrder}
+          onChange={(e) => setSortOrder(e.target.value as "az" | "za")}
+          className="h-9 rounded-lg border border-border bg-card px-3 text-sm text-foreground outline-none focus:border-ring"
+          aria-label="Sort by name"
+        >
+          <option value="az">Name A–Z</option>
+          <option value="za">Name Z–A</option>
         </select>
 
         {!showArchived && archivedEmployees.length > 0 && (
