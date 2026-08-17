@@ -1417,6 +1417,19 @@ function StaffRow({ employee, reviews, scores, reviewTemplates, onOpen }: {
     return map
   }, [reviews])
 
+  // Year total = average of the scored quarters' percentages (same math as the
+  // quarter chips), so admins see the overall picture at a glance.
+  const yearPct = useMemo(() => {
+    const pcts: number[] = []
+    for (const q of QUARTERS) {
+      const review = reviewByQuarter[q]
+      if (!review) continue
+      const { pct, hasScores } = computeReviewScore(reviewTemplates[review.id] ?? [], scores[review.id] ?? [], review.kpi_review_invitees ?? [])
+      if (hasScores) pcts.push(pct)
+    }
+    return pcts.length ? pcts.reduce((a, b) => a + b, 0) / pcts.length : null
+  }, [reviewByQuarter, reviewTemplates, scores])
+
   const name = `${employee.first_name} ${employee.last_name}`
   const deptName = (employee as { department?: { name: string } | null }).department?.name ?? ""
 
@@ -1484,6 +1497,17 @@ function StaffRow({ employee, reviews, scores, reviewTemplates, onOpen }: {
               </button>
             )
           })}
+
+          {/* Year total */}
+          <span
+            className={cn(
+              "inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-bold",
+              yearPct !== null ? "border-primary/30 bg-primary/5 text-primary" : "border-dashed border-border text-muted-foreground"
+            )}
+            title="Average of scored quarters"
+          >
+            Year · {yearPct !== null ? `${fmtScore(yearPct)}/100` : "—"}
+          </span>
         </div>
 
         <div className="w-7 h-7 rounded-full border border-border flex items-center justify-center text-muted-foreground shrink-0 ml-1">
