@@ -9,11 +9,13 @@ export function parsePeriod(period: string | null | undefined): { year: number; 
   return { quarter: parseInt(m[1], 10), year: parseInt(m[2], 10) }
 }
 
-// The period a new review should inherit from: same-year Q1 if a template
-// exists for it, otherwise the earliest-quarter period of that year that has an
-// active template. Only quarters BEFORE the target qualify, so the earliest
-// quarter is itself a baseline (nothing inherits into it) and later quarters
-// pull from it. Returns null when there's nothing to inherit.
+// The period a new review should inherit from:
+//  1. same-year Q1 if a template exists for it;
+//  2. else the earliest-quarter period of the same year that is before the
+//     target (so the earliest quarter is itself a baseline);
+//  3. else — for a brand-new year — the latest period of the most recent
+//     PRIOR year, so starting e.g. Q1 2027 carries forward the 2026 template.
+// Returns null when there's nothing to inherit.
 export async function resolveBaselinePeriod(supabase: DB, targetPeriod: string): Promise<string | null> {
   const t = parsePeriod(targetPeriod)
   if (!t) return null
@@ -23,15 +25,25 @@ export async function resolveBaselinePeriod(supabase: DB, targetPeriod: string):
     .select("period")
     .eq("is_active", true)
 
-  const sameYear = Array.from(new Set((data ?? []).map((r) => r.period).filter(Boolean) as string[]))
+  const periods = Array.from(new Set((data ?? []).map((r) => r.period).filter(Boolean) as string[]))
     .map((p) => ({ p, pp: parsePeriod(p) }))
-    .filter((x): x is { p: string; pp: { year: number; quarter: number } } =>
-      x.pp !== null && x.pp.year === t.year && x.pp.quarter < t.quarter)
+    .filter((x): x is { p: string; pp: { year: number; quarter: number } } => x.pp !== null)
 
-  if (sameYear.length === 0) return null
-  const q1 = sameYear.find((x) => x.pp.quarter === 1)
-  if (q1) return q1.p
-  return sameYear.sort((a, b) => a.pp.quarter - b.pp.quarter)[0].p
+  const sameYearEarlier = periods.filter((x) => x.pp.year === t.year && x.pp.quarter < t.quarter)
+  if (sameYearEarlier.length > 0) {
+    const q1 = sameYearEarlier.find((x) => x.pp.quarter === 1)
+    if (q1) return q1.p
+    return sameYearEarlier.sort((a, b) => a.pp.quarter - b.pp.quarter)[0].p
+  }
+
+  // Brand-new year: fall back to the latest period of the most recent prior year.
+  const priorYears = periods.filter((x) => x.pp.year < t.year)
+  if (priorYears.length > 0) {
+    priorYears.sort((a, b) => b.pp.year - a.pp.year || b.pp.quarter - a.pp.quarter)
+    return priorYears[0].p
+  }
+
+  return null
 }
 
 // Clone a period's template STRUCTURE (sections + global KPI items) into a

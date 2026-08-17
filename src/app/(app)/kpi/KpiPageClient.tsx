@@ -101,8 +101,13 @@ function periodToQuarter(period: string): Quarter | null {
   return null
 }
 
-function quarterToPeriod(q: Quarter): string {
-  return `Q${q} 2026`
+function periodToYear(period: string): number | null {
+  const m = period.match(/(\d{4})/)
+  return m ? parseInt(m[1], 10) : null
+}
+
+function quarterToPeriod(q: Quarter, year: number): string {
+  return `Q${q} ${year}`
 }
 
 // A review's overall score: per item, average the submitted scores (HR + the
@@ -138,14 +143,15 @@ function computeReviewScore(
 // Quarter-by-quarter + year summary for one employee. The year score is the
 // average of the scored quarters' percentages, shown as a % and as an out-of-10
 // rating (with the rating-guide band label when available).
-function QuarterScoresSummary({ reviews, scores, reviewTemplates, ratingScale }: {
+function QuarterScoresSummary({ reviews, scores, reviewTemplates, ratingScale, year }: {
   reviews: Review[]
   scores: Record<string, Score[]>
   reviewTemplates: Record<string, TemplateSection[]>
   ratingScale: RatingRow[]
+  year: number
 }) {
   const perQuarter = QUARTERS.map((q) => {
-    const review = reviews.find((r) => periodToQuarter(r.period) === q)
+    const review = reviews.find((r) => periodToYear(r.period) === year && periodToQuarter(r.period) === q)
     if (!review) return { q, review: null as Review | null, pct: null as number | null, hasScores: false }
     const { pct, hasScores } = computeReviewScore(
       reviewTemplates[review.id] ?? [],
@@ -915,14 +921,20 @@ function ConfirmDeleteModal({ onConfirm, onCancel, deleting }: {
 
 // ─── Create Review Modal ────────────────────────────────────────────────────────
 
-function CreateReviewModal({ employees, currentPeriod, preselectedEmployeeId, preselectedQuarter, onSave, onClose, saving }: {
-  employees: Employee[]; currentPeriod: string
+function CreateReviewModal({ employees, currentPeriod, selectedYear, preselectedEmployeeId, preselectedQuarter, onSave, onClose, saving }: {
+  employees: Employee[]; currentPeriod: string; selectedYear: number
   preselectedEmployeeId?: string; preselectedQuarter?: Quarter
   onSave: (d: { employee_id: string; period: string; title: string; deadline: string }) => Promise<void>
   onClose: () => void; saving: boolean
 }) {
   const [employeeId, setEmployeeId] = useState(preselectedEmployeeId ?? employees[0]?.id ?? "")
-  const [period, setPeriod]         = useState(preselectedQuarter ? quarterToPeriod(preselectedQuarter) : currentPeriod)
+  // Default to the picked quarter in the selected year; otherwise the current
+  // period if it's in the selected year, else Q1 of the selected year.
+  const [period, setPeriod]         = useState(
+    preselectedQuarter
+      ? quarterToPeriod(preselectedQuarter, selectedYear)
+      : periodToYear(currentPeriod) === selectedYear ? currentPeriod : `Q1 ${selectedYear}`
+  )
   const [customTitle, setCustomTitle] = useState<string | null>(null)
   const [deadline, setDeadline]     = useState("")
 
@@ -1469,7 +1481,7 @@ function StaffRow({ employee, reviews, scores, reviewTemplates, onOpen }: {
 
 // ─── Employee Review Detail (single-person full view) ─────────────────────────────
 
-function EmployeeReviewDetail({ employee, reviews, scores, reviewTemplates, finalComments, allEmployees, currentEmployeeId, onScoreChange, onSaveFinalComment, onAddInvitee, onRemoveInvitee, onSetSections, onStatusChange, onDelete, onAddItem, onEditItem, onRemoveItem, onResetItem, onCopyItems, onUpdateReviewDetails, onCreateReview, onBack, initialQuarter, ratingScale }: {
+function EmployeeReviewDetail({ employee, reviews, scores, reviewTemplates, finalComments, allEmployees, currentEmployeeId, onScoreChange, onSaveFinalComment, onAddInvitee, onRemoveInvitee, onSetSections, onStatusChange, onDelete, onAddItem, onEditItem, onRemoveItem, onResetItem, onCopyItems, onUpdateReviewDetails, onCreateReview, onBack, initialQuarter, ratingScale, selectedYear }: {
   employee: Employee
   reviews: Review[]
   scores: Record<string, Score[]>
@@ -1494,15 +1506,17 @@ function EmployeeReviewDetail({ employee, reviews, scores, reviewTemplates, fina
   onBack: () => void
   initialQuarter?: Quarter
   ratingScale: RatingRow[]
+  selectedYear: number
 }) {
   const reviewByQuarter = useMemo(() => {
     const map: Partial<Record<Quarter, Review>> = {}
     for (const r of reviews) {
+      if (periodToYear(r.period) !== selectedYear) continue
       const q = periodToQuarter(r.period)
       if (q) map[q] = r
     }
     return map
-  }, [reviews])
+  }, [reviews, selectedYear])
 
   const visibleQuarters = useMemo<Quarter[]>(() => {
     const withReview = QUARTERS.filter(q => reviewByQuarter[q])
@@ -1551,7 +1565,7 @@ function EmployeeReviewDetail({ employee, reviews, scores, reviewTemplates, fina
         </div>
       </div>
 
-      <QuarterScoresSummary reviews={reviews} scores={scores} reviewTemplates={reviewTemplates} ratingScale={ratingScale} />
+      <QuarterScoresSummary reviews={reviews} scores={scores} reviewTemplates={reviewTemplates} ratingScale={ratingScale} year={selectedYear} />
 
       {/* Quarter tab bar */}
       <div className="flex items-center gap-0 border-b border-border">
@@ -1619,7 +1633,7 @@ function EmployeeReviewDetail({ employee, reviews, scores, reviewTemplates, fina
 
 // ─── HR Admin View ──────────────────────────────────────────────────────────────
 
-function HRAdminView({ reviewTemplates, reviews, scores, finalComments, allEmployees, currentEmployeeId, onScoreChange, onSaveFinalComment, onAddInvitee, onRemoveInvitee, onSetSections, onStatusChange, onDelete, onAddItem, onEditItem, onRemoveItem, onResetItem, onCopyItems, onUpdateReviewDetails, onShowCreate, onManageTemplate, onShowRatingGuide, ratingScale }: {
+function HRAdminView({ reviewTemplates, reviews, scores, finalComments, allEmployees, currentEmployeeId, onScoreChange, onSaveFinalComment, onAddInvitee, onRemoveInvitee, onSetSections, onStatusChange, onDelete, onAddItem, onEditItem, onRemoveItem, onResetItem, onCopyItems, onUpdateReviewDetails, onShowCreate, onManageTemplate, onShowRatingGuide, ratingScale, selectedYear, setSelectedYear, availableYears }: {
   reviewTemplates: Record<string, TemplateSection[]>
   reviews: Review[]
   scores: Record<string, Score[]>
@@ -1643,6 +1657,9 @@ function HRAdminView({ reviewTemplates, reviews, scores, finalComments, allEmplo
   onManageTemplate: () => void
   onShowRatingGuide: () => void
   ratingScale: RatingRow[]
+  selectedYear: number
+  setSelectedYear: (y: number) => void
+  availableYears: number[]
 }) {
   const [searchQ, setSearchQ]         = useState("")
   const [deptFilter, setDeptFilter]   = useState("all")
@@ -1651,19 +1668,22 @@ function HRAdminView({ reviewTemplates, reviews, scores, finalComments, allEmplo
   const [selectedId, setSelectedId]   = useState<string | null>(null)
   const [selectedQuarter, setSelectedQuarter] = useState<Quarter | undefined>(undefined)
 
-  // Build a map: employee_id → reviews[]
+  // Only reviews in the selected year drive the list, chips and stats.
+  const yearReviews = useMemo(() => reviews.filter(r => periodToYear(r.period) === selectedYear), [reviews, selectedYear])
+
+  // Build a map: employee_id → reviews[] (for the selected year)
   const reviewsByEmployee = useMemo(() => {
     const map: Record<string, Review[]> = {}
-    for (const r of reviews) {
+    for (const r of yearReviews) {
       if (!map[r.employee_id]) map[r.employee_id] = []
       map[r.employee_id].push(r)
     }
     return map
-  }, [reviews])
+  }, [yearReviews])
 
   // Stat cards
   const totalStaff = allEmployees.length
-  const q1Reviews = reviews.filter(r => periodToQuarter(r.period) === 1)
+  const q1Reviews = yearReviews.filter(r => periodToQuarter(r.period) === 1)
   const q1Published = q1Reviews.filter(r => r.status === "active" || r.status === "completed").length
   const q1Draft = q1Reviews.filter(r => r.status === "draft").length
   const employeesWithQ1 = new Set(q1Reviews.map(r => r.employee_id))
@@ -1739,6 +1759,7 @@ function HRAdminView({ reviewTemplates, reviews, scores, finalComments, allEmplo
         onBack={() => setSelectedId(null)}
         initialQuarter={selectedQuarter}
         ratingScale={ratingScale}
+        selectedYear={selectedYear}
       />
     )
   }
@@ -1748,12 +1769,20 @@ function HRAdminView({ reviewTemplates, reviews, scores, finalComments, allEmplo
       {/* Page header */}
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">KPI Reviews — 2026</h1>
+          <h1 className="text-2xl font-bold tracking-tight">KPI Reviews — {selectedYear}</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            {totalStaff} staff member{totalStaff !== 1 ? "s" : ""} · Q1 in progress
+            {totalStaff} staff member{totalStaff !== 1 ? "s" : ""} · {selectedYear} review year
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+          <select
+            value={selectedYear}
+            onChange={e => setSelectedYear(Number(e.target.value))}
+            className="h-9 rounded-lg border border-border bg-card px-3 text-sm font-semibold text-foreground outline-none focus:border-ring"
+            aria-label="Review year"
+          >
+            {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
+          </select>
           <Button size="sm" variant="outline" onClick={onShowRatingGuide} className="gap-1.5 h-9 text-xs">
             <BarChart3 size={13} /> Rating Guide
           </Button>
@@ -1852,7 +1881,7 @@ function HRAdminView({ reviewTemplates, reviews, scores, finalComments, allEmplo
 
 // ─── My Assignments tab (non-HR / HR-as-invitee) ────────────────────────────────
 
-function MyAssignmentsView({ reviews, scores, reviewTemplates, finalComments, currentEmployeeId, isHR, onScoreChange, onSaveFinalComment, loadAll, showToast, ratingScale }: {
+function MyAssignmentsView({ reviews, scores, reviewTemplates, finalComments, currentEmployeeId, isHR, onScoreChange, onSaveFinalComment, loadAll, showToast, ratingScale, selectedYear }: {
   reviews: Review[]
   scores: Record<string, Score[]>
   reviewTemplates: Record<string, TemplateSection[]>
@@ -1864,19 +1893,21 @@ function MyAssignmentsView({ reviews, scores, reviewTemplates, finalComments, cu
   loadAll: (opts?: { silent?: boolean }) => Promise<void>
   showToast: (msg: string) => void
   ratingScale: RatingRow[]
+  selectedYear: number
 }) {
+  const yearReviews = reviews.filter(r => periodToYear(r.period) === selectedYear)
   const myAssignments = isHR
-    ? reviews.filter(r => r.kpi_review_invitees?.some(i => i.invitee_id === currentEmployeeId))
-    : reviews
+    ? yearReviews.filter(r => r.kpi_review_invitees?.some(i => i.invitee_id === currentEmployeeId))
+    : yearReviews
 
   // The current user's own KPI reviews (where they are the subject) — for the
   // quarter/year performance summary.
-  const myOwnReviews = reviews.filter(r => r.employee_id === currentEmployeeId)
+  const myOwnReviews = yearReviews.filter(r => r.employee_id === currentEmployeeId)
 
   return (
     <div className="space-y-4">
       {myOwnReviews.length > 0 && (
-        <QuarterScoresSummary reviews={myOwnReviews} scores={scores} reviewTemplates={reviewTemplates} ratingScale={ratingScale} />
+        <QuarterScoresSummary reviews={myOwnReviews} scores={scores} reviewTemplates={reviewTemplates} ratingScale={ratingScale} year={selectedYear} />
       )}
       {myAssignments.length === 0 ? (
         <div className="flex flex-col items-center justify-center h-48 text-muted-foreground gap-3">
@@ -2486,6 +2517,19 @@ export function KpiPageClient({ isHR, currentEmployeeId }: { isHR: boolean; curr
   const [showManage, setShowManage]       = useState(false)
   const [showRatingGuide, setShowRatingGuide] = useState(false)
   const [ratingScale, setRatingScale]     = useState<RatingRow[]>([])
+  const [selectedYear, setSelectedYear]   = useState<number>(new Date().getFullYear())
+
+  // Years offered in the filter: every year that has reviews, plus the current
+  // period's year and the next year (so a new year can always be started).
+  const availableYears = useMemo(() => {
+    const years = new Set<number>()
+    for (const r of reviews) { const y = periodToYear(r.period); if (y) years.add(y) }
+    const base = periodToYear(currentPeriod) ?? new Date().getFullYear()
+    years.add(base)
+    years.add(base + 1)
+    years.add(selectedYear)
+    return Array.from(years).sort((a, b) => a - b)
+  }, [reviews, currentPeriod, selectedYear])
 
   function showToast(msg: string) {
     setToast(msg)
@@ -2807,6 +2851,9 @@ export function KpiPageClient({ isHR, currentEmployeeId }: { isHR: boolean; curr
               onManageTemplate={() => setShowManage(true)}
               onShowRatingGuide={() => setShowRatingGuide(true)}
               ratingScale={ratingScale}
+              selectedYear={selectedYear}
+              setSelectedYear={setSelectedYear}
+              availableYears={availableYears}
             />
           )}
 
@@ -2818,9 +2865,19 @@ export function KpiPageClient({ isHR, currentEmployeeId }: { isHR: boolean; curr
                     <h1 className="text-2xl font-bold tracking-tight">KPI &amp; Performance</h1>
                     <p className="text-sm text-muted-foreground mt-0.5">View your KPI reviews and scoring</p>
                   </div>
-                  <Button size="sm" variant="outline" onClick={() => setShowRatingGuide(true)} className="gap-1.5 h-9 text-xs shrink-0">
-                    <BarChart3 size={13} /> Rating Guide
-                  </Button>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <select
+                      value={selectedYear}
+                      onChange={e => setSelectedYear(Number(e.target.value))}
+                      className="h-9 rounded-lg border border-border bg-card px-3 text-sm font-semibold text-foreground outline-none focus:border-ring"
+                      aria-label="Review year"
+                    >
+                      {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
+                    </select>
+                    <Button size="sm" variant="outline" onClick={() => setShowRatingGuide(true)} className="gap-1.5 h-9 text-xs">
+                      <BarChart3 size={13} /> Rating Guide
+                    </Button>
+                  </div>
                 </div>
               )}
               <MyAssignmentsView
@@ -2835,6 +2892,7 @@ export function KpiPageClient({ isHR, currentEmployeeId }: { isHR: boolean; curr
                 loadAll={loadAll}
                 showToast={showToast}
                 ratingScale={ratingScale}
+                selectedYear={selectedYear}
               />
             </>
           )}
@@ -2845,6 +2903,7 @@ export function KpiPageClient({ isHR, currentEmployeeId }: { isHR: boolean; curr
         <CreateReviewModal
           employees={allEmployees}
           currentPeriod={currentPeriod}
+          selectedYear={selectedYear}
           preselectedEmployeeId={createPreselect.employeeId}
           preselectedQuarter={createPreselect.quarter}
           onSave={handleCreate}
