@@ -6,6 +6,7 @@ import {
   Users, UserPlus, Send, Clock, CheckCircle2, XCircle,
   Loader2, BarChart3, FileText, Target, Heart, Building2,
   Search, Pencil, SlidersHorizontal, ArrowUp, ArrowDown, RotateCcw, Copy,
+  Sparkles, ListChecks,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -1012,6 +1013,62 @@ function FinalCommentsAccordion({ visible, byAuthor, withComment, isHR, currentE
   )
 }
 
+// ─── Action Points ──────────────────────────────────────────────────────────────
+
+// Placeholder for AI-generated action points. Once a quarter is scored, HR
+// clicks "Summarise" and (later) OpenAI summarises all scores + comments into
+// the points the staff member should work on to improve. The AI call is not
+// wired up yet — this is the UI shell only.
+function ActionPoints({ isHR }: { isHR: boolean }) {
+  const [open, setOpen] = useState(true)
+  const [note, setNote] = useState(false)
+
+  return (
+    <div className="rounded-xl border bg-card overflow-hidden shadow-sm border-border">
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={() => setOpen(o => !o)}
+        onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpen(o => !o) } }}
+        className={cn("w-full flex items-center gap-3 px-5 py-4 text-left transition-colors cursor-pointer select-none", open ? "border-b border-border" : "hover:bg-muted/20")}
+      >
+        <ListChecks size={18} className="shrink-0 text-primary" />
+        <div className="flex-1 min-w-0">
+          <p className="font-bold text-[14px] text-foreground leading-snug">Action Points</p>
+          <p className="text-xs text-muted-foreground mt-0.5">What this staff member should work on next quarter to improve their score</p>
+        </div>
+        {isHR && (
+          <Button size="sm" variant="outline" onClick={e => { e.stopPropagation(); setOpen(true); setNote(true) }} className="h-7 text-xs gap-1.5 shrink-0">
+            <Sparkles size={13} /> Summarise
+          </Button>
+        )}
+        <div className={cn("w-7 h-7 rounded-full border border-border flex items-center justify-center text-muted-foreground transition-transform shrink-0", !open && "-rotate-90")}>
+          <ChevronDown size={14} />
+        </div>
+      </div>
+
+      {open && (
+        <div className="bg-[#FAFBFC] p-5">
+          <div className="border-2 border-dashed border-border rounded-xl p-8 text-center bg-card">
+            <div className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center mx-auto mb-3">
+              <Sparkles size={18} />
+            </div>
+            <p className="font-semibold text-sm">No action points yet</p>
+            <p className="text-xs text-muted-foreground mt-1 max-w-md mx-auto">
+              {isHR
+                ? "Once the quarter is scored, click Summarise and the scores and comments will be turned into the action points this staff member should focus on."
+                : "Once your review is scored, HR will generate the action points you should focus on to improve."}
+            </p>
+            {note && (
+              <p className="text-[11px] font-medium text-amber-600 dark:text-amber-400 mt-3">AI summarisation isn&apos;t connected yet — coming soon.</p>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Quarter Panel (within staff row) ──────────────────────────────────────────
 
 function QuarterPanel({ review, template, scores, finalComments, allEmployees, currentEmployeeId, isHR, onScoreChange, onSaveFinalComment, onAddInvitee, onRemoveInvitee, onSetSections, onStatusChange, onDelete, onAddItem, onEditItem, onRemoveItem, onResetItem, onCopyItems, otherReviews, onUpdateReviewDetails }: {
@@ -1169,6 +1226,8 @@ function QuarterPanel({ review, template, scores, finalComments, allEmployees, c
       {isHR && (
         <InviteePanel review={review} allEmployees={allEmployees} template={template} onAddInvitee={onAddInvitee} onRemoveInvitee={onRemoveInvitee} onSetSections={onSetSections} />
       )}
+
+      <ActionPoints isHR={isHR} />
 
       <div className="flex flex-col gap-3">
         {reviewTemplate.length === 0 ? (
@@ -1762,6 +1821,7 @@ function MyAssignmentsView({ reviews, scores, reviewTemplates, finalComments, cu
               if (!inviteeActive && !subjectReadOnly) return null
               return (
                 <div className="px-5 py-5 space-y-3">
+                  <ActionPoints isHR={isHR} />
                   {(reviewTemplates[review.id] ?? []).map((section) => (
                     <SectionAccordion
                       key={section.id} section={section}
