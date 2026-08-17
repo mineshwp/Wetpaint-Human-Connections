@@ -1460,7 +1460,7 @@ function EmployeeReviewDetail({ employee, reviews, scores, reviewTemplates, fina
 
 // ─── HR Admin View ──────────────────────────────────────────────────────────────
 
-function HRAdminView({ reviewTemplates, reviews, scores, finalComments, allEmployees, currentEmployeeId, onScoreChange, onSaveFinalComment, onAddInvitee, onRemoveInvitee, onSetSections, onStatusChange, onDelete, onAddItem, onEditItem, onRemoveItem, onResetItem, onCopyItems, onUpdateReviewDetails, onShowCreate, onManageTemplate }: {
+function HRAdminView({ reviewTemplates, reviews, scores, finalComments, allEmployees, currentEmployeeId, onScoreChange, onSaveFinalComment, onAddInvitee, onRemoveInvitee, onSetSections, onStatusChange, onDelete, onAddItem, onEditItem, onRemoveItem, onResetItem, onCopyItems, onUpdateReviewDetails, onShowCreate, onManageTemplate, onShowRatingGuide }: {
   reviewTemplates: Record<string, TemplateSection[]>
   reviews: Review[]
   scores: Record<string, Score[]>
@@ -1482,6 +1482,7 @@ function HRAdminView({ reviewTemplates, reviews, scores, finalComments, allEmplo
   onUpdateReviewDetails?: (reviewId: string, data: { title: string; period: string; deadline: string | null }) => Promise<void>
   onShowCreate: (employeeId?: string, quarter?: Quarter) => void
   onManageTemplate: () => void
+  onShowRatingGuide: () => void
 }) {
   const [searchQ, setSearchQ]         = useState("")
   const [deptFilter, setDeptFilter]   = useState("all")
@@ -1592,6 +1593,9 @@ function HRAdminView({ reviewTemplates, reviews, scores, finalComments, allEmplo
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+          <Button size="sm" variant="outline" onClick={onShowRatingGuide} className="gap-1.5 h-9 text-xs">
+            <BarChart3 size={13} /> Rating Guide
+          </Button>
           <Button size="sm" variant="outline" onClick={onManageTemplate} className="gap-1.5 h-9 text-xs">
             <SlidersHorizontal size={13} /> Manage Template
           </Button>
@@ -1842,6 +1846,143 @@ function GlobalItemsEditor({ section, onAdd, onEdit, onDelete }: {
       ) : (
         <button type="button" onClick={() => setShowAdd(true)} className="text-[11px] text-primary hover:underline">+ Add KPI (all staff)</button>
       )}
+    </div>
+  )
+}
+
+interface RatingRow { score: number; label: string; annual_increase: string; birthday_bonus: string }
+
+// The KPI rating guide (1-10 → annual increase / birthday bonus). Everyone can
+// view it; HR can edit. Reference only — no scores are calculated from it.
+function RatingGuideModal({ isHR, onClose, showToast }: {
+  isHR: boolean
+  onClose: () => void
+  showToast: (msg: string) => void
+}) {
+  const [rows, setRows]       = useState<RatingRow[]>([])
+  const [loading, setLoading] = useState(true)
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft]     = useState<RatingRow[]>([])
+  const [saving, setSaving]   = useState(false)
+
+  useEffect(() => {
+    let alive = true
+    ;(async () => {
+      try {
+        const res = await fetch("/api/kpi/rating-scale")
+        const data = res.ok ? await res.json() : []
+        if (alive) setRows(Array.isArray(data) ? data : [])
+      } finally {
+        if (alive) setLoading(false)
+      }
+    })()
+    return () => { alive = false }
+  }, [])
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) { if (e.key === "Escape") onClose() }
+    document.addEventListener("keydown", onKey)
+    return () => document.removeEventListener("keydown", onKey)
+  }, [onClose])
+
+  function startEdit() { setDraft(rows.map(r => ({ ...r }))); setEditing(true) }
+  function setCell(score: number, key: keyof RatingRow, value: string) {
+    setDraft(d => d.map(r => r.score === score ? { ...r, [key]: value } : r))
+  }
+  async function save() {
+    setSaving(true)
+    const res = await fetch("/api/kpi/rating-scale", {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ rows: draft }),
+    })
+    if (res.ok) {
+      const data = await res.json()
+      setRows(Array.isArray(data) ? data : draft)
+      setEditing(false)
+      showToast("Rating guide saved")
+    } else {
+      showToast("Failed to save rating guide")
+    }
+    setSaving(false)
+  }
+
+  const view = editing ? draft : rows
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={onClose}>
+      <div className="w-full max-w-2xl max-h-[85vh] overflow-y-auto rounded-2xl bg-card border border-border p-6 shadow-xl space-y-4" onClick={e => e.stopPropagation()}>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="font-bold text-lg">KPI Rating Guide</h2>
+            <p className="text-xs text-muted-foreground mt-0.5">Rating is on a scale of 1–10. Used as a reference for annual increases and birthday bonuses.</p>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            {isHR && !editing && (
+              <Button size="sm" variant="outline" onClick={startEdit} className="h-8 text-xs gap-1"><Pencil size={12} /> Edit</Button>
+            )}
+            {isHR && editing && (
+              <>
+                <Button size="sm" onClick={save} disabled={saving} className="h-8 text-xs gap-1">
+                  {saving ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />} Save
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setEditing(false)} className="h-8 text-xs">Cancel</Button>
+              </>
+            )}
+            <button type="button" onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors"><X size={18} /></button>
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="flex items-center justify-center py-10"><Loader2 size={22} className="animate-spin text-muted-foreground" /></div>
+        ) : (
+          <div className="overflow-x-auto rounded-xl border border-border">
+            <table className="w-full text-sm border-collapse">
+              <thead>
+                <tr className="bg-primary text-primary-foreground text-left">
+                  <th className="px-3 py-2 font-semibold">Rating (1–10)</th>
+                  <th className="px-3 py-2 font-semibold">% Score for Annual Increase</th>
+                  <th className="px-3 py-2 font-semibold">% R for Birthday Bonus</th>
+                </tr>
+              </thead>
+              <tbody>
+                {view.map(r => (
+                  <tr key={r.score} className="border-t border-border">
+                    <td className="px-3 py-2 align-middle">
+                      <span className="font-semibold text-foreground">{r.score}</span>
+                      {editing ? (
+                        <input value={r.label} onChange={e => setCell(r.score, "label", e.target.value)}
+                          placeholder="label"
+                          className="ml-2 w-40 rounded border border-border bg-card px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary" />
+                      ) : (
+                        <span className="text-muted-foreground"> – {r.label}</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 align-middle">
+                      {editing ? (
+                        <input value={r.annual_increase} onChange={e => setCell(r.score, "annual_increase", e.target.value)}
+                          placeholder="—"
+                          className="w-48 rounded border border-border bg-card px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary" />
+                      ) : (
+                        <span className={r.annual_increase ? "text-foreground" : "text-muted-foreground"}>{r.annual_increase || "—"}</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 align-middle">
+                      {editing ? (
+                        <input value={r.birthday_bonus} onChange={e => setCell(r.score, "birthday_bonus", e.target.value)}
+                          placeholder="—"
+                          className="w-32 rounded border border-border bg-card px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary" />
+                      ) : (
+                        <span className={r.birthday_bonus ? "text-foreground" : "text-muted-foreground"}>{r.birthday_bonus || "—"}</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {!isHR && <p className="text-[11px] text-muted-foreground">This guide is maintained by HR.</p>}
+      </div>
     </div>
   )
 }
@@ -2173,6 +2314,7 @@ export function KpiPageClient({ isHR, currentEmployeeId }: { isHR: boolean; curr
   const [deleteTarget, setDeleteTarget]   = useState<string | null>(null)
   const [deleting, setDeleting]           = useState(false)
   const [showManage, setShowManage]       = useState(false)
+  const [showRatingGuide, setShowRatingGuide] = useState(false)
 
   function showToast(msg: string) {
     setToast(msg)
@@ -2482,6 +2624,7 @@ export function KpiPageClient({ isHR, currentEmployeeId }: { isHR: boolean; curr
               onUpdateReviewDetails={handleUpdateReviewDetails}
               onShowCreate={handleShowCreate}
               onManageTemplate={() => setShowManage(true)}
+              onShowRatingGuide={() => setShowRatingGuide(true)}
             />
           )}
 
@@ -2493,6 +2636,9 @@ export function KpiPageClient({ isHR, currentEmployeeId }: { isHR: boolean; curr
                     <h1 className="text-2xl font-bold tracking-tight">KPI &amp; Performance</h1>
                     <p className="text-sm text-muted-foreground mt-0.5">View your KPI reviews and scoring</p>
                   </div>
+                  <Button size="sm" variant="outline" onClick={() => setShowRatingGuide(true)} className="gap-1.5 h-9 text-xs shrink-0">
+                    <BarChart3 size={13} /> Rating Guide
+                  </Button>
                 </div>
               )}
               <MyAssignmentsView
@@ -2537,6 +2683,14 @@ export function KpiPageClient({ isHR, currentEmployeeId }: { isHR: boolean; curr
           currentPeriod={currentPeriod}
           onClose={() => { setShowManage(false); void loadAll({ silent: true }) }}
           onCurrentPeriodChange={setCurrentPeriod}
+          showToast={showToast}
+        />
+      )}
+
+      {showRatingGuide && (
+        <RatingGuideModal
+          isHR={isHR}
+          onClose={() => setShowRatingGuide(false)}
           showToast={showToast}
         />
       )}

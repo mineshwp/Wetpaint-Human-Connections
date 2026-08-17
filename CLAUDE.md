@@ -154,6 +154,12 @@ kpi_scores
 
 kpi_settings
   key, value  (e.g. key="current_period", value="Q1 2026")
+
+kpi_rating_scale
+  score (1-10 PK), label, annual_increase, birthday_bonus
+  # Global reference rubric (not per-period). % values stored as free text so
+  # notes ("3.6% SA inflation rate") and blank bands are allowed. HR edits,
+  # everyone views. Reference only — no scores are computed from it.
 ```
 
 ### API routes needed
@@ -173,6 +179,8 @@ POST   /api/kpi/reviews/[id]/invitees              → add invitees (HR only)
 DELETE /api/kpi/reviews/[id]/invitees              → remove invitee (HR only)
 POST   /api/kpi/invitees/[id]/respond              → accept or decline invite
 GET    /api/kpi/settings                           → fetch settings (e.g. current_period)
+GET    /api/kpi/rating-scale                        → rating guide rows (any authenticated user)
+PUT    /api/kpi/rating-scale                        → bulk-upsert rating guide rows (HR only)
 POST   /api/kpi/template/sections/[id]             → add item to section (HR only)
 ```
 
@@ -312,6 +320,8 @@ Always return proper HTTP status codes: 400, 401, 403, 404, 500.
 | KPI inline accordion on Training & KPIs tab | ✅ Done |
 | Leave tab removed (future phase) | ✅ Done |
 | KPI per-period templates (select/edit a period's template; new period copies from another) | ✅ Done |
+| KPI rating guide (global 1–10 rubric; HR edits, all view) | ✅ Done |
+| Alphabetical A–Z / Z–A sort on Employees + KPI lists | ✅ Done |
 
 Update this table as features are completed.
 
