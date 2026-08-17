@@ -144,7 +144,9 @@ kpi_template_items
   id, section_id, title, description, min_score, max_score, position, is_active
 
 kpi_reviews
-  id, employee_id, period, title, deadline, status ("draft" | "active" | "completed")
+  id, employee_id, period, title, deadline, status ("draft" | "active" | "completed"), action_points, action_points_generated_at
+  # action_points: AI-generated on publish (status → active) via OpenAI, gated
+  # on OPENAI_API_KEY (+ optional OPENAI_MODEL, default gpt-4o-mini).
 
 kpi_review_invitees
   id, review_id, invitee_id, status ("pending" | "accepted" | "declined" | "completed")
@@ -324,7 +326,7 @@ Always return proper HTTP status codes: 400, 401, 403, 404, 500.
 | Alphabetical A–Z / Z–A sort on Employees + KPI lists | ✅ Done |
 | KPI Q1-as-default inheritance (new Q2/Q3/Q4 review auto-inherits period template + staff's baseline-quarter KPIs; baseline = same-year Q1, else earliest existing same-year quarter, else latest prior-year period so a new year carries forward; editable after) | ✅ Done |
 | Multi-year KPI support (year filter with current-year default; year-aware quarter↔period; create/set up future-year reviews) | ✅ Done |
-| KPI Action Points placeholder section (Summarise button; OpenAI hookup pending) | ✅ Done |
+| KPI Action Points — auto-generated on publish via OpenAI (dormant until `OPENAI_API_KEY` env var is set; regenerates each publish; stored on `kpi_reviews.action_points`) | ✅ Done |
 | KPI quarter + year performance summary (Q1–Q4 + year score, % and /10 via rating guide) | ✅ Done |
 | Archive cascade (archiving an employee archives their KPI reviews; archived reviews hidden from lists) | ✅ Done |
 

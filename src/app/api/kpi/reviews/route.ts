@@ -21,7 +21,7 @@ export async function GET() {
   const effectiveEmployeeId = role === "hr" && impersonating ? impersonating.employeeId : myEmployeeId
 
   const selectClause = `
-    id, employee_id, period, title, deadline, status, created_at,
+    id, employee_id, period, title, deadline, status, created_at, action_points, action_points_generated_at,
     employee:employees!kpi_reviews_employee_id_fkey(id, first_name, last_name, job_title, department:departments(name)),
     kpi_review_invitees(id, invitee_id, status, invitee:employees!kpi_review_invitees_invitee_id_fkey(id, first_name, last_name), kpi_review_invitee_sections(section_id))
   `

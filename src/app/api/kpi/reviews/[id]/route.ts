@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { getUserRole, getEmployeeIdForUser } from "@/lib/auth"
 import { getImpersonationContext } from "@/lib/impersonation"
+import { generateActionPoints } from "@/lib/kpi/action-points"
 
 async function canAccessReview(
   supabase: Awaited<ReturnType<typeof createClient>>,
@@ -51,7 +52,7 @@ export async function GET(
   const { data, error } = await supabase
     .from("kpi_reviews")
     .select(`
-      id, employee_id, period, title, deadline, status, created_at,
+      id, employee_id, period, title, deadline, status, created_at, action_points, action_points_generated_at,
       employee:employees!kpi_reviews_employee_id_fkey(id, first_name, last_name, job_title, department:departments(name)),
       kpi_review_invitees(id, invitee_id, status, invitee:employees!kpi_review_invitees_invitee_id_fkey(id, first_name, last_name))
     `)
@@ -91,7 +92,15 @@ export async function PATCH(
 
   if (error) return NextResponse.json({ error: "Failed to update review" }, { status: 500 })
 
-  return NextResponse.json(data)
+  // When a quarter is published (status → active), regenerate the AI action
+  // points from the latest scores + comments. Dormant until OPENAI_API_KEY is
+  // set; best-effort so it never blocks the status change.
+  let actionPoints: { generated: boolean; reason?: string } | undefined
+  if (body.status === "active") {
+    actionPoints = await generateActionPoints(supabase, id)
+  }
+
+  return NextResponse.json({ ...data, actionPoints })
 }
 
 export async function DELETE(

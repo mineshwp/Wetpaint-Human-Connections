@@ -33,6 +33,8 @@ interface Review {
   deadline: string | null; status: "draft" | "active" | "completed"
   employee: { id: string; first_name: string; last_name: string; job_title: string; department: { name: string } | null }
   kpi_review_invitees: ReviewInvitee[]
+  action_points?: string | null
+  action_points_generated_at?: string | null
 }
 interface Score {
   id: string; review_id: string; item_id: string
@@ -1124,13 +1126,18 @@ function FinalCommentsAccordion({ visible, byAuthor, withComment, isHR, currentE
 
 // ─── Action Points ──────────────────────────────────────────────────────────────
 
-// Placeholder for AI-generated action points. Once a quarter is scored, HR
-// clicks "Summarise" and (later) OpenAI summarises all scores + comments into
-// the points the staff member should work on to improve. The AI call is not
-// wired up yet — this is the UI shell only.
-function ActionPoints({ isHR }: { isHR: boolean }) {
+// AI-generated action points. Generated automatically when a quarter is
+// published (status → active); this component just displays what was stored.
+function ActionPoints({ isHR, actionPoints, generatedAt }: {
+  isHR: boolean
+  actionPoints?: string | null
+  generatedAt?: string | null
+}) {
   const [open, setOpen] = useState(true)
-  const [note, setNote] = useState(false)
+  const points = (actionPoints ?? "")
+    .split("\n")
+    .map(l => l.replace(/^\s*[-*•]\s?/, "").trim())
+    .filter(Boolean)
 
   return (
     <div className="rounded-xl border bg-card overflow-hidden shadow-sm border-border">
@@ -1146,10 +1153,10 @@ function ActionPoints({ isHR }: { isHR: boolean }) {
           <p className="font-bold text-[14px] text-foreground leading-snug">Action Points</p>
           <p className="text-xs text-muted-foreground mt-0.5">What this staff member should work on next quarter to improve their score</p>
         </div>
-        {isHR && (
-          <Button size="sm" variant="outline" onClick={e => { e.stopPropagation(); setOpen(true); setNote(true) }} className="h-7 text-xs gap-1.5 shrink-0">
-            <Sparkles size={13} /> Summarise
-          </Button>
+        {generatedAt && (
+          <span className="hidden sm:inline-flex items-center gap-1 text-[10px] text-muted-foreground shrink-0">
+            <Sparkles size={11} className="text-primary" /> AI generated
+          </span>
         )}
         <div className={cn("w-7 h-7 rounded-full border border-border flex items-center justify-center text-muted-foreground transition-transform shrink-0", !open && "-rotate-90")}>
           <ChevronDown size={14} />
@@ -1158,20 +1165,28 @@ function ActionPoints({ isHR }: { isHR: boolean }) {
 
       {open && (
         <div className="bg-[#FAFBFC] p-5">
-          <div className="border-2 border-dashed border-border rounded-xl p-8 text-center bg-card">
-            <div className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center mx-auto mb-3">
-              <Sparkles size={18} />
+          {points.length > 0 ? (
+            <ul className="space-y-2">
+              {points.map((p, i) => (
+                <li key={i} className="flex items-start gap-2.5 rounded-lg border border-border bg-card px-3 py-2.5">
+                  <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
+                  <span className="text-sm text-foreground">{p}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="border-2 border-dashed border-border rounded-xl p-8 text-center bg-card">
+              <div className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center mx-auto mb-3">
+                <Sparkles size={18} />
+              </div>
+              <p className="font-semibold text-sm">No action points yet</p>
+              <p className="text-xs text-muted-foreground mt-1 max-w-md mx-auto">
+                {isHR
+                  ? "These are generated automatically when the quarter is published — from the scores and comments."
+                  : "These appear automatically once HR publishes your scored review."}
+              </p>
             </div>
-            <p className="font-semibold text-sm">No action points yet</p>
-            <p className="text-xs text-muted-foreground mt-1 max-w-md mx-auto">
-              {isHR
-                ? "Once the quarter is scored, click Summarise and the scores and comments will be turned into the action points this staff member should focus on."
-                : "Once your review is scored, HR will generate the action points you should focus on to improve."}
-            </p>
-            {note && (
-              <p className="text-[11px] font-medium text-amber-600 dark:text-amber-400 mt-3">AI summarisation isn&apos;t connected yet — coming soon.</p>
-            )}
-          </div>
+          )}
         </div>
       )}
     </div>
@@ -1336,7 +1351,7 @@ function QuarterPanel({ review, template, scores, finalComments, allEmployees, c
         <InviteePanel review={review} allEmployees={allEmployees} template={template} onAddInvitee={onAddInvitee} onRemoveInvitee={onRemoveInvitee} onSetSections={onSetSections} />
       )}
 
-      <ActionPoints isHR={isHR} />
+      <ActionPoints isHR={isHR} actionPoints={review.action_points} generatedAt={review.action_points_generated_at} />
 
       <div className="flex flex-col gap-3">
         {reviewTemplate.length === 0 ? (
@@ -1962,7 +1977,7 @@ function MyAssignmentsView({ reviews, scores, reviewTemplates, finalComments, cu
               if (!inviteeActive && !subjectReadOnly) return null
               return (
                 <div className="px-5 py-5 space-y-3">
-                  <ActionPoints isHR={isHR} />
+                  <ActionPoints isHR={isHR} actionPoints={review.action_points} generatedAt={review.action_points_generated_at} />
                   {(reviewTemplates[review.id] ?? []).map((section) => (
                     <SectionAccordion
                       key={section.id} section={section}
@@ -2669,6 +2684,13 @@ export function KpiPageClient({ isHR, currentEmployeeId }: { isHR: boolean; curr
     if (!res.ok) {
       if (prev) setReviews(rs => rs.map(r => r.id === reviewId ? { ...r, status: prev } : r))
       showToast("Failed to update status")
+      return
+    }
+    // Publishing triggers AI action points server-side — reload so they show.
+    if (status === "active") {
+      const data = await res.json().catch(() => null)
+      showToast(data?.actionPoints?.generated ? "Published — action points generated" : "Review published")
+      await loadAll({ silent: true })
     }
   }
 
