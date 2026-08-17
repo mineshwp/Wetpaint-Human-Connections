@@ -1696,13 +1696,16 @@ function HRAdminView({ reviewTemplates, reviews, scores, finalComments, allEmplo
     return map
   }, [yearReviews])
 
-  // Stat cards
+  // Stat cards — published/draft per quarter for the selected year.
   const totalStaff = allEmployees.length
-  const q1Reviews = yearReviews.filter(r => periodToQuarter(r.period) === 1)
-  const q1Published = q1Reviews.filter(r => r.status === "active" || r.status === "completed").length
-  const q1Draft = q1Reviews.filter(r => r.status === "draft").length
-  const employeesWithQ1 = new Set(q1Reviews.map(r => r.employee_id))
-  const notStarted = allEmployees.filter(e => !employeesWithQ1.has(e.id)).length
+  const quarterStats = QUARTERS.map(q => {
+    const qReviews = yearReviews.filter(r => periodToQuarter(r.period) === q)
+    return {
+      q,
+      published: qReviews.filter(r => r.status === "active" || r.status === "completed").length,
+      draft: qReviews.filter(r => r.status === "draft").length,
+    }
+  })
 
   // Departments for filter
   const departments = useMemo(() => {
@@ -1810,24 +1813,21 @@ function HRAdminView({ reviewTemplates, reviews, scores, finalComments, allEmplo
         </div>
       </div>
 
-      {/* Stat cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      {/* Stat cards — total staff + published/draft per quarter */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         <div className="rounded-xl border border-border bg-card px-4 py-3">
           <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Total Staff</div>
           <div className="text-2xl font-bold">{totalStaff}</div>
         </div>
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
-          <div className="text-[10px] font-semibold text-emerald-700 uppercase tracking-wider mb-1">Q1 Published</div>
-          <div className="text-2xl font-bold text-emerald-700">{q1Published}</div>
-        </div>
-        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
-          <div className="text-[10px] font-semibold text-amber-700 uppercase tracking-wider mb-1">Q1 Draft</div>
-          <div className="text-2xl font-bold text-amber-700">{q1Draft}</div>
-        </div>
-        <div className="rounded-xl border border-border bg-card px-4 py-3">
-          <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Not Started</div>
-          <div className="text-2xl font-bold text-muted-foreground">{notStarted}</div>
-        </div>
+        {quarterStats.map(({ q, published, draft }) => (
+          <div key={q} className="rounded-xl border border-border bg-card px-4 py-3">
+            <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Q{q} Published</div>
+            <div className="text-2xl font-bold text-emerald-700">
+              {published}<span className="text-sm font-medium text-muted-foreground"> / {totalStaff}</span>
+            </div>
+            <div className="text-[11px] text-amber-700 mt-0.5">{draft} draft{draft !== 1 ? "s" : ""}</div>
+          </div>
+        ))}
       </div>
 
       {/* Filter bar */}
