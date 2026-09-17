@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { getUserRole } from "@/lib/auth"
+import { syncCustomItemToSiblings } from "@/lib/kpi/inherit"
 
 // Resolve whether an item is global (review_id null) or this review's custom item.
 async function loadItem(
@@ -9,7 +10,7 @@ async function loadItem(
 ) {
   const { data } = await supabase
     .from("kpi_template_items")
-    .select("id, review_id")
+    .select("id, review_id, section_id, title")
     .eq("id", itemId)
     .single()
   return data
@@ -41,9 +42,27 @@ export async function PUT(
   if (!item) return NextResponse.json({ error: "Item not found" }, { status: 404 })
 
   if (item.review_id === reviewId) {
-    // Custom item — edit directly.
+    // Custom item — edit directly, then push the same edit to this employee's
+    // matching custom item (same section + original title) in their other
+    // reviews for the same year, so individualized criteria stay in sync.
     const { error } = await supabase.from("kpi_template_items").update(fields).eq("id", itemId)
     if (error) return NextResponse.json({ error: "Failed to update KPI" }, { status: 500 })
+
+    const { data: review } = await supabase
+      .from("kpi_reviews")
+      .select("employee_id, period")
+      .eq("id", reviewId)
+      .maybeSingle()
+    if (review) {
+      await syncCustomItemToSiblings(
+        supabase,
+        { id: reviewId, employee_id: review.employee_id, period: review.period },
+        item.section_id,
+        item.title,
+        fields,
+      )
+    }
+
     return NextResponse.json({ success: true, scope: "custom" })
   }
 
@@ -80,10 +99,27 @@ export async function DELETE(
   const item = await loadItem(supabase, itemId)
   if (!item) return NextResponse.json({ error: "Item not found" }, { status: 404 })
 
-  // Custom item: both remove and reset simply take it out of this review.
+  // Custom item: both remove and reset simply take it out of this review —
+  // and out of its matching copies in the employee's other same-year reviews.
   if (item.review_id === reviewId) {
     const { error } = await supabase.from("kpi_template_items").update({ is_active: false }).eq("id", itemId)
     if (error) return NextResponse.json({ error: "Failed to remove KPI" }, { status: 500 })
+
+    const { data: review } = await supabase
+      .from("kpi_reviews")
+      .select("employee_id, period")
+      .eq("id", reviewId)
+      .maybeSingle()
+    if (review) {
+      await syncCustomItemToSiblings(
+        supabase,
+        { id: reviewId, employee_id: review.employee_id, period: review.period },
+        item.section_id,
+        item.title,
+        { is_active: false },
+      )
+    }
+
     return NextResponse.json({ success: true })
   }
 

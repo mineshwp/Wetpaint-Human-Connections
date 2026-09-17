@@ -176,6 +176,129 @@ export async function copyStaffCustomItems(
   return toInsert.length
 }
 
+// An employee's other active (non-archived) reviews that fall in the same
+// calendar year as `period`, excluding `excludeReviewId`.
+async function findSameYearSiblingReviews(
+  supabase: DB,
+  employeeId: string,
+  period: string,
+  excludeReviewId: string,
+): Promise<{ id: string; period: string }[]> {
+  const t = parsePeriod(period)
+  if (!t) return []
+  const { data } = await supabase
+    .from("kpi_reviews")
+    .select("id, period")
+    .eq("employee_id", employeeId)
+    .eq("is_archived", false)
+    .neq("id", excludeReviewId)
+  return (data ?? []).filter((r) => parsePeriod(r.period)?.year === t.year)
+}
+
+// Find the section in `period` whose title matches `title` (trimmed,
+// case-insensitive equality — same matching rule as copyStaffCustomItems).
+async function findSectionByTitle(supabase: DB, period: string, title: string): Promise<string | null> {
+  const key = title.trim().toLowerCase()
+  const { data } = await supabase
+    .from("kpi_template_sections")
+    .select("id, title")
+    .eq("period", period)
+    .eq("is_active", true)
+  return (data ?? []).find((s) => (s.title ?? "").trim().toLowerCase() === key)?.id ?? null
+}
+
+// Push a just-created custom KPI item into an employee's other same-year
+// reviews, matching sections by title. Skips a sibling whose target section
+// already has an item with this title (avoids duplicates). Best-effort.
+export async function pushCustomItemToSiblings(
+  supabase: DB,
+  sourceReview: { id: string; employee_id: string; period: string },
+  item: { section_id: string; title: string; description: string | null; min_score: number; max_score: number },
+): Promise<void> {
+  try {
+    const siblings = await findSameYearSiblingReviews(supabase, sourceReview.employee_id, sourceReview.period, sourceReview.id)
+    if (siblings.length === 0) return
+
+    const { data: srcSection } = await supabase
+      .from("kpi_template_sections")
+      .select("title")
+      .eq("id", item.section_id)
+      .maybeSingle()
+    if (!srcSection?.title) return
+    const itemKey = item.title.trim().toLowerCase()
+
+    for (const sibling of siblings) {
+      const targetSectionId = await findSectionByTitle(supabase, sibling.period, srcSection.title)
+      if (!targetSectionId) continue
+
+      const { data: existingItems } = await supabase
+        .from("kpi_template_items")
+        .select("id, title, position")
+        .eq("review_id", sibling.id)
+        .eq("section_id", targetSectionId)
+        .eq("is_active", true)
+      if ((existingItems ?? []).some((i) => (i.title ?? "").trim().toLowerCase() === itemKey)) continue
+
+      const position = (existingItems ?? []).reduce((max, i) => Math.max(max, i.position ?? 0), -1) + 1
+
+      await supabase.from("kpi_template_items").insert({
+        section_id: targetSectionId,
+        review_id: sibling.id,
+        title: item.title,
+        description: item.description ?? null,
+        min_score: item.min_score,
+        max_score: item.max_score,
+        position,
+        is_active: true,
+      })
+    }
+  } catch (e) {
+    console.error("[pushCustomItemToSiblings]", e)
+  }
+}
+
+// Apply an edit or removal made to one custom KPI item across the employee's
+// matching custom items (same section title + original item title) in their
+// other same-year reviews. Best-effort — never throws.
+export async function syncCustomItemToSiblings(
+  supabase: DB,
+  sourceReview: { id: string; employee_id: string; period: string },
+  sectionId: string,
+  originalTitle: string,
+  fields: Record<string, unknown>,
+): Promise<void> {
+  try {
+    const siblings = await findSameYearSiblingReviews(supabase, sourceReview.employee_id, sourceReview.period, sourceReview.id)
+    if (siblings.length === 0) return
+
+    const { data: srcSection } = await supabase
+      .from("kpi_template_sections")
+      .select("title")
+      .eq("id", sectionId)
+      .maybeSingle()
+    if (!srcSection?.title) return
+    const titleKey = originalTitle.trim().toLowerCase()
+
+    for (const sibling of siblings) {
+      const targetSectionId = await findSectionByTitle(supabase, sibling.period, srcSection.title)
+      if (!targetSectionId) continue
+
+      const { data: candidates } = await supabase
+        .from("kpi_template_items")
+        .select("id, title")
+        .eq("review_id", sibling.id)
+        .eq("section_id", targetSectionId)
+        .eq("is_active", true)
+      const match = (candidates ?? []).find((i) => (i.title ?? "").trim().toLowerCase() === titleKey)
+      if (!match) continue
+
+      await supabase.from("kpi_template_items").update(fields).eq("id", match.id)
+    }
+  } catch (e) {
+    console.error("[syncCustomItemToSiblings]", e)
+  }
+}
+
 // Full inheritance for a newly-created review: ensure the target period has a
 // template (cloned from its baseline), then copy the staff member's custom KPIs
 // from their baseline-quarter review. Best-effort — never throws.

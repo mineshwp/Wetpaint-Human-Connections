@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { getUserRole } from "@/lib/auth"
+import { pushCustomItemToSiblings } from "@/lib/kpi/inherit"
 
-// Add a KPI item to a section for THIS review only (a per-staff custom item).
+// Add a KPI item to a section for THIS review — and, since it's an
+// individualized criterion under a shared value/section, push it into the
+// employee's other reviews for the same year too, so it stays consistent
+// across quarters.
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -49,6 +53,19 @@ export async function POST(
   if (error) {
     console.error("[POST /api/kpi/reviews/[id]/items]", error)
     return NextResponse.json({ error: "Failed to add KPI" }, { status: 500 })
+  }
+
+  const { data: review } = await supabase
+    .from("kpi_reviews")
+    .select("employee_id, period")
+    .eq("id", reviewId)
+    .maybeSingle()
+  if (review) {
+    await pushCustomItemToSiblings(
+      supabase,
+      { id: reviewId, employee_id: review.employee_id, period: review.period },
+      { section_id, title, description: data.description, min_score: data.min_score, max_score: data.max_score },
+    )
   }
 
   return NextResponse.json(data, { status: 201 })

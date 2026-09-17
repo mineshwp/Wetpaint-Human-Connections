@@ -179,14 +179,14 @@ function QuarterScoresSummary({ reviews, scores, reviewTemplates, ratingScale, y
         {perQuarter.map(({ q, review, pct }) => (
           <div key={q} className="px-4 py-3 flex flex-col gap-0.5">
             <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Q{q}</span>
+            <span className="text-[10px] text-muted-foreground">
+              {review ? (STATUS_DISPLAY[review.status]?.label ?? "") : "Not set up"}
+            </span>
             {pct !== null ? (
               <span className="text-lg font-bold text-foreground leading-tight">{fmtScore(pct)}<span className="text-xs font-medium text-muted-foreground">%</span></span>
             ) : (
               <span className="text-lg font-bold text-muted-foreground/40 leading-tight">—</span>
             )}
-            <span className="text-[10px] text-muted-foreground">
-              {review ? (STATUS_DISPLAY[review.status]?.label ?? "") : "Not set up"}
-            </span>
           </div>
         ))}
         <div className="px-4 py-3 flex flex-col gap-0.5 bg-primary/5 col-span-2 sm:col-span-1">
