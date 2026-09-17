@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { getUserRole } from "@/lib/auth"
-import { syncCustomItemToSiblings } from "@/lib/kpi/inherit"
+import { syncCustomItemToSiblings, syncOverrideToSiblings } from "@/lib/kpi/inherit"
 
 // Resolve whether an item is global (review_id null) or this review's custom item.
 async function loadItem(
@@ -67,11 +67,32 @@ export async function PUT(
   }
 
   if (item.review_id === null) {
-    // Global item — store an override for this review (do not touch `hidden`).
+    // Global item — store an override for this review (do not touch `hidden`),
+    // then push the same override onto the matching global item in this
+    // employee's other reviews for the same year.
     const { error } = await supabase
       .from("kpi_review_item_overrides")
       .upsert({ review_id: reviewId, item_id: itemId, ...fields }, { onConflict: "review_id,item_id" })
     if (error) return NextResponse.json({ error: "Failed to save override" }, { status: 500 })
+
+    const { data: review } = await supabase
+      .from("kpi_reviews")
+      .select("employee_id, period")
+      .eq("id", reviewId)
+      .maybeSingle()
+    if (review) {
+      await syncOverrideToSiblings(
+        supabase,
+        { id: reviewId, employee_id: review.employee_id, period: review.period },
+        itemId,
+        async (targetReviewId, targetItemId) => {
+          await supabase
+            .from("kpi_review_item_overrides")
+            .upsert({ review_id: targetReviewId, item_id: targetItemId, ...fields }, { onConflict: "review_id,item_id" })
+        },
+      )
+    }
+
     return NextResponse.json({ success: true, scope: "override" })
   }
 
@@ -124,6 +145,12 @@ export async function DELETE(
   }
 
   if (item.review_id === null) {
+    const { data: review } = await supabase
+      .from("kpi_reviews")
+      .select("employee_id, period")
+      .eq("id", reviewId)
+      .maybeSingle()
+
     if (action === "reset") {
       const { error } = await supabase
         .from("kpi_review_item_overrides")
@@ -131,13 +158,44 @@ export async function DELETE(
         .eq("review_id", reviewId)
         .eq("item_id", itemId)
       if (error) return NextResponse.json({ error: "Failed to reset KPI" }, { status: 500 })
+
+      if (review) {
+        await syncOverrideToSiblings(
+          supabase,
+          { id: reviewId, employee_id: review.employee_id, period: review.period },
+          itemId,
+          async (targetReviewId, targetItemId) => {
+            await supabase
+              .from("kpi_review_item_overrides")
+              .delete()
+              .eq("review_id", targetReviewId)
+              .eq("item_id", targetItemId)
+          },
+        )
+      }
+
       return NextResponse.json({ success: true })
     }
-    // remove → hide for this review
+    // remove → hide for this review, and for the matching item in this
+    // employee's other same-year reviews.
     const { error } = await supabase
       .from("kpi_review_item_overrides")
       .upsert({ review_id: reviewId, item_id: itemId, hidden: true }, { onConflict: "review_id,item_id" })
     if (error) return NextResponse.json({ error: "Failed to remove KPI" }, { status: 500 })
+
+    if (review) {
+      await syncOverrideToSiblings(
+        supabase,
+        { id: reviewId, employee_id: review.employee_id, period: review.period },
+        itemId,
+        async (targetReviewId, targetItemId) => {
+          await supabase
+            .from("kpi_review_item_overrides")
+            .upsert({ review_id: targetReviewId, item_id: targetItemId, hidden: true }, { onConflict: "review_id,item_id" })
+        },
+      )
+    }
+
     return NextResponse.json({ success: true })
   }
 

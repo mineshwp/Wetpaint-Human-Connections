@@ -299,6 +299,55 @@ export async function syncCustomItemToSiblings(
   }
 }
 
+// Apply a per-review override change (made on a GLOBAL item, e.g. one of the
+// shared core-value items) across the employee's other same-year reviews.
+// Matches the counterpart item by (section title, item title) in each sibling
+// period, then hands its (reviewId, itemId) to `apply` so the caller can
+// upsert/delete the override row itself. Best-effort — never throws.
+export async function syncOverrideToSiblings(
+  supabase: DB,
+  sourceReview: { id: string; employee_id: string; period: string },
+  itemId: string,
+  apply: (targetReviewId: string, targetItemId: string) => Promise<void>,
+): Promise<void> {
+  try {
+    const siblings = await findSameYearSiblingReviews(supabase, sourceReview.employee_id, sourceReview.period, sourceReview.id)
+    if (siblings.length === 0) return
+
+    const { data: srcItem } = await supabase
+      .from("kpi_template_items")
+      .select("title, section_id")
+      .eq("id", itemId)
+      .maybeSingle()
+    if (!srcItem) return
+    const { data: srcSection } = await supabase
+      .from("kpi_template_sections")
+      .select("title")
+      .eq("id", srcItem.section_id)
+      .maybeSingle()
+    if (!srcSection?.title) return
+    const itemKey = (srcItem.title ?? "").trim().toLowerCase()
+
+    for (const sibling of siblings) {
+      const targetSectionId = await findSectionByTitle(supabase, sibling.period, srcSection.title)
+      if (!targetSectionId) continue
+
+      const { data: candidates } = await supabase
+        .from("kpi_template_items")
+        .select("id, title")
+        .eq("section_id", targetSectionId)
+        .is("review_id", null)
+        .eq("is_active", true)
+      const match = (candidates ?? []).find((i) => (i.title ?? "").trim().toLowerCase() === itemKey)
+      if (!match) continue
+
+      await apply(sibling.id, match.id)
+    }
+  } catch (e) {
+    console.error("[syncOverrideToSiblings]", e)
+  }
+}
+
 // Full inheritance for a newly-created review: ensure the target period has a
 // template (cloned from its baseline), then copy the staff member's custom KPIs
 // from their baseline-quarter review. Best-effort — never throws.
