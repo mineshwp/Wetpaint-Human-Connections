@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { getUserRole, getEmployeeIdForUser } from "@/lib/auth"
-import { getImpersonationContext } from "@/lib/impersonation"
+import { blockWhileImpersonating } from "@/lib/impersonation"
 
 export async function GET(
   _req: NextRequest,
@@ -29,24 +29,23 @@ export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const viewOnly = await blockWhileImpersonating()
+  if (viewOnly) return viewOnly
   const { id: reviewId } = await params
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-  const [role, myEmployeeId, impersonating] = await Promise.all([
+  const [role, myEmployeeId] = await Promise.all([
     getUserRole(supabase, user.id),
     getEmployeeIdForUser(supabase, user.id),
-    getImpersonationContext(),
   ])
-  const effectiveRole = role === "hr" && impersonating ? "staff" : role
-  const effectiveEmployeeId = role === "hr" && impersonating ? impersonating.employeeId : myEmployeeId
 
   const body = await req.json()
   const comment: string = typeof body.comment === "string" ? body.comment : ""
   let authorId: string | null = body.author_id ?? null
 
-  if (effectiveRole === "hr") {
+  if (role === "hr") {
     if (authorId) {
       const { data: inv } = await supabase
         .from("kpi_review_invitees")
@@ -57,16 +56,16 @@ export async function PUT(
       if (!inv) return NextResponse.json({ error: "That reviewer is not on this review" }, { status: 400 })
     }
   } else {
-    if (!effectiveEmployeeId) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+    if (!myEmployeeId) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     const { data: inv } = await supabase
       .from("kpi_review_invitees")
       .select("id")
       .eq("review_id", reviewId)
-      .eq("invitee_id", effectiveEmployeeId)
+      .eq("invitee_id", myEmployeeId)
       .in("status", ["accepted", "completed"])
       .single()
     if (!inv) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-    authorId = effectiveEmployeeId // reviewers can only write their own
+    authorId = myEmployeeId // reviewers can only write their own
   }
 
   // Manual upsert (partial unique indexes can't be an onConflict target).

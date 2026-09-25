@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { getUserRole, getEmployeeIdForUser } from "@/lib/auth"
+import { blockWhileImpersonating } from "@/lib/impersonation"
 
 const BUCKET = "employee-photos"
 const EXT_BY_MIME: Record<string, string> = {
@@ -36,6 +37,8 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const viewOnly = await blockWhileImpersonating()
+  if (viewOnly) return viewOnly
   const { id } = await params
   const auth = await authorize(req, id)
   if ("error" in auth) return NextResponse.json({ error: auth.error }, { status: auth.status })
@@ -79,6 +82,8 @@ export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const viewOnly = await blockWhileImpersonating()
+  if (viewOnly) return viewOnly
   const { id } = await params
   const auth = await authorize(req, id)
   if ("error" in auth) return NextResponse.json({ error: auth.error }, { status: auth.status })

@@ -1,12 +1,15 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { getUserRole } from "@/lib/auth"
+import { blockWhileImpersonating } from "@/lib/impersonation"
 
 // Copy a period's template STRUCTURE into a new period (HR only): section
 // titles/types + global KPI titles/descriptions. Reviews, scores and per-review
 // custom items are never copied. Used to spin up a new quarter's template from
 // an existing one. Fails if the destination period already has any sections.
 export async function POST(req: Request) {
+  const viewOnly = await blockWhileImpersonating()
+  if (viewOnly) return viewOnly
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })

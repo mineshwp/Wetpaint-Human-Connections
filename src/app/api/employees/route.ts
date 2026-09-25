@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { getUserRole, getEmployeeIdForUser } from "@/lib/auth"
 import type { Employee } from "@/lib/types"
+import { blockWhileImpersonating } from "@/lib/impersonation"
 
 export async function GET(req: Request) {
   const supabase = await createClient()
@@ -72,6 +73,8 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
+  const viewOnly = await blockWhileImpersonating()
+  if (viewOnly) return viewOnly
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })

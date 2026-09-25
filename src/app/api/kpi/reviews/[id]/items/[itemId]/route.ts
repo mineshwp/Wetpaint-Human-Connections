@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { getUserRole } from "@/lib/auth"
 import { syncCustomItemToSiblings, syncOverrideToSiblings } from "@/lib/kpi/inherit"
+import { blockWhileImpersonating } from "@/lib/impersonation"
 
 // Resolve whether an item is global (review_id null) or this review's custom item.
 async function loadItem(
@@ -23,6 +24,8 @@ export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string; itemId: string }> }
 ) {
+  const viewOnly = await blockWhileImpersonating()
+  if (viewOnly) return viewOnly
   const { id: reviewId, itemId } = await params
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -107,6 +110,8 @@ export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ id: string; itemId: string }> }
 ) {
+  const viewOnly = await blockWhileImpersonating()
+  if (viewOnly) return viewOnly
   const { id: reviewId, itemId } = await params
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()

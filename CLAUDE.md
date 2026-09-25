@@ -329,6 +329,8 @@ Always return proper HTTP status codes: 400, 401, 403, 404, 500.
 | KPI Action Points — auto-generated on publish via OpenAI (dormant until `OPENAI_API_KEY` env var is set; regenerates each publish; stored on `kpi_reviews.action_points`) | ✅ Done |
 | KPI quarter + year performance summary (Q1–Q4 + year score, % and /10 via rating guide) | ✅ Done |
 | Archive cascade (archiving an employee archives their KPI reviews; archived reviews hidden from lists) | ✅ Done |
+| HR "View as" any active/onboarding staff member (exact view, their role; view-only enforced on every write API) | ✅ Done |
+| Staff see only their own profile (land on it after login; sidebar "My Profile") | ✅ Done |
 
 Update this table as features are completed.
 

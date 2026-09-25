@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { getUserRole } from "@/lib/auth"
+import { blockWhileImpersonating } from "@/lib/impersonation"
 
 // Add N whole months to a YYYY-MM-DD date, clamping the day to the target
 // month's length (e.g. 31 Jan + 1 month → 28/29 Feb).
@@ -21,6 +22,8 @@ export async function POST(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const viewOnly = await blockWhileImpersonating()
+  if (viewOnly) return viewOnly
   const { id } = await params
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()

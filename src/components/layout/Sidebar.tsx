@@ -3,7 +3,7 @@
 import Link from "next/link"
 import Image from "next/image"
 import { usePathname } from "next/navigation"
-import { Users, BarChart3, X, LayoutGrid, Settings, Contact } from "lucide-react"
+import { Users, User, BarChart3, X, LayoutGrid, Settings, Contact } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 const ALL_NAV_ITEMS = [
@@ -18,14 +18,19 @@ interface SidebarProps {
   onClose: () => void
   roleBadge: string
   isHR?: boolean
-  isImpersonating?: boolean
+  /** Set for staff: "Employees" becomes "My Profile" linking to their own record. */
+  ownProfileHref?: string | null
 }
 
-export function Sidebar({ isOpen, onClose, roleBadge, isHR, isImpersonating }: SidebarProps) {
+// Driven purely by the effective role, so an HR "view as" session renders the
+// exact same navigation the viewed person gets.
+export function Sidebar({ isOpen, onClose, roleBadge, isHR, ownProfileHref }: SidebarProps) {
   const pathname = usePathname()
 
-  const navItems = ALL_NAV_ITEMS.filter((item) =>
-    isImpersonating ? item.href !== "/employees" : !item.staffOnly
+  const navItems = ALL_NAV_ITEMS.filter((item) => !item.staffOnly).map((item) =>
+    item.href === "/employees" && ownProfileHref
+      ? { ...item, href: ownProfileHref, label: "My Profile", icon: User }
+      : item
   )
 
   return (
@@ -71,14 +76,11 @@ export function Sidebar({ isOpen, onClose, roleBadge, isHR, isImpersonating }: S
           </button>
         </div>
 
-        {/* Role badge — hidden in staff view */}
-        {!isImpersonating && (
-          <div className="px-5 py-3 border-b border-border">
-            <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-primary/10 text-primary">
-              {roleBadge}
-            </span>
-          </div>
-        )}
+        <div className="px-5 py-3 border-b border-border">
+          <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-primary/10 text-primary">
+            {roleBadge}
+          </span>
+        </div>
 
         {/* Navigation */}
         <nav className="flex-1 overflow-y-auto px-3 py-4">
@@ -110,7 +112,7 @@ export function Sidebar({ isOpen, onClose, roleBadge, isHR, isImpersonating }: S
 
         {/* Footer */}
         <div className="shrink-0 border-t border-border px-3 py-3 space-y-1">
-          {isHR && !isImpersonating && (
+          {isHR && (
             <Link
               href="/settings"
               onClick={onClose}

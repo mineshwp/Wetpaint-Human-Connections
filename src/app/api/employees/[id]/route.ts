@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { getUserRole, getEmployeeIdForUser, canAccessEmployee } from "@/lib/auth"
 import type { EmployeeFull } from "@/lib/types"
+import { blockWhileImpersonating } from "@/lib/impersonation"
 
 export async function GET(
   _req: Request,
@@ -117,6 +118,8 @@ export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const viewOnly = await blockWhileImpersonating()
+  if (viewOnly) return viewOnly
   const supabase = await createClient()
   const {
     data: { user },

@@ -1,24 +1,21 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { getUserRole, getEmployeeIdForUser } from "@/lib/auth"
-import { getImpersonationContext } from "@/lib/impersonation"
 import { generateActionPoints } from "@/lib/kpi/action-points"
+import { blockWhileImpersonating } from "@/lib/impersonation"
 
 async function canAccessReview(
   supabase: Awaited<ReturnType<typeof createClient>>,
   userId: string,
   reviewId: string
 ): Promise<boolean> {
-  const [role, myEmployeeId, impersonating] = await Promise.all([
+  const [role, myEmployeeId] = await Promise.all([
     getUserRole(supabase, userId),
     getEmployeeIdForUser(supabase, userId),
-    getImpersonationContext(),
   ])
-  const effectiveRole = role === "hr" && impersonating ? "staff" : role
-  const effectiveEmployeeId = role === "hr" && impersonating ? impersonating.employeeId : myEmployeeId
 
-  if (effectiveRole === "hr") return true
-  if (!effectiveEmployeeId) return false
+  if (role === "hr") return true
+  if (!myEmployeeId) return false
 
   // Review owner or invitee
   const { data: review } = await supabase
@@ -26,13 +23,13 @@ async function canAccessReview(
     .select("employee_id")
     .eq("id", reviewId)
     .single()
-  if (review?.employee_id === effectiveEmployeeId) return true
+  if (review?.employee_id === myEmployeeId) return true
 
   const { data: inv } = await supabase
     .from("kpi_review_invitees")
     .select("id")
     .eq("review_id", reviewId)
-    .eq("invitee_id", effectiveEmployeeId)
+    .eq("invitee_id", myEmployeeId)
     .single()
   return !!inv
 }
@@ -68,6 +65,8 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const viewOnly = await blockWhileImpersonating()
+  if (viewOnly) return viewOnly
   const { id } = await params
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -107,6 +106,8 @@ export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const viewOnly = await blockWhileImpersonating()
+  if (viewOnly) return viewOnly
   const { id } = await params
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()

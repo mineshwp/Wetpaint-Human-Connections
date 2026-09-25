@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { getEmployeeIdForUser } from "@/lib/auth"
-import { getImpersonationContext } from "@/lib/impersonation"
 import { BarChart3, User } from "lucide-react"
 import Link from "next/link"
 
@@ -12,12 +11,7 @@ export default async function DashboardPage() {
   } = await supabase.auth.getUser()
   if (!user) redirect("/login")
 
-  const [employeeId, impersonating] = await Promise.all([
-    getEmployeeIdForUser(supabase, user.id),
-    getImpersonationContext(),
-  ])
-
-  const effectiveEmployeeId = impersonating ? impersonating.employeeId : employeeId
+  const effectiveEmployeeId = await getEmployeeIdForUser(supabase, user.id)
 
   let employee: {
     first_name: string

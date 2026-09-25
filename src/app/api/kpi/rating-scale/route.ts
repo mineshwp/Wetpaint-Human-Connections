@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { getUserRole } from "@/lib/auth"
+import { blockWhileImpersonating } from "@/lib/impersonation"
 
 // The KPI rating guide (1-10 → annual increase / birthday bonus).
 // Readable by any authenticated user; only HR can edit.
@@ -25,6 +26,8 @@ export async function GET() {
 // Bulk-upsert the rating guide rows (HR only). Body: { rows: [{ score, label,
 // annual_increase, birthday_bonus }] }. Scores must be 1-10.
 export async function PUT(req: Request) {
+  const viewOnly = await blockWhileImpersonating()
+  if (viewOnly) return viewOnly
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })

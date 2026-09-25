@@ -3,7 +3,6 @@ import Link from "next/link"
 import { UserPlus } from "lucide-react"
 import { createClient } from "@/lib/supabase/server"
 import { getUserRole, getEmployeeIdForUser } from "@/lib/auth"
-import { getImpersonationContext } from "@/lib/impersonation"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { EmployeeListClient } from "./EmployeeListClient"
 import type { Employee, Department } from "@/lib/types"
@@ -49,24 +48,20 @@ export default async function EmployeesPage() {
 
   if (!user) redirect("/login")
 
-  const [role, impersonating] = await Promise.all([
-    getUserRole(supabase, user.id),
-    getImpersonationContext(),
-  ])
+  const role = await getUserRole(supabase, user.id)
 
   if (!role || role === "applicant") {
     redirect("/login")
   }
 
-  if (impersonating) {
-    redirect(`/employees/${impersonating.employeeId}`)
-  }
-
+  // Staff only ever see their own profile — send them straight to it.
   if (role === "staff") {
+    const ownId = await getEmployeeIdForUser(supabase, user.id)
+    if (ownId) redirect(`/employees/${ownId}`)
     return (
       <div className="flex items-center justify-center py-24">
         <p className="text-sm text-muted-foreground">
-          You don&apos;t have permission to view the employee list.
+          Your login isn&apos;t linked to an employee profile yet. Please contact HR.
         </p>
       </div>
     )

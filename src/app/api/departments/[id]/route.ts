@@ -1,9 +1,12 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { getUserRole } from "@/lib/auth"
+import { blockWhileImpersonating } from "@/lib/impersonation"
 
 // Update a department's name and/or colour (HR only).
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const viewOnly = await blockWhileImpersonating()
+  if (viewOnly) return viewOnly
   const { id } = await params
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -45,6 +48,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 // unassigned (the FK sets department_id to null). Without either, we refuse and
 // report the employee count so the UI can prompt.
 export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const viewOnly = await blockWhileImpersonating()
+  if (viewOnly) return viewOnly
   const { id } = await params
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()

@@ -1,7 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import type { UserRole } from "./types"
+import { readImpersonationCookies } from "./impersonation"
 
-export async function getUserRole(
+/** The signed-in user's own role, ignoring any "view as" session. */
+export async function getRealUserRole(
   supabase: SupabaseClient,
   userId: string
 ): Promise<UserRole | null> {
@@ -13,15 +15,37 @@ export async function getUserRole(
   return (data?.active_role as UserRole) ?? null
 }
 
+/**
+ * Effective role. While an HR user is viewing as someone else, this is the
+ * viewed employee's role, so every page and API route scopes itself exactly
+ * as it would for that person.
+ */
+export async function getUserRole(
+  supabase: SupabaseClient,
+  userId: string
+): Promise<UserRole | null> {
+  const role = await getRealUserRole(supabase, userId)
+  if (role === "hr") {
+    const viewing = await readImpersonationCookies()
+    if (viewing) return viewing.role
+  }
+  return role
+}
+
+/** Effective employee id (the viewed employee's while viewing as someone). */
 export async function getEmployeeIdForUser(
   supabase: SupabaseClient,
   userId: string
 ): Promise<string | null> {
   const { data } = await supabase
     .from("app_users")
-    .select("employee_id")
+    .select("employee_id, active_role")
     .eq("id", userId)
     .single()
+  if (data?.active_role === "hr") {
+    const viewing = await readImpersonationCookies()
+    if (viewing) return viewing.employeeId
+  }
   return data?.employee_id ?? null
 }
 

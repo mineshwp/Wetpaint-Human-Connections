@@ -1,33 +1,40 @@
 "use client"
 
 import { useState } from "react"
-import { Menu, Eye } from "lucide-react"
+import { Menu, Eye, Users } from "lucide-react"
 import { Sidebar } from "./Sidebar"
+import { ViewAsPicker } from "./ViewAsPicker"
 
 interface ImpersonationContext {
   employeeId: string
   employeeName: string
+  role: string
 }
 
 interface AppShellProps {
   children: React.ReactNode
   userInitials: string
   userName: string
+  /** The signed-in user's own role label (user menu). */
   roleBadge: string
+  /** The signed-in user's own HR status — gates the "view as" controls. */
   isHR: boolean
+  /** Effective role label/HR status for the sidebar (the viewed person's while viewing as). */
+  sidebarRoleBadge: string
+  sidebarIsHR: boolean
+  sidebarOwnProfileHref: string | null
   ownEmployeeId: string | null
-  ownEmployeeName: string
   impersonating: ImpersonationContext | null
   signOutAction: () => Promise<void>
 }
 
-async function apiSetImpersonation(employeeId: string, employeeName: string) {
+async function apiViewAsSelf(employeeId: string) {
   await fetch("/api/impersonate", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ employeeId, employeeName }),
+    body: JSON.stringify({ employeeId, asStaff: true }),
   })
-  window.location.href = `/employees/${employeeId}`
+  window.location.href = "/employees"
 }
 
 async function apiClearImpersonation() {
@@ -35,28 +42,39 @@ async function apiClearImpersonation() {
   window.location.href = "/employees"
 }
 
+const menuItemClass =
+  "w-full px-3 py-2 text-sm text-left text-foreground hover:bg-muted transition-colors flex items-center gap-2"
+
 export function AppShell({
   children,
   userInitials,
   userName,
   roleBadge,
   isHR,
+  sidebarRoleBadge,
+  sidebarIsHR,
+  sidebarOwnProfileHref,
   ownEmployeeId,
-  ownEmployeeName,
   impersonating,
   signOutAction,
 }: AppShellProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
+  const [pickerOpen, setPickerOpen] = useState(false)
+
+  const openPicker = () => {
+    setUserMenuOpen(false)
+    setPickerOpen(true)
+  }
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
       <Sidebar
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
-        roleBadge={roleBadge}
-        isHR={isHR}
-        isImpersonating={!!impersonating}
+        roleBadge={sidebarRoleBadge}
+        isHR={sidebarIsHR}
+        ownProfileHref={sidebarOwnProfileHref}
       />
 
       <div className="flex flex-1 flex-col overflow-hidden">
@@ -100,17 +118,24 @@ export function AppShell({
                       </p>
                     </div>
 
-                    {isHR && ownEmployeeId && !impersonating && (
+                    {isHR && !impersonating && ownEmployeeId && (
                       <button
                         type="button"
                         onClick={() => {
                           setUserMenuOpen(false)
-                          apiSetImpersonation(ownEmployeeId, ownEmployeeName)
+                          apiViewAsSelf(ownEmployeeId)
                         }}
-                        className="w-full px-3 py-2 text-sm text-left text-foreground hover:bg-muted transition-colors flex items-center gap-2"
+                        className={menuItemClass}
                       >
                         <Eye className="h-3.5 w-3.5 text-muted-foreground" />
                         View as Staff
+                      </button>
+                    )}
+
+                    {isHR && (
+                      <button type="button" onClick={openPicker} className={menuItemClass}>
+                        <Users className="h-3.5 w-3.5 text-muted-foreground" />
+                        {impersonating ? "Switch staff member…" : "View as staff member…"}
                       </button>
                     )}
 
@@ -145,23 +170,39 @@ export function AppShell({
 
         {/* Impersonation banner */}
         {impersonating && (
-          <div className="shrink-0 flex items-center justify-between gap-3 bg-amber-50 border-b border-amber-200 px-4 lg:px-6 py-2">
-            <div className="flex items-center gap-2">
+          <div className="shrink-0 flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 bg-amber-50 border-b border-amber-200 px-4 lg:px-6 py-2">
+            <div className="flex items-center gap-2 min-w-0">
               <Eye className="h-4 w-4 text-amber-600 shrink-0" />
               <span className="text-sm text-amber-800 font-medium">
                 Viewing as{" "}
                 <span className="font-semibold">{impersonating.employeeName}</span>
-                <span className="font-normal text-amber-700"> — Staff view</span>
+                <span className="font-normal text-amber-700"> — {sidebarRoleBadge} view · view only</span>
               </span>
             </div>
-            <button
-              type="button"
-              onClick={apiClearImpersonation}
-              className="text-xs font-semibold text-amber-700 hover:text-amber-900 border border-amber-300 rounded-md px-2.5 py-1 hover:bg-amber-100 transition-colors"
-            >
-              Exit
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setPickerOpen(true)}
+                className="text-xs font-semibold text-amber-700 hover:text-amber-900 border border-amber-300 rounded-md px-2.5 py-1 hover:bg-amber-100 transition-colors"
+              >
+                Switch
+              </button>
+              <button
+                type="button"
+                onClick={apiClearImpersonation}
+                className="text-xs font-semibold text-amber-700 hover:text-amber-900 border border-amber-300 rounded-md px-2.5 py-1 hover:bg-amber-100 transition-colors"
+              >
+                Exit
+              </button>
+            </div>
           </div>
+        )}
+
+        {pickerOpen && (
+          <ViewAsPicker
+            onClose={() => setPickerOpen(false)}
+            currentEmployeeId={impersonating?.employeeId ?? null}
+          />
         )}
 
         {/* Scrollable content area */}

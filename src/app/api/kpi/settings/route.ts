@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { getUserRole } from "@/lib/auth"
+import { blockWhileImpersonating } from "@/lib/impersonation"
 
 export async function GET() {
   const supabase = await createClient()
@@ -16,6 +17,8 @@ export async function GET() {
 
 // Upsert a setting (HR only), e.g. { key: "current_period", value: "Q3 2026" }.
 export async function PUT(req: Request) {
+  const viewOnly = await blockWhileImpersonating()
+  if (viewOnly) return viewOnly
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })

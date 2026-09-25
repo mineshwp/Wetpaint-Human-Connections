@@ -41,32 +41,25 @@ export default async function EmployeeDetailPage({
   } = await supabase.auth.getUser()
   if (!user) redirect("/login")
 
-  const [role, myEmployeeId, impersonating] = await Promise.all([
+  // role / myEmployeeId are the *effective* values: while HR is viewing as
+  // someone, they are that person's, so access is scoped exactly as for them.
+  const [role, myEmployeeId, viewingAs] = await Promise.all([
     getUserRole(supabase, user.id),
     getEmployeeIdForUser(supabase, user.id),
-    getImpersonationContext(),
+    getImpersonationContext(supabase, user.id),
   ])
 
   if (!role || role === "applicant") redirect("/login")
 
-  // When impersonating, enforce staff-level access: only the impersonated employee's own profile
-  if (impersonating) {
-    if (id !== impersonating.employeeId) notFound()
-  } else {
-    const allowed = await canAccessEmployee(supabase, user.id, role, id)
-    if (!allowed) notFound()
-  }
+  const allowed = await canAccessEmployee(supabase, user.id, role, id)
+  if (!allowed) notFound()
 
-  // Effective role and employee context
-  const effectiveRole = impersonating ? "staff" : role
-  const effectiveEmployeeId = impersonating ? impersonating.employeeId : myEmployeeId
-
-  const isHR = effectiveRole === "hr"
-  const isOwnProfile = effectiveEmployeeId === id
+  const isHR = role === "hr"
+  const isOwnProfile = myEmployeeId === id
   const canViewDocuments = isHR || isOwnProfile
   const canViewBanking = isHR
   const canViewNotes = isHR
-  const canImpersonate = role === "hr" && !impersonating
+  const canImpersonate = isHR && !viewingAs
 
   // Fetch employee record
   const { data: row, error: empError } = await supabase
@@ -220,6 +213,7 @@ export default async function EmployeeDetailPage({
       canViewNotes={canViewNotes}
       canImpersonate={canImpersonate}
       setImpersonationAction={setImpersonation}
+      showBackLink={role !== "staff"}
     />
   )
 }

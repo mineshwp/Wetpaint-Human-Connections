@@ -5,6 +5,7 @@ import { getUserRole } from "@/lib/auth"
 import { sendAdminGrantedEmail } from "@/lib/email"
 import { listAdmins } from "@/lib/admins"
 import { generateTempPassword } from "@/lib/password"
+import { blockWhileImpersonating } from "@/lib/impersonation"
 
 export async function GET() {
   const supabase = await createClient()
@@ -25,6 +26,8 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const viewOnly = await blockWhileImpersonating()
+  if (viewOnly) return viewOnly
   try {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()

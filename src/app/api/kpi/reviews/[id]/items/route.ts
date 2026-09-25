@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { getUserRole } from "@/lib/auth"
 import { pushCustomItemToSiblings } from "@/lib/kpi/inherit"
+import { blockWhileImpersonating } from "@/lib/impersonation"
 
 // Add a KPI item to a section for THIS review — and, since it's an
 // individualized criterion under a shared value/section, push it into the
@@ -11,6 +12,8 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const viewOnly = await blockWhileImpersonating()
+  if (viewOnly) return viewOnly
   const { id: reviewId } = await params
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()

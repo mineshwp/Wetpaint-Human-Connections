@@ -1,24 +1,21 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { getUserRole, getEmployeeIdForUser } from "@/lib/auth"
-import { getImpersonationContext } from "@/lib/impersonation"
 import { inheritForNewReview } from "@/lib/kpi/inherit"
+import { blockWhileImpersonating } from "@/lib/impersonation"
 
 export async function GET() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-  const [role, myEmployeeId, impersonating] = await Promise.all([
+  const [role, myEmployeeId] = await Promise.all([
     getUserRole(supabase, user.id),
     getEmployeeIdForUser(supabase, user.id),
-    getImpersonationContext(),
   ])
 
   if (!role || role === "applicant") return NextResponse.json({ error: "Forbidden" }, { status: 403 })
 
-  const effectiveRole = role === "hr" && impersonating ? "staff" : role
-  const effectiveEmployeeId = role === "hr" && impersonating ? impersonating.employeeId : myEmployeeId
 
   const selectClause = `
     id, employee_id, period, title, deadline, status, created_at, action_points, action_points_generated_at,
@@ -26,20 +23,20 @@ export async function GET() {
     kpi_review_invitees(id, invitee_id, status, invitee:employees!kpi_review_invitees_invitee_id_fkey(id, first_name, last_name), kpi_review_invitee_sections(section_id))
   `
 
-  if (effectiveRole !== "hr") {
-    if (!effectiveEmployeeId) return NextResponse.json([])
+  if (role !== "hr") {
+    if (!myEmployeeId) return NextResponse.json([])
 
     const [ownedResult, assignedResult] = await Promise.all([
       supabase
         .from("kpi_reviews")
         .select(selectClause)
-        .eq("employee_id", effectiveEmployeeId)
+        .eq("employee_id", myEmployeeId)
         .eq("is_archived", false)
         .order("created_at", { ascending: false }),
       supabase
         .from("kpi_reviews")
         .select(selectClause)
-        .eq("kpi_review_invitees.invitee_id", effectiveEmployeeId)
+        .eq("kpi_review_invitees.invitee_id", myEmployeeId)
         .eq("is_archived", false)
         .order("created_at", { ascending: false }),
     ])
@@ -54,7 +51,7 @@ export async function GET() {
     for (const review of ownedResult.data ?? []) byId.set(review.id, review)
     for (const review of assignedResult.data ?? []) {
       const isAssigned = review.kpi_review_invitees?.some(
-        (invitee: { invitee_id: string }) => invitee.invitee_id === effectiveEmployeeId
+        (invitee: { invitee_id: string }) => invitee.invitee_id === myEmployeeId
       )
       if (isAssigned) byId.set(review.id, review)
     }
@@ -80,6 +77,8 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const viewOnly = await blockWhileImpersonating()
+  if (viewOnly) return viewOnly
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })

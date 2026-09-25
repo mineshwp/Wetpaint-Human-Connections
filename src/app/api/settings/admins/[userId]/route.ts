@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { getUserRole } from "@/lib/auth"
 import { sendAdminRevokedEmail } from "@/lib/email"
 import { generateTempPassword } from "@/lib/password"
+import { blockWhileImpersonating } from "@/lib/impersonation"
 
 // Reset/set a temporary password for an admin so HR can hand it over.
 // Onboarding is HR-set-password (no email invites). Returns the new password once.
@@ -11,6 +12,8 @@ export async function POST(
   _req: NextRequest,
   { params }: { params: Promise<{ userId: string }> }
 ) {
+  const viewOnly = await blockWhileImpersonating()
+  if (viewOnly) return viewOnly
   const { userId } = await params
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -57,6 +60,8 @@ export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ userId: string }> }
 ) {
+  const viewOnly = await blockWhileImpersonating()
+  if (viewOnly) return viewOnly
   const { userId } = await params
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()

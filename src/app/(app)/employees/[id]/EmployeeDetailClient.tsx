@@ -1614,6 +1614,8 @@ interface Props {
   canViewNotes: boolean
   canImpersonate?: boolean
   setImpersonationAction?: (formData: FormData) => Promise<void>
+  /** False for staff — their own profile is the only page they have. */
+  showBackLink?: boolean
 }
 
 export function EmployeeDetailClient({
@@ -1629,6 +1631,7 @@ export function EmployeeDetailClient({
   canViewNotes,
   canImpersonate,
   setImpersonationAction,
+  showBackLink = true,
 }: Props) {
   const [tab, setTab] = useState<Tab>("personal")
   const [nowMs] = useState(() => Date.now())
@@ -1679,14 +1682,15 @@ export function EmployeeDetailClient({
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
-      {/* Back link */}
-      <Link
-        href="/employees"
-        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
-      >
-        <ChevronLeft size={16} />
-        Back to Employees
-      </Link>
+      {showBackLink && (
+        <Link
+          href="/employees"
+          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <ChevronLeft size={16} />
+          Back to Employees
+        </Link>
+      )}
 
       {/* ── Profile header ──────────────────────────────────────────────── */}
       <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
