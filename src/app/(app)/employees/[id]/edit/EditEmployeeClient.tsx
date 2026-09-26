@@ -6,6 +6,7 @@ import { ChevronLeft, Loader2, Save } from "lucide-react"
 import Link from "next/link"
 import { PageHeader } from "@/components/layout/PageHeader"
 import type { Department, Employee, EmployeeFull } from "@/lib/types"
+import { PhotoUploader } from "./PhotoUploader"
 
 // ── Field primitives ──────────────────────────────────────────────────────────
 
@@ -245,6 +246,15 @@ export function EditEmployeeClient({ employee, departments, allEmployees }: Prop
       )}
 
       <div className="space-y-6">
+        {/* Profile Photo */}
+        <SectionCard title="Profile Photo" subtitle="Shown on their profile, the employee list and the staff directory">
+          <PhotoUploader
+            employeeId={employee.id}
+            initialUrl={employee.profilePhotoUrl}
+            initials={employee.avatarInitials}
+          />
+        </SectionCard>
+
         {/* Personal Information */}
         <SectionCard title="Personal Information" subtitle="Identity & EE data">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
