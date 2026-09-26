@@ -2,7 +2,7 @@ import { redirect } from "next/navigation"
 import Link from "next/link"
 import { UserPlus } from "lucide-react"
 import { createClient } from "@/lib/supabase/server"
-import { getUserRole, getEmployeeIdForUser } from "@/lib/auth"
+import { getUserRole, getEmployeeIdForUser, getScopedDepartmentIds } from "@/lib/auth"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { EmployeeListClient } from "./EmployeeListClient"
 import type { Employee, Department } from "@/lib/types"
@@ -72,20 +72,13 @@ export default async function EmployeesPage() {
   let activeQuery = supabase.from("employees").select(SELECT).eq("is_archived", false).order("last_name")
   let archivedQuery = supabase.from("employees").select(SELECT).eq("is_archived", true).order("last_name")
 
-  if (role === "manager") {
+  if (role === "manager" || role === "dept_head") {
     const employeeId = await getEmployeeIdForUser(supabase, user.id)
-    if (employeeId) {
-      const { data: myEmp } = await supabase
-        .from("employees")
-        .select("department_id")
-        .eq("id", employeeId)
-        .single()
-
-      if (myEmp?.department_id) {
-        activeQuery = activeQuery.eq("department_id", myEmp.department_id) as typeof activeQuery
-        archivedQuery = archivedQuery.eq("department_id", myEmp.department_id) as typeof archivedQuery
-      }
-    }
+    // No scoped departments → match nothing rather than falling back to everyone.
+    const deptIds = await getScopedDepartmentIds(supabase, role, employeeId)
+    const scope = deptIds.length > 0 ? deptIds : ["00000000-0000-0000-0000-000000000000"]
+    activeQuery = activeQuery.in("department_id", scope) as typeof activeQuery
+    archivedQuery = archivedQuery.in("department_id", scope) as typeof archivedQuery
   }
 
   const [activeResult, archivedResult, deptResult] = await Promise.all([

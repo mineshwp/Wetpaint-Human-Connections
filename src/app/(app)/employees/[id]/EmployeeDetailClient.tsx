@@ -393,7 +393,8 @@ function PersonalTab({
             <FieldRow label="Alternate Number" value={localEmp.alternatePhone} />
             <FieldRow label="Personal Email" value={localEmp.personalEmail} />
             <FieldRow label="Work Email" value={localEmp.workEmail ?? localEmp.email} />
-            {isHR && <FieldRow label="Home Address" value={localEmp.homeAddress} />}
+            {/* HR, or a manager / department head viewing their team (the API only sends it to those) */}
+            {(isHR || !isOwnProfile) && <FieldRow label="Home Address" value={localEmp.homeAddress} />}
           </>
         )}
       </SectionCard>

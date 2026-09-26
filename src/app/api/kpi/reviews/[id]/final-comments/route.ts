@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { getUserRole, getEmployeeIdForUser } from "@/lib/auth"
 import { blockWhileImpersonating } from "@/lib/impersonation"
+import { canViewReview, getReviewStatus, isPublished, PUBLISHED_LOCK_MESSAGE } from "@/lib/kpi/access"
 
 export async function GET(
   _req: NextRequest,
@@ -11,6 +12,9 @@ export async function GET(
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+
+  const allowed = await canViewReview(supabase, user.id, reviewId)
+  if (!allowed) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
 
   const { data, error } = await supabase
     .from("kpi_final_comments")
@@ -57,6 +61,9 @@ export async function PUT(
     }
   } else {
     if (!myEmployeeId) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+    if (isPublished(await getReviewStatus(supabase, reviewId))) {
+      return NextResponse.json({ error: PUBLISHED_LOCK_MESSAGE }, { status: 403 })
+    }
     const { data: inv } = await supabase
       .from("kpi_review_invitees")
       .select("id")

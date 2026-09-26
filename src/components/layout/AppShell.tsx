@@ -23,6 +23,7 @@ interface AppShellProps {
   sidebarRoleBadge: string
   sidebarIsHR: boolean
   sidebarOwnProfileHref: string | null
+  sidebarKeepEmployeesLink: boolean
   ownEmployeeId: string | null
   impersonating: ImpersonationContext | null
   signOutAction: () => Promise<void>
@@ -54,6 +55,7 @@ export function AppShell({
   sidebarRoleBadge,
   sidebarIsHR,
   sidebarOwnProfileHref,
+  sidebarKeepEmployeesLink,
   ownEmployeeId,
   impersonating,
   signOutAction,
@@ -75,6 +77,7 @@ export function AppShell({
         roleBadge={sidebarRoleBadge}
         isHR={sidebarIsHR}
         ownProfileHref={sidebarOwnProfileHref}
+        keepEmployeesLink={sidebarKeepEmployeesLink}
       />
 
       <div className="flex flex-1 flex-col overflow-hidden">

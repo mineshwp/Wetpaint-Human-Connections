@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import type { UserRole } from "./types"
 import { readImpersonationCookies } from "./impersonation"
+import { deriveRole, getHeadedDepartmentIds } from "./roles"
 
 /** The signed-in user's own role, ignoring any "view as" session. */
 export async function getRealUserRole(
@@ -9,10 +10,10 @@ export async function getRealUserRole(
 ): Promise<UserRole | null> {
   const { data } = await supabase
     .from("app_users")
-    .select("active_role")
+    .select("active_role, employee_id")
     .eq("id", userId)
     .single()
-  return (data?.active_role as UserRole) ?? null
+  return deriveRole(supabase, (data?.active_role as UserRole) ?? null, data?.employee_id ?? null)
 }
 
 /**
@@ -61,13 +62,19 @@ export async function canAccessEmployee(
   const myEmployeeId = await getEmployeeIdForUser(supabase, userId)
   if (!myEmployeeId) return false
 
-  if (role === "staff") {
-    return myEmployeeId === targetEmployeeId
+  if (myEmployeeId === targetEmployeeId) return true
+  if (role === "staff") return false
+
+  // Department head: anyone in a department they head
+  if (role === "dept_head") {
+    const [headed, { data: targetEmp }] = await Promise.all([
+      getHeadedDepartmentIds(supabase, myEmployeeId),
+      supabase.from("employees").select("department_id").eq("id", targetEmployeeId).single(),
+    ])
+    return !!targetEmp?.department_id && headed.includes(targetEmp.department_id)
   }
 
-  // Manager: own record or anyone in same department
-  if (myEmployeeId === targetEmployeeId) return true
-
+  // Manager: anyone in same department
   const [{ data: myEmp }, { data: targetEmp }] = await Promise.all([
     supabase.from("employees").select("department_id").eq("id", myEmployeeId).single(),
     supabase.from("employees").select("department_id").eq("id", targetEmployeeId).single(),
@@ -76,4 +83,26 @@ export async function canAccessEmployee(
   return (
     !!myEmp?.department_id && myEmp.department_id === targetEmp?.department_id
   )
+}
+
+/**
+ * Departments whose staff a manager / department head may list: a manager's
+ * own department, or every department a head heads. Empty for anyone else.
+ */
+export async function getScopedDepartmentIds(
+  supabase: SupabaseClient,
+  role: UserRole | null,
+  myEmployeeId: string | null
+): Promise<string[]> {
+  if (!myEmployeeId) return []
+  if (role === "dept_head") return getHeadedDepartmentIds(supabase, myEmployeeId)
+  if (role === "manager") {
+    const { data } = await supabase
+      .from("employees")
+      .select("department_id")
+      .eq("id", myEmployeeId)
+      .single()
+    return data?.department_id ? [data.department_id] : []
+  }
+  return []
 }

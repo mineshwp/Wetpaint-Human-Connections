@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { getUserRole, getEmployeeIdForUser } from "@/lib/auth"
+import { getUserRole, getEmployeeIdForUser, getScopedDepartmentIds } from "@/lib/auth"
 import type { Employee } from "@/lib/types"
 import { blockWhileImpersonating } from "@/lib/impersonation"
 
@@ -30,19 +30,12 @@ export async function GET(req: Request) {
     query = query.eq("is_archived", false) as typeof query
   }
 
-  if (role === "manager") {
+  if (role === "manager" || role === "dept_head") {
     const employeeId = await getEmployeeIdForUser(supabase, user.id)
-    if (!employeeId) return NextResponse.json({ employees: [] })
+    const deptIds = await getScopedDepartmentIds(supabase, role, employeeId)
+    if (deptIds.length === 0) return NextResponse.json({ employees: [] })
 
-    const { data: myEmp } = await supabase
-      .from("employees")
-      .select("department_id")
-      .eq("id", employeeId)
-      .single()
-
-    if (!myEmp?.department_id) return NextResponse.json({ employees: [] })
-
-    query = query.eq("department_id", myEmp.department_id) as typeof query
+    query = query.in("department_id", deptIds) as typeof query
   }
 
   const { data, error } = await query

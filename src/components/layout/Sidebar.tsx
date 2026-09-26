@@ -18,20 +18,25 @@ interface SidebarProps {
   onClose: () => void
   roleBadge: string
   isHR?: boolean
-  /** Set for staff: "Employees" becomes "My Profile" linking to their own record. */
+  /** Link to the user's own record, shown as "My Profile". */
   ownProfileHref?: string | null
+  /**
+   * Managers / department heads keep "Employees" and get "My Profile" added
+   * after it; for staff "Employees" is replaced by "My Profile".
+   */
+  keepEmployeesLink?: boolean
 }
 
 // Driven purely by the effective role, so an HR "view as" session renders the
 // exact same navigation the viewed person gets.
-export function Sidebar({ isOpen, onClose, roleBadge, isHR, ownProfileHref }: SidebarProps) {
+export function Sidebar({ isOpen, onClose, roleBadge, isHR, ownProfileHref, keepEmployeesLink }: SidebarProps) {
   const pathname = usePathname()
 
-  const navItems = ALL_NAV_ITEMS.filter((item) => !item.staffOnly).map((item) =>
-    item.href === "/employees" && ownProfileHref
-      ? { ...item, href: ownProfileHref, label: "My Profile", icon: User }
-      : item
-  )
+  const navItems = ALL_NAV_ITEMS.filter((item) => !item.staffOnly).flatMap((item) => {
+    if (item.href !== "/employees" || !ownProfileHref) return [item]
+    const myProfile = { ...item, href: ownProfileHref, label: "My Profile", icon: User }
+    return keepEmployeesLink ? [item, myProfile] : [myProfile]
+  })
 
   return (
     <>
@@ -86,7 +91,9 @@ export function Sidebar({ isOpen, onClose, roleBadge, isHR, ownProfileHref }: Si
         <nav className="flex-1 overflow-y-auto px-3 py-4">
           <ul className="space-y-0.5">
             {navItems.map((item) => {
-              const active = pathname.startsWith(item.href)
+              // On your own profile, highlight "My Profile" rather than "Employees".
+              const onOwnProfile = !!ownProfileHref && pathname.startsWith(ownProfileHref)
+              const active = item.href === "/employees" && onOwnProfile ? false : pathname.startsWith(item.href)
               const Icon = item.icon
               return (
                 <li key={item.href}>

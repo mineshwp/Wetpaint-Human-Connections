@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { getUserRole, getEmployeeIdForUser, canAccessEmployee } from "@/lib/auth"
+import { EMPLOYEE_FULL_SELECT, mapEmployeeFull, employeeFieldAccess } from "@/lib/employees"
 import type { EmployeeFull } from "@/lib/types"
 import { blockWhileImpersonating } from "@/lib/impersonation"
 
@@ -15,7 +16,10 @@ export async function GET(
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
   const { id } = await params
-  const role = await getUserRole(supabase, user.id)
+  const [role, myEmployeeId] = await Promise.all([
+    getUserRole(supabase, user.id),
+    getEmployeeIdForUser(supabase, user.id),
+  ])
 
   if (!role || role === "applicant") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
@@ -24,23 +28,9 @@ export async function GET(
   const allowed = await canAccessEmployee(supabase, user.id, role, id)
   if (!allowed) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
 
-  const isHR = role === "hr"
-
   const { data: row, error } = await supabase
     .from("employees")
-    .select(`
-      id, employee_number, first_name, last_name, email, phone, job_title,
-      department_id, manager_id, status, start_date, avatar_initials, profile_photo_url,
-      contract_type, contract_end_date, contract_is_renewable, contract_term_months, probation_end_date, salary_band, last_salary_review_date,
-      personal_email, work_email, alternate_phone, home_address,
-      next_of_kin_name, next_of_kin_phone, next_of_kin_relationship,
-      vat_number, date_of_birth, identity_number, gender, race, disability, citizenship_status,
-      bank_name, bank_account_number, bank_branch_code, bank_account_type, bank_verification_status,
-      is_archived, resignation_date,
-      created_at, updated_at,
-      departments:department_id ( id, name, colour ),
-      manager:manager_id ( id, first_name, last_name, job_title )
-    `)
+    .select(EMPLOYEE_FULL_SELECT)
     .eq("id", id)
     .single()
 
@@ -48,68 +38,7 @@ export async function GET(
     return NextResponse.json({ error: "Employee not found" }, { status: 404 })
   }
 
-  type Dept = { id: string; name: string; colour: string }
-  type Mgr = { id: string; first_name: string; last_name: string; job_title: string }
-  const dept = row.departments as unknown as Dept | null
-  const mgr = row.manager as unknown as Mgr | null
-
-  const employee: EmployeeFull = {
-    id: row.id,
-    employeeNumber: row.employee_number ?? null,
-    resignationDate: row.resignation_date ?? null,
-    isArchived: row.is_archived ?? false,
-    firstName: row.first_name,
-    lastName: row.last_name,
-    email: row.email,
-    phone: row.phone ?? null,
-    departmentId: row.department_id ?? null,
-    jobTitle: row.job_title,
-    managerId: row.manager_id ?? null,
-    startDate: row.start_date ?? null,
-    status: row.status,
-    avatarInitials:
-      row.avatar_initials ??
-      `${row.first_name[0] ?? ""}${row.last_name[0] ?? ""}`.toUpperCase(),
-    profilePhotoUrl: row.profile_photo_url ?? null,
-    contractType: row.contract_type ?? null,
-    contractEndDate: row.contract_end_date ?? null,
-    contractIsRenewable: row.contract_is_renewable ?? false,
-    contractTermMonths: row.contract_term_months ?? null,
-    probationEndDate: row.probation_end_date ?? null,
-    personalEmail: row.personal_email ?? null,
-    workEmail: row.work_email ?? null,
-    alternatePhone: row.alternate_phone ?? null,
-    gender: row.gender ?? null,
-    nextOfKinName: row.next_of_kin_name ?? null,
-    nextOfKinPhone: row.next_of_kin_phone ?? null,
-    nextOfKinRelationship: row.next_of_kin_relationship ?? null,
-    // HR-only fields — stripped for non-HR
-    homeAddress: isHR ? (row.home_address ?? null) : null,
-    dateOfBirth: isHR ? (row.date_of_birth ?? null) : null,
-    identityNumber: isHR ? (row.identity_number ?? null) : null,
-    race: isHR ? (row.race ?? null) : null,
-    disability: isHR ? (row.disability ?? null) : null,
-    citizenshipStatus: isHR ? (row.citizenship_status ?? null) : null,
-    vatNumber: isHR ? (row.vat_number ?? null) : null,
-    salaryBand: isHR ? (row.salary_band ?? null) : null,
-    lastSalaryReviewDate: isHR ? (row.last_salary_review_date ?? null) : null,
-    bankName: isHR ? (row.bank_name ?? null) : null,
-    bankAccountNumber: isHR ? (row.bank_account_number ?? null) : null,
-    bankBranchCode: isHR ? (row.bank_branch_code ?? null) : null,
-    bankAccountType: isHR ? (row.bank_account_type ?? null) : null,
-    bankVerificationStatus: isHR ? (row.bank_verification_status ?? null) : null,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-    department: dept ?? null,
-    manager: mgr
-      ? {
-          id: mgr.id,
-          firstName: mgr.first_name,
-          lastName: mgr.last_name,
-          jobTitle: mgr.job_title,
-        }
-      : null,
-  }
+  const employee: EmployeeFull = mapEmployeeFull(row, employeeFieldAccess(role, myEmployeeId === id))
 
   return NextResponse.json({ employee })
 }
@@ -205,6 +134,17 @@ export async function PATCH(
   if (error) {
     console.error("[PATCH /api/employees/[id]]", error)
     return NextResponse.json({ error: "Failed to update employee" }, { status: 500 })
+  }
+
+  // A head only runs their own department: moving them to another department
+  // (or out of one) or archiving them drops their head role.
+  if (isHR && ("department_id" in updates || updates.is_archived === true)) {
+    let drop = supabase.from("department_heads").delete().eq("employee_id", id)
+    if (updates.is_archived !== true && updates.department_id) {
+      drop = drop.neq("department_id", updates.department_id as string)
+    }
+    const { error: headError } = await drop
+    if (headError) console.error("[PATCH /api/employees/[id]] department head cleanup", headError)
   }
 
   // Cascade archive state to the employee's KPI reviews (HR only)

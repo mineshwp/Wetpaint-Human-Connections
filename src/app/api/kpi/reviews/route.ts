@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 import { getUserRole, getEmployeeIdForUser } from "@/lib/auth"
 import { inheritForNewReview } from "@/lib/kpi/inherit"
 import { blockWhileImpersonating } from "@/lib/impersonation"
+import { getHeadedDepartmentIds } from "@/lib/roles"
 
 export async function GET() {
   const supabase = await createClient()
@@ -26,7 +27,21 @@ export async function GET() {
   if (role !== "hr") {
     if (!myEmployeeId) return NextResponse.json([])
 
-    const [ownedResult, assignedResult] = await Promise.all([
+    // Department heads also see published reviews for staff in the departments
+    // they head (read-only). Drafts stay between HR and the reviewers.
+    let deptEmployeeIds: string[] = []
+    if (role === "dept_head") {
+      const deptIds = await getHeadedDepartmentIds(supabase, myEmployeeId)
+      if (deptIds.length > 0) {
+        const { data: deptEmps } = await supabase
+          .from("employees")
+          .select("id")
+          .in("department_id", deptIds)
+        deptEmployeeIds = (deptEmps ?? []).map((e) => e.id as string)
+      }
+    }
+
+    const [ownedResult, assignedResult, deptResult] = await Promise.all([
       supabase
         .from("kpi_reviews")
         .select(selectClause)
@@ -39,9 +54,17 @@ export async function GET() {
         .eq("kpi_review_invitees.invitee_id", myEmployeeId)
         .eq("is_archived", false)
         .order("created_at", { ascending: false }),
+      deptEmployeeIds.length > 0
+        ? supabase
+            .from("kpi_reviews")
+            .select(selectClause)
+            .in("employee_id", deptEmployeeIds)
+            .in("status", ["active", "completed"])
+            .eq("is_archived", false)
+        : Promise.resolve({ data: [], error: null }),
     ])
 
-    const error = ownedResult.error ?? assignedResult.error
+    const error = ownedResult.error ?? assignedResult.error ?? deptResult.error
     if (error) {
       console.error("[GET /api/kpi/reviews]", error)
       return NextResponse.json({ error: "Failed to fetch reviews" }, { status: 500 })
@@ -49,6 +72,7 @@ export async function GET() {
 
     const byId = new Map<string, NonNullable<typeof ownedResult.data>[number]>()
     for (const review of ownedResult.data ?? []) byId.set(review.id, review)
+    for (const review of deptResult.data ?? []) byId.set(review.id, review)
     for (const review of assignedResult.data ?? []) {
       const isAssigned = review.kpi_review_invitees?.some(
         (invitee: { invitee_id: string }) => invitee.invitee_id === myEmployeeId

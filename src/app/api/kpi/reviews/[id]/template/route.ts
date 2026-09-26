@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { canViewReview } from "@/lib/kpi/access"
 
 interface RawItem {
   id: string
@@ -34,6 +35,9 @@ export async function GET(
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+
+  const allowed = await canViewReview(supabase, user.id, reviewId)
+  if (!allowed) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
 
   // Templates are per-period: a review reads the template for its own period.
   const { data: review, error: revErr } = await supabase

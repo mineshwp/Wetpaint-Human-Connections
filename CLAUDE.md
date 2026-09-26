@@ -49,6 +49,7 @@ Roles are stored in Supabase (table: `user_roles` or a `roles` column on the use
 | Role | Access |
 |---|---|
 | `hr_admin` | Full access |
+| `dept_head` | Staff of the department they head (must be a member of it) + their published KPIs (derived from `department_heads`, never stored) |
 | `manager` | Department/team view only |
 | `staff` | Own data only |
 
@@ -102,14 +103,22 @@ Tabs:
 
 ### Access rules (enforce server-side)
 
-| Data | HR/Admin | Manager | Staff |
-|---|---|---|---|
-| View employee list | ✅ All | ✅ Own dept only | ❌ |
-| View personal details | ✅ | ✅ Basic only | Own only |
-| View banking/payroll | ✅ | ❌ | ❌ |
-| View documents | ✅ | ❌ | Own only |
-| View HR notes | ✅ | ❌ | ❌ |
-| Edit employee record | ✅ | ❌ | Own profile only |
+| Data | HR/Admin | Dept Head | Manager | Staff |
+|---|---|---|---|---|
+| View employee list | ✅ All | ✅ Headed dept(s) | ✅ Own dept only | ❌ |
+| View personal details | ✅ | ✅ + home address; no DOB/ID/race/disability/citizenship/VAT | ✅ same as Dept Head | Own only |
+| View banking/payroll/salary | ✅ | ❌ | ❌ | ❌ |
+| View documents | ✅ | Own only | Own only | Own only |
+| View HR notes | ✅ | ❌ | ❌ | ❌ |
+| Edit employee record | ✅ | Own profile only | Own profile only | Own profile only |
+
+Managers and dept heads see their **own** record exactly as staff do. Field
+masking lives in `src/lib/employees.ts` (`mapEmployeeFull` + `employeeFieldAccess`).
+Dept heads are assigned per department in the Departments manager
+(`department_heads` table; `POST/DELETE /api/departments/[id]/heads`, HR only).
+A head must be a member of the department they run (enforced in the heads
+POST route); moving a head to another department or archiving them removes
+their head role automatically (employee PATCH).
 
 ### API routes needed
 
@@ -188,14 +197,19 @@ POST   /api/kpi/template/sections/[id]             → add item to section (HR o
 
 ### KPI access rules
 
-| Action | HR/Admin | Invitee (accepted) | Staff |
-|---|---|---|---|
-| View all reviews | ✅ | ❌ | ❌ |
-| Create / delete review | ✅ | ❌ | ❌ |
-| Add / remove invitees | ✅ | ❌ | ❌ |
-| Score HR sections | ✅ | ❌ | ❌ |
-| Score invitee sections | ❌ | ✅ own rows only | ❌ |
-| View own KPI summary | ✅ | ✅ | ✅ |
+| Action | HR/Admin | Invitee (accepted) | Dept Head | Staff |
+|---|---|---|---|---|
+| View all reviews | ✅ | ❌ | Published reviews of headed dept(s) | ❌ |
+| Create / delete review | ✅ | ❌ | ❌ | ❌ |
+| Add / remove invitees | ✅ | ❌ | ❌ | ❌ |
+| Score HR sections | ✅ | ❌ | ❌ | ❌ |
+| Score invitee sections | ❌ | ✅ own rows only, **draft only** | as invitee only | ❌ |
+| View own KPI summary | ✅ | ✅ | ✅ | ✅ |
+
+**Publish lock:** once HR publishes a review (status `active`/`completed`), only
+HR can change scores or final comments; everyone else is view-only (enforced in
+the scores + final-comments PUT routes). Review read access is centralised in
+`src/lib/kpi/access.ts` (`canViewReview`).
 
 ### Scoring logic
 
@@ -331,6 +345,8 @@ Always return proper HTTP status codes: 400, 401, 403, 404, 500.
 | Archive cascade (archiving an employee archives their KPI reviews; archived reviews hidden from lists) | ✅ Done |
 | HR "View as" any active/onboarding staff member (exact view, their role; view-only enforced on every write API) | ✅ Done |
 | Staff see only their own profile (land on it after login; sidebar "My Profile") | ✅ Done |
+| Department heads (dept-scoped staff + published KPI view; sensitive fields masked; no documents) | ✅ Done |
+| KPI publish lock (reviewers edit only while draft; HR-only after publish) | ✅ Done |
 
 Update this table as features are completed.
 

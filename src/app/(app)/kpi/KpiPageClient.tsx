@@ -6,7 +6,7 @@ import {
   Users, UserPlus, Send, Clock, CheckCircle2, XCircle,
   Loader2, BarChart3, FileText, Target, Heart, Building2,
   Search, Pencil, SlidersHorizontal, ArrowUp, ArrowDown, RotateCcw, Copy,
-  Sparkles, ListChecks,
+  Sparkles, ListChecks, Lock,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -2004,17 +2004,26 @@ function MyAssignmentsView({ reviews, scores, reviewTemplates, finalComments, cu
               </div>
             </div>
             {(() => {
+              const published = review.status === "active" || review.status === "completed"
               const inviteeActive = myInv && (myInv.status === "accepted" || myInv.status === "completed")
-              const subjectReadOnly = !myInv && !isHR && (review.status === "active" || review.status === "completed")
+              const subjectReadOnly = !myInv && !isHR && published
               if (!inviteeActive && !subjectReadOnly) return null
+              // Once HR publishes, reviewers can only view — the API rejects
+              // their writes too. A null scorer id leaves no row editable.
+              const editorId = published && !isHR ? null : currentEmployeeId
               return (
                 <div className="px-5 py-5 space-y-3">
+                  {published && inviteeActive && !isHR && (
+                    <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                      <Lock size={12} /> Published by HR — view only.
+                    </p>
+                  )}
                   <ActionPoints isHR={isHR} isOwnReview={!isHR && review.employee_id === currentEmployeeId} actionPoints={review.action_points} generatedAt={review.action_points_generated_at} />
                   {(reviewTemplates[review.id] ?? []).map((section) => (
                     <SectionAccordion
                       key={section.id} section={section}
                       scores={scores[review.id] ?? []} invitees={review.kpi_review_invitees ?? []}
-                      isHR={false} currentEmployeeId={currentEmployeeId}
+                      isHR={false} currentEmployeeId={editorId}
                       onScoreChange={(itemId, score, comments, scorerId) => onScoreChange(review.id, itemId, score, comments, scorerId)}
                       defaultOpen={false}
                     />
@@ -2024,7 +2033,7 @@ function MyAssignmentsView({ reviews, scores, reviewTemplates, finalComments, cu
                     comments={finalComments[review.id] ?? []}
                     scores={scores[review.id] ?? []}
                     isHR={false}
-                    currentEmployeeId={currentEmployeeId}
+                    currentEmployeeId={editorId}
                     onSave={(authorId, comment) => onSaveFinalComment(review.id, authorId, comment)}
                   />
                 </div>

@@ -1,0 +1,98 @@
+import type { EmployeeFull, UserRole } from "./types"
+
+export const EMPLOYEE_FULL_SELECT = `
+  id, employee_number, first_name, last_name, email, phone, job_title,
+  department_id, manager_id, status, start_date, avatar_initials, profile_photo_url,
+  contract_type, contract_end_date, contract_is_renewable, contract_term_months, probation_end_date, salary_band, last_salary_review_date,
+  personal_email, work_email, alternate_phone, home_address,
+  next_of_kin_name, next_of_kin_phone, next_of_kin_relationship,
+  vat_number, date_of_birth, identity_number, gender, race, disability, citizenship_status,
+  bank_name, bank_account_number, bank_branch_code, bank_account_type, bank_verification_status,
+  is_archived, resignation_date,
+  created_at, updated_at,
+  departments:department_id ( id, name, colour ),
+  manager:manager_id ( id, first_name, last_name, job_title )
+`
+
+/**
+ * How much of a record the viewer gets:
+ *  - "hr":   everything
+ *  - "team": a manager / department head viewing someone in their scope —
+ *            adds home address; never ID, DOB, banking, salary, VAT, race,
+ *            disability or citizenship
+ *  - "self": anyone else (incl. managers/heads on their own record) — the
+ *            standard staff view
+ */
+export type EmployeeFieldAccess = "hr" | "team" | "self"
+
+export function employeeFieldAccess(
+  role: UserRole | null,
+  isOwnProfile: boolean
+): EmployeeFieldAccess {
+  if (role === "hr") return "hr"
+  if (!isOwnProfile && (role === "manager" || role === "dept_head")) return "team"
+  return "self"
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function mapEmployeeFull(row: any, access: EmployeeFieldAccess): EmployeeFull {
+  type Dept = { id: string; name: string; colour: string }
+  type Mgr = { id: string; first_name: string; last_name: string; job_title: string }
+  const dept = row.departments as Dept | null
+  const mgr = row.manager as Mgr | null
+  const hr = access === "hr"
+  const hrOr = <T,>(v: T | null | undefined): T | null => (hr ? (v ?? null) : null)
+
+  return {
+    id: row.id,
+    employeeNumber: row.employee_number ?? null,
+    resignationDate: row.resignation_date ?? null,
+    isArchived: row.is_archived ?? false,
+    firstName: row.first_name,
+    lastName: row.last_name,
+    email: row.email,
+    phone: row.phone ?? null,
+    departmentId: row.department_id ?? null,
+    jobTitle: row.job_title,
+    managerId: row.manager_id ?? null,
+    startDate: row.start_date ?? null,
+    status: row.status,
+    avatarInitials:
+      row.avatar_initials ??
+      `${row.first_name[0] ?? ""}${row.last_name[0] ?? ""}`.toUpperCase(),
+    profilePhotoUrl: row.profile_photo_url ?? null,
+    contractType: row.contract_type ?? null,
+    contractEndDate: row.contract_end_date ?? null,
+    contractIsRenewable: row.contract_is_renewable ?? false,
+    contractTermMonths: row.contract_term_months ?? null,
+    probationEndDate: row.probation_end_date ?? null,
+    personalEmail: row.personal_email ?? null,
+    workEmail: row.work_email ?? null,
+    alternatePhone: row.alternate_phone ?? null,
+    gender: row.gender ?? null,
+    nextOfKinName: row.next_of_kin_name ?? null,
+    nextOfKinPhone: row.next_of_kin_phone ?? null,
+    nextOfKinRelationship: row.next_of_kin_relationship ?? null,
+    homeAddress: access === "self" ? null : (row.home_address ?? null),
+    // HR-only fields — stripped for everyone else
+    dateOfBirth: hrOr(row.date_of_birth),
+    identityNumber: hrOr(row.identity_number),
+    race: hrOr(row.race),
+    disability: hrOr(row.disability),
+    citizenshipStatus: hrOr(row.citizenship_status),
+    vatNumber: hrOr(row.vat_number),
+    salaryBand: hrOr(row.salary_band),
+    lastSalaryReviewDate: hrOr(row.last_salary_review_date),
+    bankName: hrOr(row.bank_name),
+    bankAccountNumber: hrOr(row.bank_account_number),
+    bankBranchCode: hrOr(row.bank_branch_code),
+    bankAccountType: hrOr(row.bank_account_type),
+    bankVerificationStatus: hrOr(row.bank_verification_status),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    department: dept ?? null,
+    manager: mgr
+      ? { id: mgr.id, firstName: mgr.first_name, lastName: mgr.last_name, jobTitle: mgr.job_title }
+      : null,
+  }
+}

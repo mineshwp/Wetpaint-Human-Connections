@@ -28,14 +28,30 @@ export async function GET(req: Request) {
   // Optional employee counts for the management UI (?counts=1).
   const withCounts = new URL(req.url).searchParams.get("counts") === "1"
   if (withCounts) {
-    const { data: emps } = await supabase
-      .from("employees")
-      .select("department_id")
+    const [{ data: emps }, { data: headRows }] = await Promise.all([
+      supabase.from("employees").select("department_id"),
+      supabase
+        .from("department_heads")
+        .select("department_id, employee:employees(id, first_name, last_name)"),
+    ])
     const counts = new Map<string, number>()
     for (const e of emps ?? []) {
       if (e.department_id) counts.set(e.department_id, (counts.get(e.department_id) ?? 0) + 1)
     }
-    const departments = (data ?? []).map((d) => ({ ...d, employee_count: counts.get(d.id) ?? 0 }))
+    type HeadEmp = { id: string; first_name: string; last_name: string }
+    const heads = new Map<string, { id: string; name: string }[]>()
+    for (const h of headRows ?? []) {
+      const emp = h.employee as unknown as HeadEmp | null
+      if (!emp) continue
+      const list = heads.get(h.department_id) ?? []
+      list.push({ id: emp.id, name: `${emp.first_name} ${emp.last_name}`.trim() })
+      heads.set(h.department_id, list)
+    }
+    const departments = (data ?? []).map((d) => ({
+      ...d,
+      employee_count: counts.get(d.id) ?? 0,
+      heads: heads.get(d.id) ?? [],
+    }))
     return NextResponse.json({ departments })
   }
 

@@ -15,14 +15,14 @@ export async function GET(
   const { id } = await params
   const role = await getUserRole(supabase, user.id)
 
-  if (!role || role === "applicant" || role === "manager") {
+  if (!role || role === "applicant") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
 
   const isHR = role === "hr"
 
-  // Staff can only view their own documents
-  if (role === "staff") {
+  // Everyone except HR (incl. managers and department heads) sees only their own documents
+  if (!isHR) {
     const myEmployeeId = await getEmployeeIdForUser(supabase, user.id)
     if (myEmployeeId !== id) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
