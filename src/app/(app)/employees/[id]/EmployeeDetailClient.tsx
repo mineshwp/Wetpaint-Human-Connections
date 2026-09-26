@@ -1047,11 +1047,13 @@ function TrainingKPITab({
   employeeId,
   initialTraining,
   canEdit,
+  showKpi,
 }: {
   kpi: KpiSummary
   employeeId: string
   initialTraining: EmployeeTraining[]
   canEdit: boolean
+  showKpi: boolean
 }) {
   const [nowMs] = useState(() => Date.now())
   const [kpiExpanded, setKpiExpanded] = useState(false)
@@ -1097,8 +1099,8 @@ function TrainingKPITab({
 
   return (
     <div className="space-y-6">
-      {/* KPI section */}
-      {kpi ? (
+      {/* KPI section — hidden for staff, who use the KPI Reviews page */}
+      {!showKpi ? null : kpi ? (
         <SectionCard title={`KPI — ${kpi.period}`} subtitle={kpi.title}>
           <div className="flex flex-wrap items-center gap-4 mb-4">
             <span
@@ -1616,6 +1618,8 @@ interface Props {
   setImpersonationAction?: (formData: FormData) => Promise<void>
   /** False for staff — their own profile is the only page they have. */
   showBackLink?: boolean
+  /** False for staff — KPIs live on their own KPI Reviews page. */
+  showKpi?: boolean
 }
 
 export function EmployeeDetailClient({
@@ -1632,6 +1636,7 @@ export function EmployeeDetailClient({
   canImpersonate,
   setImpersonationAction,
   showBackLink = true,
+  showKpi = true,
 }: Props) {
   const [tab, setTab] = useState<Tab>("personal")
   const [nowMs] = useState(() => Date.now())
@@ -1643,7 +1648,7 @@ export function EmployeeDetailClient({
   const tabs: { key: Tab; label: string }[] = [
     { key: "personal", label: "Personal & Employment" },
     ...(canViewBanking ? [{ key: "banking" as Tab, label: "Banking & Payroll" }] : []),
-    { key: "training", label: "Training & KPIs" },
+    { key: "training", label: showKpi ? "Training & KPIs" : "Training" },
     ...(canViewDocuments
       ? [
           {
@@ -1846,19 +1851,21 @@ export function EmployeeDetailClient({
       </div>
 
       {/* ── Stats row ────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+      <div className={cn("grid grid-cols-2 gap-4", showKpi && "sm:grid-cols-3")}>
         <MiniStat
           label="Tenure"
           value={tenure(emp.startDate)}
           icon={<Clock size={18} />}
           iconClass="text-blue-600 bg-blue-50"
         />
-        <MiniStat
-          label="KPI"
-          value={kpiSummary ? kpiSummary.period : "—"}
-          icon={<TrendingUp size={18} />}
-          iconClass="text-violet-600 bg-violet-50"
-        />
+        {showKpi && (
+          <MiniStat
+            label="KPI"
+            value={kpiSummary ? kpiSummary.period : "—"}
+            icon={<TrendingUp size={18} />}
+            iconClass="text-violet-600 bg-violet-50"
+          />
+        )}
         <MiniStat
           label="Documents"
           value={String(initialDocuments.length)}
@@ -1887,6 +1894,7 @@ export function EmployeeDetailClient({
           employeeId={emp.id}
           initialTraining={initialTraining}
           canEdit={isHR || isOwnProfile}
+          showKpi={showKpi}
         />
       )}
       {activeTab === "documents" && canViewDocuments && (

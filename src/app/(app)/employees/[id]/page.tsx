@@ -214,6 +214,7 @@ export default async function EmployeeDetailPage({
       canImpersonate={canImpersonate}
       setImpersonationAction={setImpersonation}
       showBackLink={role !== "staff"}
+      showKpi={role !== "staff"}
     />
   )
 }
