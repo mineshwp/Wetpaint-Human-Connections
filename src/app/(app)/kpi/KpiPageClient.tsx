@@ -1128,8 +1128,10 @@ function FinalCommentsAccordion({ visible, byAuthor, withComment, isHR, currentE
 
 // AI-generated action points. Generated automatically when a quarter is
 // published (status → active); this component just displays what was stored.
-function ActionPoints({ isHR, actionPoints, generatedAt }: {
+function ActionPoints({ isHR, isOwnReview, actionPoints, generatedAt }: {
   isHR: boolean
+  /** The viewer is the staff member being reviewed — address them directly. */
+  isOwnReview: boolean
   actionPoints?: string | null
   generatedAt?: string | null
 }) {
@@ -1151,7 +1153,11 @@ function ActionPoints({ isHR, actionPoints, generatedAt }: {
         <ListChecks size={18} className="shrink-0 text-primary" />
         <div className="flex-1 min-w-0">
           <p className="font-bold text-[14px] text-foreground leading-snug">Action Points</p>
-          <p className="text-xs text-muted-foreground mt-0.5">What this staff member should work on next quarter to improve their score</p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {isOwnReview
+              ? "What you should work on next quarter to improve your score"
+              : "What this staff member should work on next quarter to improve their score"}
+          </p>
         </div>
         {generatedAt && (
           <span className="hidden sm:inline-flex items-center gap-1 text-[10px] text-muted-foreground shrink-0">
@@ -1183,7 +1189,9 @@ function ActionPoints({ isHR, actionPoints, generatedAt }: {
               <p className="text-xs text-muted-foreground mt-1 max-w-md mx-auto">
                 {isHR
                   ? "These are generated automatically when the quarter is published — from the scores and comments."
-                  : "These appear automatically once HR publishes your scored review."}
+                  : isOwnReview
+                    ? "These appear automatically once HR publishes your scored review."
+                    : "These appear automatically once HR publishes this scored review."}
               </p>
             </div>
           )}
@@ -1351,7 +1359,7 @@ function QuarterPanel({ review, template, scores, finalComments, allEmployees, c
         <InviteePanel review={review} allEmployees={allEmployees} template={template} onAddInvitee={onAddInvitee} onRemoveInvitee={onRemoveInvitee} onSetSections={onSetSections} />
       )}
 
-      <ActionPoints isHR={isHR} actionPoints={review.action_points} generatedAt={review.action_points_generated_at} />
+      <ActionPoints isHR={isHR} isOwnReview={!isHR && review.employee_id === currentEmployeeId} actionPoints={review.action_points} generatedAt={review.action_points_generated_at} />
 
       <div className="flex flex-col gap-3">
         {reviewTemplate.length === 0 ? (
@@ -2001,7 +2009,7 @@ function MyAssignmentsView({ reviews, scores, reviewTemplates, finalComments, cu
               if (!inviteeActive && !subjectReadOnly) return null
               return (
                 <div className="px-5 py-5 space-y-3">
-                  <ActionPoints isHR={isHR} actionPoints={review.action_points} generatedAt={review.action_points_generated_at} />
+                  <ActionPoints isHR={isHR} isOwnReview={!isHR && review.employee_id === currentEmployeeId} actionPoints={review.action_points} generatedAt={review.action_points_generated_at} />
                   {(reviewTemplates[review.id] ?? []).map((section) => (
                     <SectionAccordion
                       key={section.id} section={section}
