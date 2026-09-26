@@ -8,7 +8,6 @@ import type {
   EmployeeFull,
   EmployeeDocument,
   HRNote,
-  KpiSummary,
   EmployeeTraining,
 } from "@/lib/types"
 
@@ -146,7 +145,7 @@ export default async function EmployeeDetailPage({
   }
 
   // Fetch sub-resources in parallel
-  const [docsResult, notesResult, kpiResult, trainingResult] = await Promise.all([
+  const [docsResult, notesResult, trainingResult] = await Promise.all([
     canViewDocuments
       ? (() => {
           let q = supabase
@@ -170,14 +169,6 @@ export default async function EmployeeDetailPage({
       : Promise.resolve({ data: [], error: null }),
 
     supabase
-      .from("kpi_reviews")
-      .select("id, period, title, status, deadline")
-      .eq("employee_id", id)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle(),
-
-    supabase
       .from("employee_training")
       .select("*")
       .eq("employee_id", id)
@@ -188,23 +179,11 @@ export default async function EmployeeDetailPage({
   const hrNotes: HRNote[] = (notesResult.data ?? []) as HRNote[]
   const training: EmployeeTraining[] = (trainingResult.data ?? []) as EmployeeTraining[]
 
-  const kpiRow = kpiResult.data
-  const kpiSummary: KpiSummary = kpiRow
-    ? {
-        reviewId: kpiRow.id,
-        period: kpiRow.period,
-        title: kpiRow.title,
-        status: kpiRow.status,
-        deadline: kpiRow.deadline ?? null,
-      }
-    : null
-
   return (
     <EmployeeDetailClient
       employee={employee}
       initialDocuments={documents}
       initialNotes={hrNotes}
-      kpiSummary={kpiSummary}
       initialTraining={training}
       isHR={isHR}
       isOwnProfile={isOwnProfile}
@@ -214,7 +193,6 @@ export default async function EmployeeDetailPage({
       canImpersonate={canImpersonate}
       setImpersonationAction={setImpersonation}
       showBackLink={role !== "staff"}
-      showKpi={role !== "staff"}
     />
   )
 }

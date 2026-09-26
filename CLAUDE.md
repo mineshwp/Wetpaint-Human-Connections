@@ -96,7 +96,7 @@ Tabs:
 1. **Personal & Employment** — personal info, contact, next of kin, employment details
 2. **Banking & Payroll** — HR/Admin only; bank details with sensitive field masking
 3. **Leave** — leave balances per type (read-only here; leave management is a future module)
-4. **Training & KPIs** — KPI summary card linking to `/kpi`; training placeholder
+4. **Training** — training records (KPIs are not shown on profiles; they live on `/kpi`)
 5. **Documents** — file list with HR visibility toggle (HR can hide docs from staff view)
 6. **HR Notes** — HR/Admin only; private internal notes
 
@@ -319,7 +319,7 @@ Always return proper HTTP status codes: 400, 401, 403, 404, 500.
 | Training module (add/edit/delete, cert upload) | ✅ Done |
 | `GET/POST /api/employees/[id]/training` | ✅ Done |
 | `PATCH/DELETE /api/employees/[id]/training/[id]` | ✅ Done |
-| KPI inline accordion on Training & KPIs tab | ✅ Done |
+| KPI removed from employee profiles (tab is "Training"; KPIs live only on `/kpi`) | ✅ Done |
 | Leave tab removed (future phase) | ✅ Done |
 | KPI per-period templates (select/edit a period's template; new period copies from another) | ✅ Done |
 | KPI rating guide (global 1–10 rubric; HR edits, all view) | ✅ Done |

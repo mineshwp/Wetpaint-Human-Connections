@@ -13,7 +13,6 @@ import {
   Printer,
   Eye,
   EyeOff,
-  TrendingUp,
   BookOpen,
   FileText,
   Download,
@@ -21,8 +20,6 @@ import {
   Plus,
   AlertTriangle,
   X,
-  ChevronDown,
-  ChevronUp,
   Trash2,
   ExternalLink,
   Check,
@@ -33,7 +30,6 @@ import type {
   EmployeeFull,
   EmployeeDocument,
   HRNote,
-  KpiSummary,
   EmploymentStatus,
   EmployeeTraining,
   TrainingCategory,
@@ -547,159 +543,6 @@ function BankingTab({ emp }: { emp: EmployeeFull }) {
   )
 }
 
-// ─── KPI inline detail ────────────────────────────────────────────────────────
-
-type KpiSection = {
-  id: string
-  title: string
-  type: string
-  position: number
-  kpi_template_items: {
-    id: string
-    title: string
-    description: string | null
-    min_score: number
-    max_score: number
-    position: number
-  }[]
-}
-
-type KpiScore = {
-  id: string
-  item_id: string
-  scorer_id: string | null
-  score: number | null
-  comments: string | null
-}
-
-function templateForKpiReview(sections: KpiSection[], scores: KpiScore[]) {
-  const scoredItemIds = new Set(scores.map((score) => score.item_id))
-
-  return sections.map((section) => {
-    const items = section.kpi_template_items ?? []
-    const scoredItems = items.filter((item) => scoredItemIds.has(item.id))
-
-    return {
-      ...section,
-      kpi_template_items: section.position === 1 && scoredItems.length > 0 ? scoredItems : items,
-    }
-  })
-}
-
-function KpiDetailPanel({ reviewId }: { reviewId: string }) {
-  const [sections, setSections] = useState<KpiSection[]>([])
-  const [scores, setScores] = useState<KpiScore[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    async function load() {
-      setLoading(true)
-      setError(null)
-      try {
-        const [tplRes, scoresRes] = await Promise.all([
-          // Templates are per-period — use this review's own period template
-          // (so item IDs line up with its scores) rather than the global one.
-          fetch(`/api/kpi/reviews/${reviewId}/template`),
-          fetch(`/api/kpi/reviews/${reviewId}/scores`),
-        ])
-        if (!tplRes.ok || !scoresRes.ok) throw new Error("Failed to load")
-        const [tpl, sc] = await Promise.all([tplRes.json(), scoresRes.json()])
-        const nextScores = sc ?? []
-        setSections(templateForKpiReview(tpl.sections ?? tpl ?? [], nextScores))
-        setScores(nextScores)
-      } catch {
-        setError("Could not load KPI details.")
-      } finally {
-        setLoading(false)
-      }
-    }
-    load()
-  }, [reviewId])
-
-  if (loading) {
-    return (
-      <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
-        <Loader2 size={14} className="animate-spin" />
-        Loading KPI details…
-      </div>
-    )
-  }
-
-  if (error) {
-    return <p className="text-sm text-red-600 py-4">{error}</p>
-  }
-
-  function avgScore(itemId: string) {
-    const itemScores = scores.filter((s) => s.item_id === itemId && s.score !== null)
-    if (itemScores.length === 0) return null
-    return itemScores.reduce((sum, s) => sum + (s.score ?? 0), 0) / itemScores.length
-  }
-
-  function sectionTotal(sec: KpiSection) {
-    return sec.kpi_template_items.reduce((sum, item) => {
-      const avg = avgScore(item.id)
-      return sum + (avg ?? 0)
-    }, 0)
-  }
-
-  const overallTotal = sections.reduce((sum, sec) => sum + sectionTotal(sec), 0)
-
-  return (
-    <div className="mt-4 space-y-4">
-      {sections.map((sec) => (
-        <div key={sec.id} className="rounded-lg border border-border overflow-hidden">
-          <div className="px-4 py-2.5 bg-muted/40 flex items-center justify-between">
-            <p className="text-xs font-semibold text-foreground uppercase tracking-wide">
-              {sec.title}
-            </p>
-            <p className="text-xs font-semibold text-muted-foreground">
-              Section total: {sectionTotal(sec).toFixed(1)}
-            </p>
-          </div>
-          <div className="divide-y divide-border">
-            {sec.kpi_template_items
-              .sort((a, b) => a.position - b.position)
-              .map((item) => {
-                const avg = avgScore(item.id)
-                return (
-                  <div key={item.id} className="px-4 py-3 flex items-center justify-between gap-4">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-foreground">{item.title}</p>
-                      {item.description && (
-                        <p className="text-xs text-muted-foreground mt-0.5">{item.description}</p>
-                      )}
-                    </div>
-                    <div className="text-right shrink-0">
-                      {avg !== null ? (
-                        <span className="text-sm font-semibold text-foreground">
-                          {avg.toFixed(1)}
-                          <span className="text-xs text-muted-foreground font-normal ml-0.5">
-                            /{item.max_score}
-                          </span>
-                        </span>
-                      ) : (
-                        <span className="text-xs text-muted-foreground italic">Not scored</span>
-                      )}
-                    </div>
-                  </div>
-                )
-              })}
-          </div>
-        </div>
-      ))}
-      {sections.length > 0 && (
-        <div className="flex justify-end">
-          <div className="rounded-lg border border-border px-4 py-2.5 text-sm">
-            <span className="text-muted-foreground">Overall score: </span>
-            <span className="font-bold text-foreground">{overallTotal.toFixed(1)}</span>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
 // ─── Training add/edit modal ──────────────────────────────────────────────────
 
 type TrainingFormData = {
@@ -1040,33 +883,22 @@ function TrainingModal({
   )
 }
 
-// ─── Tab 3: Training & KPIs ───────────────────────────────────────────────────
+// ─── Tab 3: Training ──────────────────────────────────────────────────────────
 
-function TrainingKPITab({
-  kpi,
+function TrainingTab({
   employeeId,
   initialTraining,
   canEdit,
-  showKpi,
 }: {
-  kpi: KpiSummary
   employeeId: string
   initialTraining: EmployeeTraining[]
   canEdit: boolean
-  showKpi: boolean
 }) {
   const [nowMs] = useState(() => Date.now())
-  const [kpiExpanded, setKpiExpanded] = useState(false)
   const [training, setTraining] = useState(initialTraining)
   const [showModal, setShowModal] = useState(false)
   const [editing, setEditing] = useState<EmployeeTraining | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
-
-  const STATUS_COLOR: Record<string, string> = {
-    draft: "text-gray-500 bg-gray-50 border-gray-200",
-    active: "text-blue-700 bg-blue-50 border-blue-200",
-    completed: "text-emerald-700 bg-emerald-50 border-emerald-200",
-  }
 
   function handleSaved(record: EmployeeTraining) {
     setTraining((prev) => {
@@ -1099,51 +931,6 @@ function TrainingKPITab({
 
   return (
     <div className="space-y-6">
-      {/* KPI section — hidden for staff, who use the KPI Reviews page */}
-      {!showKpi ? null : kpi ? (
-        <SectionCard title={`KPI — ${kpi.period}`} subtitle={kpi.title}>
-          <div className="flex flex-wrap items-center gap-4 mb-4">
-            <span
-              className={cn(
-                "rounded-full border px-3 py-1 text-xs font-semibold capitalize",
-                STATUS_COLOR[kpi.status] ?? "text-gray-500 bg-gray-50 border-gray-200"
-              )}
-            >
-              {kpi.status}
-            </span>
-            {kpi.deadline && (
-              <span className="text-xs text-muted-foreground flex items-center gap-1.5">
-                <Calendar size={12} />
-                Deadline: {fmtDate(kpi.deadline)}
-              </span>
-            )}
-          </div>
-          <button
-            onClick={() => setKpiExpanded((v) => !v)}
-            className="flex items-center gap-1.5 text-sm font-medium hover:underline"
-            style={{ color: "var(--brand-primary)" }}
-          >
-            {kpiExpanded ? "Hide KPI details" : "View KPI details"}
-            {kpiExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-          </button>
-          {kpiExpanded && <KpiDetailPanel reviewId={kpi.reviewId} />}
-        </SectionCard>
-      ) : (
-        <SectionCard>
-          <div className="text-center py-8">
-            <TrendingUp size={36} className="mx-auto mb-3 text-muted-foreground" />
-            <p className="text-sm text-muted-foreground">No KPI reviews found.</p>
-            <Link
-              href="/kpi"
-              className="text-sm font-medium hover:underline mt-2 inline-block"
-              style={{ color: "var(--brand-primary)" }}
-            >
-              Go to KPI Reviews →
-            </Link>
-          </div>
-        </SectionCard>
-      )}
-
       {/* Training section */}
       <SectionCard
         title="Training"
@@ -1607,7 +1394,6 @@ interface Props {
   employee: EmployeeFull
   initialDocuments: EmployeeDocument[]
   initialNotes: HRNote[]
-  kpiSummary: KpiSummary
   initialTraining: EmployeeTraining[]
   isHR: boolean
   isOwnProfile: boolean
@@ -1618,15 +1404,12 @@ interface Props {
   setImpersonationAction?: (formData: FormData) => Promise<void>
   /** False for staff — their own profile is the only page they have. */
   showBackLink?: boolean
-  /** False for staff — KPIs live on their own KPI Reviews page. */
-  showKpi?: boolean
 }
 
 export function EmployeeDetailClient({
   employee: emp,
   initialDocuments,
   initialNotes,
-  kpiSummary,
   initialTraining,
   isHR,
   isOwnProfile,
@@ -1636,7 +1419,6 @@ export function EmployeeDetailClient({
   canImpersonate,
   setImpersonationAction,
   showBackLink = true,
-  showKpi = true,
 }: Props) {
   const [tab, setTab] = useState<Tab>("personal")
   const [nowMs] = useState(() => Date.now())
@@ -1648,7 +1430,7 @@ export function EmployeeDetailClient({
   const tabs: { key: Tab; label: string }[] = [
     { key: "personal", label: "Personal & Employment" },
     ...(canViewBanking ? [{ key: "banking" as Tab, label: "Banking & Payroll" }] : []),
-    { key: "training", label: showKpi ? "Training & KPIs" : "Training" },
+    { key: "training", label: "Training" },
     ...(canViewDocuments
       ? [
           {
@@ -1851,21 +1633,13 @@ export function EmployeeDetailClient({
       </div>
 
       {/* ── Stats row ────────────────────────────────────────────────────── */}
-      <div className={cn("grid grid-cols-2 gap-4", showKpi && "sm:grid-cols-3")}>
+      <div className="grid grid-cols-2 gap-4">
         <MiniStat
           label="Tenure"
           value={tenure(emp.startDate)}
           icon={<Clock size={18} />}
           iconClass="text-blue-600 bg-blue-50"
         />
-        {showKpi && (
-          <MiniStat
-            label="KPI"
-            value={kpiSummary ? kpiSummary.period : "—"}
-            icon={<TrendingUp size={18} />}
-            iconClass="text-violet-600 bg-violet-50"
-          />
-        )}
         <MiniStat
           label="Documents"
           value={String(initialDocuments.length)}
@@ -1889,12 +1663,10 @@ export function EmployeeDetailClient({
       )}
       {activeTab === "banking" && canViewBanking && <BankingTab emp={emp} />}
       {activeTab === "training" && (
-        <TrainingKPITab
-          kpi={kpiSummary}
+        <TrainingTab
           employeeId={emp.id}
           initialTraining={initialTraining}
           canEdit={isHR || isOwnProfile}
-          showKpi={showKpi}
         />
       )}
       {activeTab === "documents" && canViewDocuments && (
