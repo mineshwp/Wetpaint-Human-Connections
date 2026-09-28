@@ -21,7 +21,6 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Employee, Department, EmploymentStatus } from "@/lib/types"
-import { DepartmentsManager } from "./DepartmentsManager"
 
 const STATUS_META: Record<
   EmploymentStatus,
@@ -320,7 +319,6 @@ export function EmployeeListClient({ employees, archivedEmployees, departments, 
   const [viewMode, setViewMode] = useState<"grid" | "list">("list")
   const [showArchived, setShowArchived] = useState(false)
   const [showPhotoUpload, setShowPhotoUpload] = useState(false)
-  const [showDepts, setShowDepts] = useState(false)
 
   const pool = showArchived ? archivedEmployees : employees
 
@@ -469,12 +467,12 @@ export function EmployeeListClient({ employees, archivedEmployees, departments, 
         )}
 
         {isHR && (
-          <button
-            onClick={() => setShowDepts(true)}
+          <Link
+            href="/settings?tab=departments"
             className="ml-auto h-9 rounded-lg border border-border bg-card px-3 text-sm text-foreground hover:bg-muted transition-colors flex items-center gap-1.5"
           >
             <Building2 size={15} /> Manage departments
-          </button>
+          </Link>
         )}
 
         {isHR && (
@@ -612,7 +610,6 @@ export function EmployeeListClient({ employees, archivedEmployees, departments, 
         />
       )}
 
-      <DepartmentsManager open={showDepts} onClose={() => setShowDepts(false)} />
     </>
   )
 }

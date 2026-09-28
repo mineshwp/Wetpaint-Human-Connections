@@ -2,6 +2,8 @@ import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { getUserRole } from "@/lib/auth"
 import { blockWhileImpersonating } from "@/lib/impersonation"
+import { createAdminClient } from "@/lib/supabase/admin"
+import { demoteDepartmentManagers } from "@/lib/departments"
 
 // Update a department's name and/or colour (HR only).
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -72,6 +74,11 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   }
   const employeeCount = count ?? 0
 
+  // The department's managers (looked up before anyone moves).
+  const { data: mgrs } = await createAdminClient()
+    .from("employees").select("id").eq("department_id", id).eq("access_level", "manager_department")
+  const managerIds = (mgrs ?? []).map((m) => m.id as string)
+
   if (employeeCount > 0) {
     if (reassignTo) {
       if (reassignTo === id) {
@@ -96,6 +103,14 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
       )
     }
     // force with no reassignTo: FK ON DELETE SET NULL unassigns them.
+  }
+
+  // Its managers stop being department managers (they'd otherwise manage the
+  // department their staff were moved to, or nobody).
+  const { error: demoteErr } = await demoteDepartmentManagers(managerIds)
+  if (demoteErr) {
+    console.error("[DELETE /api/departments/[id]] demote managers", demoteErr)
+    return NextResponse.json({ error: "Failed to update the department's managers" }, { status: 500 })
   }
 
   const { error } = await supabase.from("departments").delete().eq("id", id)

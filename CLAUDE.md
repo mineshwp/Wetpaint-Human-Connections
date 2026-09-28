@@ -69,7 +69,7 @@ Roles are stored in Supabase (table: `user_roles` or a `roles` column on the use
 | Role | Access |
 |---|---|
 | `hr_admin` | Full access |
-| `manager` | Set per PERSON, not login: `employees.access_level` = `manager_reports` (direct reports) / `manager_line` (whole reporting line) / `manager_department` (whole department); `staff` = own data. Teams come from "Reports to" (`employees.manager_id`) / Department. HR edits both in Settings → Who can see what (works before a login exists). Sees team profiles (masked), published KPI reviews and monthly check-ins |
+| `manager` | Set per PERSON, not login: `employees.access_level` = `manager_reports` (direct reports) / `manager_line` (whole reporting line) / `manager_department` (whole department); `staff` = own data. Teams come from "Reports to" (`employees.manager_id`) / Department. HR edits both in Settings → Who can see what (works before a login exists). Sees team profiles (masked) and published KPI reviews |
 | `staff` | Own data only |
 
 Rules:
@@ -86,7 +86,7 @@ Rules:
 /employees                      → Employee list (HR/Admin + Manager)
 /employees/[id]                 → Employee detail view (HR/Admin + Manager)
 /employees/[id]/edit            → Edit employee (HR/Admin only)
-/kpi                            → Tabs: All Reviews (HR) · My KPI (own published reviews + quarter summary) · My Team (managers: published reviews of their team) · Reviews to Score (reviews you're invited to; shown only if any) · Monthly Check-ins (HR, managers)
+/kpi                            → Tabs: All Reviews (HR) · My KPI (own published reviews + quarter summary) · My Team (managers: published reviews of their team) · Reviews to Score (reviews you're invited to; shown only if any)
 /kpi/report                     → Quarterly HR report (HR only, printable)
 /employees/training             → Training tracker: expired / expiring / all (HR only)
 ```
@@ -199,12 +199,6 @@ kpi_scores
 kpi_settings
   key, value  (e.g. key="current_period", value="Q1 2026")
 
-kpi_monthly_checkins
-  id, employee_id, month (1st of month), author_id, status ("on_track" | "needs_support" | "concern"), comment
-  # One per staff member per month. Heads/managers write for their department
-  # (never themselves) during the month and until the 10th of the next; then HR
-  # only. Staff don't see their own. Reminder email on the 1st (daily cron).
-
 kpi_rating_scale
   score (1-10 PK), label, annual_increase, birthday_bonus
   # Global reference rubric (not per-period). % values stored as free text so
@@ -232,11 +226,10 @@ GET    /api/kpi/settings                           → fetch settings (e.g. curr
 GET    /api/kpi/rating-scale                        → rating guide rows (any authenticated user)
 PUT    /api/kpi/rating-scale                        → bulk-upsert rating guide rows (HR only)
 POST   /api/kpi/template/sections/[id]             → add item to section (HR only)
-GET    /api/kpi/checkins?month=YYYY-MM              → team list with that month's check-ins (HR, managers)
-GET    /api/kpi/checkins?employee_id=&period=Q3%202026 → one person's check-ins for a quarter
-PUT    /api/kpi/checkins                            → save a check-in (window + scope enforced)
 GET/PUT/POST/DELETE /api/kpi/reviews/[id]/action-points → draft+approved state / save or approve / AI regenerate / hide from staff (HR only)
 GET    /api/kpi/team                                → the manager's team for the My Team tab (label + members)
+GET    /api/settings/departments                  → departments with staff counts + managers, and staff for the picker (HR only)
+PUT    /api/departments/[id]/managers              → set a department's managers (full list; several allowed) (HR only)
 GET/PATCH /api/settings/access                    → who can see what: everyone's Reports to / access / login; bulk-set Reports to or access (HR only; no reporting loops)
 GET/PUT /api/settings/ai                           → AI settings, usage, recent runs (HR only; key never returned)
 POST/DELETE /api/settings/ai/key                   → save (validated with OpenAI) / remove the API key
@@ -404,11 +397,12 @@ Always return proper HTTP status codes: 400, 401, 403, 404, 500.
 | KPI publish lock (reviewers edit only while draft; HR-only after publish) | ✅ Done |
 | Staff portal logins (HR temp passwords, role, disable/restore; change password) | ✅ Built — deploy pending |
 | Database RLS hardening | ✅ Applied — final column grant (`20260926_06`) pending deploy |
-| Monthly manager check-ins (tab, quarter strip, action points input, reminder on the 1st) | ✅ Built — deploy pending |
+| Monthly manager check-ins | ❌ Removed 28 Sep 2026 (no longer used). UI, API and reminder email deleted; `kpi_monthly_checkins` table left in the DB untouched |
 | Training tracker + weekly HR expiry reminder (Mondays) | ✅ Built — deploy pending |
 | Quarterly HR report (`/kpi/report`) | ✅ Built — deploy pending |
 | Manager access levels: direct reports / whole reporting line / whole department (login card) + Settings "Who can see what" | ✅ Done |
-| Settings tabs (Administrators, Who can see what, AI) | ✅ Done |
+| Settings tabs (Administrators, Departments, Who can see what, AI) | ✅ Done |
+| Settings → Departments: add/edit/delete + pick managers (several per department). A department manager = person in that department with `access_level = manager_department`; removing one resets them to `manager_reports` (if anyone reports to them) or `staff`; deleting a department does the same for its managers | ✅ Done |
 | AI settings (encrypted key, model, prompt + try-it, spend cap, usage log) + HR approval/editing of action points | ✅ Done |
 | Access on the person (not the login) + editable "Who can see what" (filters, bulk Reports to / access, team view) | ✅ Done |
 | KPI page tabs split by purpose: My KPI / My Team / Reviews to Score | ✅ Done |

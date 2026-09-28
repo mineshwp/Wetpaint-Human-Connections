@@ -1,6 +1,6 @@
 import Link from "next/link"
 import { redirect } from "next/navigation"
-import { ShieldCheck, Sparkles, UserCog } from "lucide-react"
+import { Building2, ShieldCheck, Sparkles, UserCog } from "lucide-react"
 import { createClient } from "@/lib/supabase/server"
 import { getUserRole } from "@/lib/auth"
 import { listAdmins } from "@/lib/admins"
@@ -9,13 +9,16 @@ import { cn } from "@/lib/utils"
 import { AdminsPanel } from "./AdminsPanel"
 import { AccessOverview } from "./AccessOverview"
 import { AiSettingsPanel } from "./AiSettingsPanel"
+import { DepartmentsPanel } from "./DepartmentsPanel"
 import { loadAccessData } from "@/lib/access-overview"
+import { loadDepartmentsData } from "@/lib/departments"
 
 export const metadata = { title: "Settings — Human Connections" }
 
 // Settings sections, one tab each (?tab=<id>). Add new sections here.
 const TABS = [
   { id: "admins", label: "Administrators", icon: UserCog },
+  { id: "departments", label: "Departments", icon: Building2 },
   { id: "access", label: "Who can see what", icon: ShieldCheck },
   { id: "ai", label: "AI (OpenAI)", icon: Sparkles },
 ] as const
@@ -58,6 +61,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       </nav>
 
       {tab === "admins" && <AdminsPanel initialAdmins={await listAdmins()} currentUserId={user.id} />}
+      {tab === "departments" && <DepartmentsPanel initial={await loadDepartmentsData()} />}
       {tab === "access" && <AccessOverview initial={await loadAccessData()} />}
       {tab === "ai" && <AiSettingsPanel />}
     </div>

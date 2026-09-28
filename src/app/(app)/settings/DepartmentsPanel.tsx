@@ -1,16 +1,9 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
-import { useRouter } from "next/navigation"
-import { X, Plus, Pencil, Trash2, Check, Loader2, Building2 } from "lucide-react"
+import { useState } from "react"
+import { X, Plus, Pencil, Trash2, Check, Loader2, Building2, UserCog } from "lucide-react"
 import { cn } from "@/lib/utils"
-
-interface Dept {
-  id: string
-  name: string
-  colour: string
-  employee_count: number
-}
+import type { DepartmentsData, DeptPerson, DeptRow as Dept } from "@/lib/departments"
 
 const PRESET_COLORS = [
   "#6366f1", "#3B82F6", "#0EA5E9", "#14B8A6", "#10B981", "#84CC16",
@@ -46,11 +39,73 @@ function ColorPicker({ value, onChange }: { value: string; onChange: (c: string)
   )
 }
 
-function DeptRow({ dept, others, onSave, onDelete }: {
+// A department's managers: chips to remove, a picker to add. Picking someone
+// from another department moves them into this one.
+function Managers({ dept, people, deptName, onSetManagers }: {
+  dept: Dept
+  people: DeptPerson[]
+  deptName: (id: string | null) => string
+  onSetManagers: (id: string, employeeIds: string[]) => Promise<string | null>
+}) {
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+  const current = dept.managers.map((m) => m.id)
+  const candidates = people.filter((p) => !current.includes(p.id))
+  const inDept = candidates.filter((p) => p.departmentId === dept.id)
+  const elsewhere = candidates.filter((p) => p.departmentId !== dept.id)
+
+  async function set(ids: string[]) {
+    setBusy(true); setErr(null)
+    const e = await onSetManagers(dept.id, ids)
+    setBusy(false)
+    if (e) setErr(e)
+  }
+
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-1.5">
+      <span className="inline-flex items-center gap-1 text-xs text-muted-foreground mr-1">
+        <UserCog size={12} /> {dept.managers.length > 1 ? "Managers" : "Manager"}:
+      </span>
+      {dept.managers.length === 0 && <span className="text-xs text-muted-foreground italic">None</span>}
+      {dept.managers.map((m) => (
+        <span key={m.id} className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/5 pl-2.5 pr-1 py-0.5 text-xs font-medium">
+          {m.name}
+          <button type="button" disabled={busy} onClick={() => set(current.filter((x) => x !== m.id))}
+            aria-label={`Remove ${m.name} as manager`}
+            className="h-4 w-4 rounded-full flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 disabled:opacity-50">
+            <X size={10} />
+          </button>
+        </span>
+      ))}
+      <select value="" disabled={busy} aria-label={`Add a manager to ${dept.name}`}
+        onChange={(e) => { if (e.target.value) set([...current, e.target.value]) }}
+        className="h-6 rounded-full border border-dashed border-border bg-card px-2 text-xs text-muted-foreground hover:text-foreground focus:outline-none focus:ring-1 focus:ring-primary">
+        <option value="">+ Add manager</option>
+        {inDept.length > 0 && (
+          <optgroup label={`In ${dept.name}`}>
+            {inDept.map((p) => <option key={p.id} value={p.id}>{p.name}{p.jobTitle ? ` — ${p.jobTitle}` : ""}</option>)}
+          </optgroup>
+        )}
+        {elsewhere.length > 0 && (
+          <optgroup label={`Other people (moves them to ${dept.name})`}>
+            {elsewhere.map((p) => <option key={p.id} value={p.id}>{p.name} ({deptName(p.departmentId)})</option>)}
+          </optgroup>
+        )}
+      </select>
+      {busy && <Loader2 size={12} className="animate-spin text-muted-foreground" />}
+      {err && <p className="basis-full text-xs text-destructive">{err}</p>}
+    </div>
+  )
+}
+
+function DeptRow({ dept, others, people, deptName, onSave, onDelete, onSetManagers }: {
   dept: Dept
   others: Dept[]
+  people: DeptPerson[]
+  deptName: (id: string | null) => string
   onSave: (id: string, data: { name: string; colour: string }) => Promise<string | null>
   onDelete: (id: string, opts: { reassignTo?: string; force?: boolean }) => Promise<string | null>
+  onSetManagers: (id: string, employeeIds: string[]) => Promise<string | null>
 }) {
   const [editing, setEditing] = useState(false)
   const [name, setName] = useState(dept.name)
@@ -71,7 +126,7 @@ function DeptRow({ dept, others, onSave, onDelete }: {
 
   async function del() {
     setBusy(true); setErr(null)
-    const e = await onDelete(dept.id, dept.employee_count > 0
+    const e = await onDelete(dept.id, dept.employeeCount > 0
       ? (reassignTo ? { reassignTo } : { force: true })
       : {})
     setBusy(false)
@@ -96,7 +151,7 @@ function DeptRow({ dept, others, onSave, onDelete }: {
           </>
         )}
         <span className="text-xs text-muted-foreground shrink-0">
-          {dept.employee_count} staff
+          {dept.employeeCount} staff
         </span>
         {!editing && !confirming && (
           <div className="flex items-center gap-1 shrink-0">
@@ -111,6 +166,10 @@ function DeptRow({ dept, others, onSave, onDelete }: {
           </div>
         )}
       </div>
+
+      {!editing && !confirming && (
+        <Managers dept={dept} people={people} deptName={deptName} onSetManagers={onSetManagers} />
+      )}
 
       {editing && (
         <div className="mt-2.5 space-y-2.5">
@@ -132,11 +191,14 @@ function DeptRow({ dept, others, onSave, onDelete }: {
         <div className="mt-2.5 space-y-2.5 rounded-md border border-destructive/30 bg-destructive/5 p-2.5">
           <p className="text-xs text-foreground">
             Delete <span className="font-semibold">{dept.name}</span>?
-            {dept.employee_count > 0 && (
-              <> It has <span className="font-semibold">{dept.employee_count} staff</span>. Choose where to move them:</>
+            {dept.managers.length > 0 && (
+              <> {dept.managers.map((m) => m.name).join(" and ")} will no longer be department {dept.managers.length === 1 ? "manager" : "managers"}.</>
+            )}
+            {dept.employeeCount > 0 && (
+              <> It has <span className="font-semibold">{dept.employeeCount} staff</span>. Choose where to move them:</>
             )}
           </p>
-          {dept.employee_count > 0 && (
+          {dept.employeeCount > 0 && (
             <select
               value={reassignTo}
               onChange={(e) => setReassignTo(e.target.value)}
@@ -166,34 +228,27 @@ function DeptRow({ dept, others, onSave, onDelete }: {
   )
 }
 
-export function DepartmentsManager({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const router = useRouter()
-  const [depts, setDepts] = useState<Dept[]>([])
-  const [loading, setLoading] = useState(false)
-  const [loadErr, setLoadErr] = useState<string | null>(null)
+// Settings → Departments (HR only): add, rename, recolour and delete
+// departments, and choose each one's managers (a department can have several).
+export function DepartmentsPanel({ initial }: { initial: DepartmentsData }) {
+  const [data, setData] = useState(initial)
+  const depts = data.departments
 
   const [newName, setNewName] = useState("")
   const [newColour, setNewColour] = useState(PRESET_COLORS[0])
   const [adding, setAdding] = useState(false)
   const [addErr, setAddErr] = useState<string | null>(null)
 
-  const refresh = useCallback(async () => {
-    setLoading(true); setLoadErr(null)
-    const res = await fetch("/api/departments?counts=1")
-    const data = await res.json().catch(() => null)
-    setLoading(false)
-    if (!res.ok) { setLoadErr(data?.error ?? "Failed to load departments"); return }
-    setDepts((data?.departments ?? []) as Dept[])
-    router.refresh() // keep the underlying page's dept filters in sync
-  }, [router])
+  const names = new Map(depts.map((d) => [d.id, d.name]))
+  const deptName = (id: string | null) => (id && names.get(id)) || "no department"
 
-  useEffect(() => { if (open) refresh() }, [open, refresh])
-
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) { if (e.key === "Escape") onClose() }
-    if (open) document.addEventListener("keydown", onKey)
-    return () => document.removeEventListener("keydown", onKey)
-  }, [open, onClose])
+  async function refresh(): Promise<string | null> {
+    const res = await fetch("/api/settings/departments")
+    const body = await res.json().catch(() => null)
+    if (!res.ok) return body?.error ?? "Failed to load departments"
+    setData(body as DepartmentsData)
+    return null
+  }
 
   async function add() {
     if (!newName.trim()) { setAddErr("Name is required"); return }
@@ -202,21 +257,20 @@ export function DepartmentsManager({ open, onClose }: { open: boolean; onClose: 
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name: newName.trim(), colour: newColour }),
     })
-    const data = await res.json().catch(() => null)
-    setAdding(false)
-    if (!res.ok) { setAddErr(data?.error ?? "Failed to add"); return }
+    const body = await res.json().catch(() => null)
+    if (!res.ok) { setAdding(false); setAddErr(body?.error ?? "Failed to add"); return }
     setNewName(""); setNewColour(PRESET_COLORS[0])
-    await refresh()
+    setAddErr(await refresh())
+    setAdding(false)
   }
 
   async function onSave(id: string, body: { name: string; colour: string }): Promise<string | null> {
     const res = await fetch(`/api/departments/${id}`, {
       method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
     })
-    const data = await res.json().catch(() => null)
-    if (!res.ok) return data?.error ?? "Failed to save"
-    await refresh()
-    return null
+    const out = await res.json().catch(() => null)
+    if (!res.ok) return out?.error ?? "Failed to save"
+    return refresh()
   }
 
   async function onDelete(id: string, opts: { reassignTo?: string; force?: boolean }): Promise<string | null> {
@@ -224,70 +278,73 @@ export function DepartmentsManager({ open, onClose }: { open: boolean; onClose: 
     if (opts.reassignTo) qs.set("reassignTo", opts.reassignTo)
     if (opts.force) qs.set("force", "true")
     const res = await fetch(`/api/departments/${id}${qs.toString() ? `?${qs}` : ""}`, { method: "DELETE" })
-    const data = await res.json().catch(() => null)
-    if (!res.ok) return data?.error ?? "Failed to delete"
-    await refresh()
+    const out = await res.json().catch(() => null)
+    if (!res.ok) return out?.error ?? "Failed to delete"
+    return refresh()
+  }
+
+  async function onSetManagers(id: string, employeeIds: string[]): Promise<string | null> {
+    const res = await fetch(`/api/departments/${id}/managers`, {
+      method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ employee_ids: employeeIds }),
+    })
+    const out = await res.json().catch(() => null)
+    if (!res.ok) return out?.error ?? "Failed to save managers"
+    setData(out as DepartmentsData)
     return null
   }
 
-  if (!open) return null
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
-      <div className="w-full max-w-lg rounded-2xl bg-card border border-border shadow-xl flex flex-col max-h-[85vh]" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-          <div className="flex items-center gap-2">
-            <Building2 size={18} className="text-primary" />
-            <h2 className="font-bold text-lg">Manage departments</h2>
-          </div>
-          <button type="button" onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
-            <X size={18} />
+    <section className="rounded-2xl border border-border bg-card">
+      <div className="px-5 py-4 border-b border-border space-y-1">
+        <div className="flex items-center gap-2">
+          <Building2 size={18} className="text-primary" />
+          <h2 className="font-bold text-lg">Departments</h2>
+        </div>
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          Add, rename or delete departments and choose who manages each one — a department can have more than one manager.
+          A department manager sees everyone in their department (their access becomes
+          &ldquo;Manager — whole department&rdquo; in <span className="font-medium">Who can see what</span>).
+          Taking someone off goes back to &ldquo;direct reports&rdquo; if people report to them, otherwise Staff.
+        </p>
+      </div>
+
+      <div className="px-5 py-4 space-y-4">
+        <div className="rounded-xl border border-primary/30 bg-primary/5 p-3 space-y-2.5 max-w-lg">
+          <p className="text-sm font-semibold">Add a department</p>
+          <input
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            placeholder="Department name"
+            onKeyDown={(e) => { if (e.key === "Enter") add() }}
+            className="w-full rounded-md border border-border bg-card px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+          />
+          <ColorPicker value={newColour} onChange={setNewColour} />
+          {addErr && <p className="text-xs text-destructive">{addErr}</p>}
+          <button type="button" onClick={add} disabled={adding || !newName.trim()}
+            className="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
+            {adding ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />} Add department
           </button>
         </div>
 
-        <div className="px-5 py-4 overflow-y-auto space-y-4">
-          {/* Add new */}
-          <div className="rounded-xl border border-primary/30 bg-primary/5 p-3 space-y-2.5">
-            <p className="text-sm font-semibold">Add a department</p>
-            <input
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              placeholder="Department name"
-              onKeyDown={(e) => { if (e.key === "Enter") add() }}
-              className="w-full rounded-md border border-border bg-card px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
-            />
-            <ColorPicker value={newColour} onChange={setNewColour} />
-            {addErr && <p className="text-xs text-destructive">{addErr}</p>}
-            <button type="button" onClick={add} disabled={adding || !newName.trim()}
-              className="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
-              {adding ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />} Add department
-            </button>
+        {depts.length === 0 ? (
+          <p className="text-sm text-muted-foreground italic text-center py-4">No departments yet.</p>
+        ) : (
+          <div className="space-y-2">
+            {depts.map((d) => (
+              <DeptRow
+                key={d.id}
+                dept={d}
+                others={depts.filter((o) => o.id !== d.id)}
+                people={data.people}
+                deptName={deptName}
+                onSave={onSave}
+                onDelete={onDelete}
+                onSetManagers={onSetManagers}
+              />
+            ))}
           </div>
-
-          {/* List */}
-          {loading ? (
-            <div className="flex items-center justify-center py-8 text-muted-foreground">
-              <Loader2 size={18} className="animate-spin" />
-            </div>
-          ) : loadErr ? (
-            <p className="text-sm text-destructive">{loadErr}</p>
-          ) : depts.length === 0 ? (
-            <p className="text-sm text-muted-foreground italic text-center py-4">No departments yet.</p>
-          ) : (
-            <div className="space-y-2">
-              {depts.map((d) => (
-                <DeptRow
-                  key={d.id}
-                  dept={d}
-                  others={depts.filter((o) => o.id !== d.id)}
-                  onSave={onSave}
-                  onDelete={onDelete}
-                />
-              ))}
-            </div>
-          )}
-        </div>
+        )}
       </div>
-    </div>
+    </section>
   )
 }
