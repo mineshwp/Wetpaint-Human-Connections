@@ -17,10 +17,10 @@ export const EMPLOYEE_FULL_SELECT = `
 /**
  * How much of a record the viewer gets:
  *  - "hr":   everything
- *  - "team": a manager / department head viewing someone in their scope —
+ *  - "team": a manager viewing someone in their scope —
  *            adds home address; never ID, DOB, banking, salary, VAT, race,
  *            disability or citizenship
- *  - "self": anyone else (incl. managers/heads on their own record) — the
+ *  - "self": anyone else (incl. managers on their own record) — the
  *            standard staff view
  */
 export type EmployeeFieldAccess = "hr" | "team" | "self"
@@ -30,7 +30,7 @@ export function employeeFieldAccess(
   isOwnProfile: boolean
 ): EmployeeFieldAccess {
   if (role === "hr") return "hr"
-  if (!isOwnProfile && (role === "manager" || role === "dept_head")) return "team"
+  if (!isOwnProfile && role === "manager") return "team"
   return "self"
 }
 

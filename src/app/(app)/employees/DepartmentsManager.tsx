@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { useRouter } from "next/navigation"
-import { X, Plus, Pencil, Trash2, Check, Loader2, Building2, Crown } from "lucide-react"
+import { X, Plus, Pencil, Trash2, Check, Loader2, Building2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 interface Dept {
@@ -10,10 +10,7 @@ interface Dept {
   name: string
   colour: string
   employee_count: number
-  heads: { id: string; name: string }[]
 }
-
-interface EmpOption { id: string; name: string; departmentId: string | null }
 
 const PRESET_COLORS = [
   "#6366f1", "#3B82F6", "#0EA5E9", "#14B8A6", "#10B981", "#84CC16",
@@ -49,13 +46,11 @@ function ColorPicker({ value, onChange }: { value: string; onChange: (c: string)
   )
 }
 
-function DeptRow({ dept, others, employees, onSave, onDelete, onHead }: {
+function DeptRow({ dept, others, onSave, onDelete }: {
   dept: Dept
   others: Dept[]
-  employees: EmpOption[]
   onSave: (id: string, data: { name: string; colour: string }) => Promise<string | null>
   onDelete: (id: string, opts: { reassignTo?: string; force?: boolean }) => Promise<string | null>
-  onHead: (id: string, employeeId: string, action: "add" | "remove") => Promise<string | null>
 }) {
   const [editing, setEditing] = useState(false)
   const [name, setName] = useState(dept.name)
@@ -64,15 +59,6 @@ function DeptRow({ dept, others, employees, onSave, onDelete, onHead }: {
   const [confirming, setConfirming] = useState(false)
   const [reassignTo, setReassignTo] = useState("") // "" = leave unassigned
   const [err, setErr] = useState<string | null>(null)
-  const [headBusy, setHeadBusy] = useState(false)
-
-  async function head(employeeId: string, action: "add" | "remove") {
-    setHeadBusy(true); setErr(null)
-    const e = await onHead(dept.id, employeeId, action)
-    setHeadBusy(false)
-    if (e) setErr(e)
-  }
-  const headIds = new Set(dept.heads.map((h) => h.id))
 
   async function save() {
     if (!name.trim()) { setErr("Name is required"); return }
@@ -124,35 +110,6 @@ function DeptRow({ dept, others, employees, onSave, onDelete, onHead }: {
             </button>
           </div>
         )}
-      </div>
-
-      {/* Department heads — see this department's staff and published KPIs */}
-      <div className="mt-2 flex items-center gap-1.5 flex-wrap">
-        <Crown size={11} className="text-muted-foreground shrink-0" />
-        {dept.heads.length === 0 && <span className="text-[11px] text-muted-foreground italic">No head</span>}
-        {dept.heads.map((h) => (
-          <span key={h.id} className="inline-flex items-center gap-1 rounded-full border border-border bg-muted/40 pl-2 pr-1 py-0.5 text-[11px]">
-            {h.name}
-            <button type="button" onClick={() => head(h.id, "remove")} disabled={headBusy} aria-label={`Remove ${h.name} as head`}
-              className="h-4 w-4 rounded-full flex items-center justify-center text-muted-foreground hover:text-destructive disabled:opacity-50">
-              <X size={10} />
-            </button>
-          </span>
-        ))}
-        <select
-          value=""
-          disabled={headBusy}
-          onChange={(e) => { if (e.target.value) head(e.target.value, "add") }}
-          aria-label={`Add head of ${dept.name}`}
-          className="rounded-md border border-border bg-card px-1.5 py-0.5 text-[11px] text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary max-w-[150px]"
-        >
-          <option value="">+ Add head</option>
-          {/* A head must work in the department they run */}
-          {employees.filter((emp) => emp.departmentId === dept.id && !headIds.has(emp.id)).map((emp) => (
-            <option key={emp.id} value={emp.id}>{emp.name}</option>
-          ))}
-        </select>
-        {headBusy && <Loader2 size={11} className="animate-spin text-muted-foreground" />}
       </div>
 
       {editing && (
@@ -212,7 +169,6 @@ function DeptRow({ dept, others, employees, onSave, onDelete, onHead }: {
 export function DepartmentsManager({ open, onClose }: { open: boolean; onClose: () => void }) {
   const router = useRouter()
   const [depts, setDepts] = useState<Dept[]>([])
-  const [employees, setEmployees] = useState<EmpOption[]>([])
   const [loading, setLoading] = useState(false)
   const [loadErr, setLoadErr] = useState<string | null>(null)
 
@@ -223,15 +179,11 @@ export function DepartmentsManager({ open, onClose }: { open: boolean; onClose: 
 
   const refresh = useCallback(async () => {
     setLoading(true); setLoadErr(null)
-    const [res, empRes] = await Promise.all([fetch("/api/departments?counts=1"), fetch("/api/employees")])
-    const [data, empData] = await Promise.all([res.json().catch(() => null), empRes.json().catch(() => null)])
+    const res = await fetch("/api/departments?counts=1")
+    const data = await res.json().catch(() => null)
     setLoading(false)
     if (!res.ok) { setLoadErr(data?.error ?? "Failed to load departments"); return }
     setDepts((data?.departments ?? []) as Dept[])
-    type E = { id: string; firstName: string; lastName: string; departmentId: string | null }
-    setEmployees(((empData?.employees ?? []) as E[])
-      .map((e) => ({ id: e.id, name: `${e.firstName} ${e.lastName}`.trim(), departmentId: e.departmentId }))
-      .sort((a, b) => a.name.localeCompare(b.name)))
     router.refresh() // keep the underlying page's dept filters in sync
   }, [router])
 
@@ -274,18 +226,6 @@ export function DepartmentsManager({ open, onClose }: { open: boolean; onClose: 
     const res = await fetch(`/api/departments/${id}${qs.toString() ? `?${qs}` : ""}`, { method: "DELETE" })
     const data = await res.json().catch(() => null)
     if (!res.ok) return data?.error ?? "Failed to delete"
-    await refresh()
-    return null
-  }
-
-  async function onHead(id: string, employeeId: string, action: "add" | "remove"): Promise<string | null> {
-    const res = await fetch(`/api/departments/${id}/heads`, {
-      method: action === "add" ? "POST" : "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ employee_id: employeeId }),
-    })
-    const data = await res.json().catch(() => null)
-    if (!res.ok) return data?.error ?? "Failed to update department head"
     await refresh()
     return null
   }
@@ -340,10 +280,8 @@ export function DepartmentsManager({ open, onClose }: { open: boolean; onClose: 
                   key={d.id}
                   dept={d}
                   others={depts.filter((o) => o.id !== d.id)}
-                  employees={employees}
                   onSave={onSave}
                   onDelete={onDelete}
-                  onHead={onHead}
                 />
               ))}
             </div>

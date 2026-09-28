@@ -69,8 +69,7 @@ Roles are stored in Supabase (table: `user_roles` or a `roles` column on the use
 | Role | Access |
 |---|---|
 | `hr_admin` | Full access |
-| `dept_head` | Staff of the department they head (must be a member of it) + their published KPIs (derived from `department_heads`, never stored) |
-| `manager` | HR picks per login: whole department (default) or direct reports only (`app_users.manager_scope`; "Reports to" = `employees.manager_id`) |
+| `manager` | HR picks per login (`app_users.manager_scope`): `reports` = direct reports, `line` = whole reporting line, `department` = whole department (default). Teams come from "Reports to" (`employees.manager_id`) / Department. Sees team profiles (masked), published KPI reviews and monthly check-ins |
 | `staff` | Own data only |
 
 Rules:
@@ -87,7 +86,7 @@ Rules:
 /employees                      → Employee list (HR/Admin + Manager)
 /employees/[id]                 → Employee detail view (HR/Admin + Manager)
 /employees/[id]/edit            → Edit employee (HR/Admin only)
-/kpi                            → KPI reviews list + inline detail accordion (HR/Admin + assigned invitees); Monthly Check-ins tab (HR, heads, managers)
+/kpi                            → KPI reviews list + inline detail accordion (HR/Admin + assigned invitees); Monthly Check-ins tab (HR, managers)
 /kpi/report                     → Quarterly HR report (HR only, printable)
 /employees/training             → Training tracker: expired / expiring / all (HR only)
 ```
@@ -125,22 +124,20 @@ Tabs:
 
 ### Access rules (enforce server-side)
 
-| Data | HR/Admin | Dept Head | Manager | Staff |
-|---|---|---|---|---|
-| View employee list | ✅ All | ✅ Headed dept(s) | ✅ Own dept only | ❌ |
-| View personal details | ✅ | ✅ + home address; no DOB/ID/race/disability/citizenship/VAT | ✅ same as Dept Head | Own only |
-| View banking/payroll/salary | ✅ | ❌ | ❌ | ❌ |
-| View documents | ✅ | Own only | Own only | Own only |
-| View HR notes | ✅ | ❌ | ❌ | ❌ |
-| Edit employee record | ✅ | Own profile only | Own profile only | Own profile only |
+| Data | HR/Admin | Manager | Staff |
+|---|---|---|---|
+| View employee list | ✅ All | ✅ Their team (per access level) | ❌ |
+| View personal details | ✅ | ✅ incl. home address; no DOB/ID/race/disability/citizenship/VAT | Own only |
+| View banking/payroll/salary | ✅ | ❌ | ❌ |
+| View documents | ✅ | Own only | Own only |
+| View HR notes | ✅ | ❌ | ❌ |
+| Edit employee record | ✅ | Own profile only | Own profile only |
 
-Managers and dept heads see their **own** record exactly as staff do. Field
-masking lives in `src/lib/employees.ts` (`mapEmployeeFull` + `employeeFieldAccess`).
-Dept heads are assigned per department in the Departments manager
-(`department_heads` table; `POST/DELETE /api/departments/[id]/heads`, HR only).
-A head must be a member of the department they run (enforced in the heads
-POST route); moving a head to another department or archiving them removes
-their head role automatically (employee PATCH).
+Managers see their **own** record exactly as staff do. Field masking lives in
+`src/lib/employees.ts` (`mapEmployeeFull` + `employeeFieldAccess`). Team scope:
+`getTeamScope` / `applyTeamScope` in `src/lib/auth.ts` (DB mirror:
+`hc_can_see_employee`). Department heads were removed on 28 Sep 2026 in favour
+of these access levels; Settings → "Who can see what" shows the result.
 
 ### API routes needed
 
@@ -194,9 +191,6 @@ kpi_monthly_checkins
   # (never themselves) during the month and until the 10th of the next; then HR
   # only. Staff don't see their own. Reminder email on the 1st (daily cron).
 
-department_heads
-  id, department_id, employee_id  (a head must be a member of that department)
-
 kpi_rating_scale
   score (1-10 PK), label, annual_increase, birthday_bonus
   # Global reference rubric (not per-period). % values stored as free text so
@@ -224,17 +218,16 @@ GET    /api/kpi/settings                           → fetch settings (e.g. curr
 GET    /api/kpi/rating-scale                        → rating guide rows (any authenticated user)
 PUT    /api/kpi/rating-scale                        → bulk-upsert rating guide rows (HR only)
 POST   /api/kpi/template/sections/[id]             → add item to section (HR only)
-GET    /api/kpi/checkins?month=YYYY-MM              → team list with that month's check-ins (HR, heads, managers)
+GET    /api/kpi/checkins?month=YYYY-MM              → team list with that month's check-ins (HR, managers)
 GET    /api/kpi/checkins?employee_id=&period=Q3%202026 → one person's check-ins for a quarter
 PUT    /api/kpi/checkins                            → save a check-in (window + scope enforced)
-POST/DELETE /api/departments/[id]/heads             → assign / remove a department head (HR only)
 ```
 
 ### KPI access rules
 
-| Action | HR/Admin | Invitee (accepted) | Dept Head | Staff |
+| Action | HR/Admin | Invitee (accepted) | Manager | Staff |
 |---|---|---|---|---|
-| View all reviews | ✅ | ❌ | Published reviews of headed dept(s) | ❌ |
+| View all reviews | ✅ | ❌ | Published reviews of their team | ❌ |
 | Create / delete review | ✅ | ❌ | ❌ | ❌ |
 | Add / remove invitees | ✅ | ❌ | ❌ | ❌ |
 | Score HR sections | ✅ | ❌ | ❌ | ❌ |
@@ -380,14 +373,14 @@ Always return proper HTTP status codes: 400, 401, 403, 404, 500.
 | Archive cascade (archiving an employee archives their KPI reviews; archived reviews hidden from lists) | ✅ Done |
 | HR "View as" any active/onboarding staff member (exact view, their role; view-only enforced on every write API) | ✅ Done |
 | Staff see only their own profile (land on it after login; sidebar "My Profile") | ✅ Done |
-| Department heads (dept-scoped staff + published KPI view; sensitive fields masked; no documents) | ✅ Done |
+| Department heads — replaced by manager access levels on 28 Sep 2026 | ✅ Done |
 | KPI publish lock (reviewers edit only while draft; HR-only after publish) | ✅ Done |
 | Staff portal logins (HR temp passwords, role, disable/restore; change password) | ✅ Built — deploy pending |
 | Database RLS hardening | ✅ Applied — final column grant (`20260926_06`) pending deploy |
 | Monthly manager check-ins (tab, quarter strip, action points input, reminder on the 1st) | ✅ Built — deploy pending |
 | Training tracker + weekly HR expiry reminder (Mondays) | ✅ Built — deploy pending |
 | Quarterly HR report (`/kpi/report`) | ✅ Built — deploy pending |
-| Manager access: whole department or direct reports (login card) + Settings "Who can see what" overview | ✅ Done |
+| Manager access levels: direct reports / whole reporting line / whole department (login card) + Settings "Who can see what" | ✅ Done |
 
 Update this table as features are completed.
 

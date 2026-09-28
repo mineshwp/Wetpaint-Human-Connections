@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
-import { getUserRole, getEmployeeIdForUser } from "@/lib/auth"
+import { getUserRole, getEmployeeIdForUser, getTeamScope, applyTeamScope } from "@/lib/auth"
 import { inheritForNewReview } from "@/lib/kpi/inherit"
 import { blockWhileImpersonating } from "@/lib/impersonation"
-import { getHeadedDepartmentIds } from "@/lib/roles"
 
 export async function GET() {
   const supabase = await createClient()
@@ -27,18 +26,13 @@ export async function GET() {
   if (role !== "hr") {
     if (!myEmployeeId) return NextResponse.json([])
 
-    // Department heads also see published reviews for staff in the departments
-    // they head (read-only). Drafts stay between HR and the reviewers.
+    // Managers also see published reviews for the people they can see
+    // (read-only). Drafts stay between HR and the reviewers.
     let deptEmployeeIds: string[] = []
-    if (role === "dept_head") {
-      const deptIds = await getHeadedDepartmentIds(supabase, myEmployeeId)
-      if (deptIds.length > 0) {
-        const { data: deptEmps } = await supabase
-          .from("employees")
-          .select("id")
-          .in("department_id", deptIds)
-        deptEmployeeIds = (deptEmps ?? []).map((e) => e.id as string)
-      }
+    const scope = await getTeamScope(supabase, role, myEmployeeId)
+    if (scope.kind !== "none") {
+      const { data: team } = await applyTeamScope(supabase.from("employees").select("id"), scope)
+      deptEmployeeIds = (team ?? []).map((e) => e.id as string).filter((id) => id !== myEmployeeId)
     }
 
     const [ownedResult, assignedResult, deptResult] = await Promise.all([

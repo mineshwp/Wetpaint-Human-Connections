@@ -1,4 +1,4 @@
-export type UserRole = "hr" | "dept_head" | "manager" | "staff" | "applicant"
+export type UserRole = "hr" | "manager" | "staff" | "applicant"
 
 export type EmploymentStatus =
   | "active"

@@ -3,7 +3,6 @@ import { NextResponse } from "next/server"
 import type { SupabaseClient } from "@supabase/supabase-js"
 import type { UserRole } from "./types"
 import { createAdminClient } from "./supabase/admin"
-import { deriveRole } from "./roles"
 
 // "View as" — HR/Admin previews the app exactly as another employee sees it.
 // Stored in httpOnly cookies set by /api/impersonate. The cookies are only
@@ -18,7 +17,7 @@ export const IMPERSONATE_COOKIES = {
   role: "impersonate_role",
 } as const
 
-const VIEWABLE_ROLES: UserRole[] = ["hr", "dept_head", "manager", "staff"]
+const VIEWABLE_ROLES: UserRole[] = ["hr", "manager", "staff"]
 
 export interface ImpersonationContext {
   employeeId: string
@@ -108,10 +107,8 @@ export async function startViewAs(
       .eq("employee_id", emp.id)
       .limit(1)
       .maybeSingle()
-    const storedRole = target?.active_role as UserRole | undefined
-    const baseRole = storedRole && VIEWABLE_ROLES.includes(storedRole) ? storedRole : "staff"
-    // A department head is derived from department_heads, not stored.
-    role = (await deriveRole(supabase, baseRole, emp.id)) ?? baseRole
+    const targetRole = target?.active_role as UserRole | undefined
+    if (targetRole && VIEWABLE_ROLES.includes(targetRole)) role = targetRole
   }
 
   const employeeName = `${emp.first_name} ${emp.last_name}`.trim()

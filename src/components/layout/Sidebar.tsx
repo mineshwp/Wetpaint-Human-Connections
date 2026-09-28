@@ -21,7 +21,7 @@ interface SidebarProps {
   /** Link to the user's own record, shown as "My Profile". */
   ownProfileHref?: string | null
   /**
-   * Managers / department heads keep "Employees" and get "My Profile" added
+   * Managers keep "Employees" and get "My Profile" added
    * after it; for staff "Employees" is replaced by "My Profile".
    */
   keepEmployeesLink?: boolean

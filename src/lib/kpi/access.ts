@@ -1,6 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
-import { getUserRole, getEmployeeIdForUser } from "@/lib/auth"
-import { getHeadedDepartmentIds } from "@/lib/roles"
+import { getUserRole, getEmployeeIdForUser, canAccessEmployee } from "@/lib/auth"
 
 /** Draft reviews are open for reviewers; once HR publishes, only HR can edit. */
 export function isPublished(status: string | null | undefined): boolean {
@@ -12,7 +11,7 @@ export const PUBLISHED_LOCK_MESSAGE =
 
 /**
  * Who can read a review: HR; any invitee; and — once it is published — the
- * staff member it's about and the head of their department. Mirrored by the
+ * staff member it's about and any manager who can see them. Mirrored by the
  * database function hc_can_view_review.
  */
 export async function canViewReview(
@@ -30,7 +29,7 @@ export async function canViewReview(
 
   const { data: review } = await supabase
     .from("kpi_reviews")
-    .select("employee_id, status, employee:employees!kpi_reviews_employee_id_fkey(department_id)")
+    .select("employee_id, status")
     .eq("id", reviewId)
     .single()
   if (!review) return false
@@ -44,11 +43,9 @@ export async function canViewReview(
     .maybeSingle()
   if (inv) return true
 
-  if (role === "dept_head" && isPublished(review.status)) {
-    const deptId = (review.employee as unknown as { department_id: string | null } | null)?.department_id
-    if (!deptId) return false
-    const headed = await getHeadedDepartmentIds(supabase, myEmployeeId)
-    return headed.includes(deptId)
+  // A manager sees published reviews of anyone in their team (read-only).
+  if (role === "manager" && isPublished(review.status) && review.employee_id !== myEmployeeId) {
+    return canAccessEmployee(supabase, userId, role, review.employee_id)
   }
   return false
 }

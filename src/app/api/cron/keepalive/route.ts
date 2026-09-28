@@ -44,7 +44,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ ok: false, error: error.message }, { status: 500 })
   }
 
-  // On the 1st of each month, remind heads and managers to do last month's
+  // On the 1st of each month, remind managers to do last month's
   // check-ins. Piggybacks on this daily job so no new public cron path is needed.
   let reminders: { sent: number; month: string } | undefined
   if (new Date().getUTCDate() === 1) {

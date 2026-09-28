@@ -10,16 +10,16 @@ import { blockWhileImpersonating } from "@/lib/impersonation"
 // send them. HR creates the login, gets a temporary password once, and hands it
 // over; the person changes it from the user menu after signing in.
 //
-// Stored roles here are "staff" or "manager". A Manager sees either their whole
-// department or only their direct reports (manager_scope). Department heads are
-// derived from department_heads, and HR admins are managed in Settings → Admins.
+// Stored roles here are "staff" or "manager". A Manager sees their whole
+// department, their direct reports, or their whole reporting line
+// (manager_scope). HR admins are managed in Settings → Admins.
 //
 // app_users RLS is own-row-only, so cross-user reads/writes use the service-role
 // client — HR authorization is enforced first.
 
 const LOGIN_ROLES = ["staff", "manager"] as const
 type LoginRole = (typeof LOGIN_ROLES)[number]
-const MANAGER_SCOPES = ["department", "reports"] as const
+const MANAGER_SCOPES = ["department", "reports", "line"] as const
 type ManagerScope = (typeof MANAGER_SCOPES)[number]
 // Effectively permanent; lifted when HR restores access.
 const BANNED = "876000h"
@@ -53,7 +53,7 @@ async function loadStatus(employeeId: string): Promise<LoginStatus> {
   return {
     state: disabled ? "disabled" : appUser.accepted_at ? "active" : "pending",
     role: appUser.active_role,
-    managerScope: appUser.manager_scope === "reports" ? "reports" : "department",
+    managerScope: MANAGER_SCOPES.includes(appUser.manager_scope) ? appUser.manager_scope : "department",
     userId: appUser.id,
   }
 }
@@ -66,7 +66,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 }
 
 // Create a login, or reset the password (and restore access) for an existing one.
-// Body: { role?: "staff" | "manager", manager_scope?: "department" | "reports" }
+// Body: { role?: "staff" | "manager", manager_scope?: "department" | "reports" | "line" }
 // — only applied when creating.
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const viewOnly = await blockWhileImpersonating()
@@ -146,7 +146,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   return NextResponse.json({ login: await loadStatus(id), tempPassword: temp }, { status: 201 })
 }
 
-// Change what the login can see. Body: { role: "staff" | "manager", manager_scope?: "department" | "reports" }
+// Change what the login can see. Body: { role: "staff" | "manager", manager_scope?: "department" | "reports" | "line" }
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const viewOnly = await blockWhileImpersonating()
   if (viewOnly) return viewOnly

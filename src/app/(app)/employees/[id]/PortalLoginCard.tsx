@@ -6,24 +6,28 @@ import { cn } from "@/lib/utils"
 
 type Login =
   | { state: "none" }
-  | { state: "pending" | "active" | "disabled"; role: string; managerScope: "department" | "reports"; userId: string }
+  | { state: "pending" | "active" | "disabled"; role: string; managerScope: "department" | "reports" | "line"; userId: string }
 
 // What HR picks on the card = stored role + manager scope.
-type Access = "staff" | "manager_department" | "manager_reports"
+type Access = "staff" | "manager_reports" | "manager_line" | "manager_department"
 const ACCESS_OPTIONS: { value: Access; label: string }[] = [
   { value: "staff", label: "Staff — own profile" },
   { value: "manager_reports", label: "Manager — their direct reports" },
+  { value: "manager_line", label: "Manager — their whole reporting line" },
   { value: "manager_department", label: "Manager — their whole department" },
 ]
+const SCOPE_OF: Record<Exclude<Access, "staff">, "reports" | "line" | "department"> = {
+  manager_reports: "reports",
+  manager_line: "line",
+  manager_department: "department",
+}
 function toBody(a: Access) {
-  return a === "staff"
-    ? { role: "staff" }
-    : { role: "manager", manager_scope: a === "manager_reports" ? "reports" : "department" }
+  return a === "staff" ? { role: "staff" } : { role: "manager", manager_scope: SCOPE_OF[a] }
 }
 function fromLogin(l: Login | null): Access | null {
   if (!l || l.state === "none") return null
   if (l.role !== "manager") return "staff"
-  return l.managerScope === "reports" ? "manager_reports" : "manager_department"
+  return l.managerScope === "reports" ? "manager_reports" : l.managerScope === "line" ? "manager_line" : "manager_department"
 }
 
 const STATE_LABEL: Record<string, { text: string; cls: string }> = {
@@ -36,16 +40,16 @@ const STATE_LABEL: Record<string, { text: string; cls: string }> = {
 const ACCESS_LABEL: Record<Access, string> = {
   staff: "Staff",
   manager_reports: "Manager · direct reports",
+  manager_line: "Manager · whole reporting line",
   manager_department: "Manager · whole department",
 }
 
 // HR-only: create, reset, re-role or disable an employee's portal login.
 // Logins use a temporary password HR hands over (no emailed links — Safe Links
-// consumes them). Department heads are set in Manage departments, not here.
-export function PortalLoginCard({ employeeId, employeeName, isHead }: {
+// consumes them). A manager's team comes from "Reports to" or their department.
+export function PortalLoginCard({ employeeId, employeeName }: {
   employeeId: string
   employeeName: string
-  isHead: boolean
 }) {
   const [login, setLogin] = useState<Login | null>(null)
   const [access, setAccess] = useState<Access>("staff")
@@ -94,7 +98,6 @@ export function PortalLoginCard({ employeeId, employeeName, isHead }: {
         {storedRole && (
           <span className="text-xs text-muted-foreground">
             {isAdmin ? "HR / Admin" : storedAccess ? ACCESS_LABEL[storedAccess] : storedRole}
-            {isHead && !isAdmin ? " · Department head (sees their whole department)" : ""}
           </span>
         )}
         {!login && !err && <Loader2 size={13} className="animate-spin text-muted-foreground" />}

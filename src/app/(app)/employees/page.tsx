@@ -72,7 +72,7 @@ export default async function EmployeesPage() {
   let activeQuery = supabase.from("employees").select(SELECT).eq("is_archived", false).order("last_name")
   let archivedQuery = supabase.from("employees").select(SELECT).eq("is_archived", true).order("last_name")
 
-  if (role === "manager" || role === "dept_head") {
+  if (role === "manager") {
     const employeeId = await getEmployeeIdForUser(supabase, user.id)
     // An empty scope matches nothing rather than falling back to everyone.
     const scope = await getTeamScope(supabase, role, employeeId)

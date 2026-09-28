@@ -1,8 +1,9 @@
 import { createAdminClient } from "@/lib/supabase/admin"
 import { sendCheckinReminderEmail } from "@/lib/email"
 import { checkinDeadlineLabel, monthLabel, monthKey, shiftMonth } from "@/lib/kpi/checkins"
+import { reportingLine } from "@/lib/reporting-line"
 
-// Emails every department head and manager who has an active portal login a
+// Emails every manager who has an active portal login a
 // reminder to complete last month's check-ins. Called on the 1st of the month
 // by the daily cron (see /api/cron/keepalive). Service client: this runs with
 // no signed-in user. Sends at most once per month (tracked in kpi_settings).
@@ -17,9 +18,8 @@ export async function sendMonthlyCheckinReminders(now = new Date()): Promise<{ s
   if (already?.value === month) return { sent: 0, month, skipped: "already_sent" }
   await admin.from("kpi_settings").upsert({ key: SENT_KEY, value: month }, { onConflict: "key" })
 
-  const [{ data: logins }, { data: heads }, { data: staff }] = await Promise.all([
-    admin.from("app_users").select("id, employee_id, active_role, manager_scope").in("active_role", ["staff", "manager"]),
-    admin.from("department_heads").select("department_id, employee_id"),
+  const [{ data: logins }, { data: staff }] = await Promise.all([
+    admin.from("app_users").select("id, employee_id, active_role, manager_scope").eq("active_role", "manager"),
     admin
       .from("employees")
       .select("id, first_name, email, department_id, manager_id")
@@ -38,14 +38,13 @@ export async function sendMonthlyCheckinReminders(now = new Date()): Promise<{ s
     const emp = login.employee_id ? byId.get(login.employee_id) : undefined
     if (!emp?.email) continue
 
-    // Same scope rules as getTeamScope: heads → departments they head;
-    // managers → their department, or only their direct reports.
-    const headed = (heads ?? []).filter((h) => h.employee_id === emp.id).map((h) => h.department_id as string)
+    // Same scope rules as getTeamScope in lib/auth.ts.
     let count = 0
-    if (headed.length > 0) count = teamSize(headed, emp.id)
-    else if (login.active_role === "manager" && login.manager_scope === "reports") {
+    if (login.manager_scope === "reports") {
       count = (staff ?? []).filter((e) => e.manager_id === emp.id).length
-    } else if (login.active_role === "manager" && emp.department_id) {
+    } else if (login.manager_scope === "line") {
+      count = reportingLine(staff ?? [], emp.id).length
+    } else if (emp.department_id) {
       count = teamSize([emp.department_id], emp.id)
     }
     if (count === 0) continue

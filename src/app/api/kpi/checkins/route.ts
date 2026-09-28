@@ -8,7 +8,7 @@ import {
 
 // Monthly manager check-ins.
 //  - HR: every active/onboarding employee, any month, any time.
-//  - Department heads / managers: their department's staff (never themselves),
+//  - Managers: the people they can see (never themselves),
 //    writable during the month and until the 10th of the next.
 //  - Staff: no access (HR decision pending — see the Q4 plan doc).
 
@@ -37,7 +37,7 @@ async function context() {
     getUserRole(supabase, user.id),
     getEmployeeIdForUser(supabase, user.id),
   ])
-  if (role !== "hr" && role !== "dept_head" && role !== "manager") {
+  if (role !== "hr" && role !== "manager") {
     return { error: NextResponse.json({ error: "Forbidden" }, { status: 403 }) }
   }
   return { supabase, userId: user.id, role, myEmployeeId }

@@ -394,7 +394,7 @@ function PersonalTab({
             <FieldRow label="Alternate Number" value={localEmp.alternatePhone} />
             <FieldRow label="Personal Email" value={localEmp.personalEmail} />
             <FieldRow label="Work Email" value={localEmp.workEmail ?? localEmp.email} />
-            {/* HR, or a manager / department head viewing their team (the API only sends it to those) */}
+            {/* HR, or a manager viewing their team (the API only sends it to those) */}
             {(isHR || !isOwnProfile) && <FieldRow label="Home Address" value={localEmp.homeAddress} />}
           </>
         )}
@@ -1406,8 +1406,6 @@ interface Props {
   setImpersonationAction?: (formData: FormData) => Promise<void>
   /** False for staff — their own profile is the only page they have. */
   showBackLink?: boolean
-  /** HR only: whether this employee heads a department (shown on the login card). */
-  isDepartmentHead?: boolean
 }
 
 export function EmployeeDetailClient({
@@ -1423,7 +1421,6 @@ export function EmployeeDetailClient({
   canImpersonate,
   setImpersonationAction,
   showBackLink = true,
-  isDepartmentHead = false,
 }: Props) {
   const [tab, setTab] = useState<Tab>("personal")
   const [nowMs] = useState(() => Date.now())
@@ -1641,7 +1638,6 @@ export function EmployeeDetailClient({
         <PortalLoginCard
           employeeId={emp.id}
           employeeName={`${emp.firstName} ${emp.lastName}`}
-          isHead={isDepartmentHead}
         />
       )}
 

@@ -107,7 +107,7 @@ function CheckinRow({ row, month, canEdit, onSaved }: {
   )
 }
 
-// Monthly check-ins for HR, department heads and managers.
+// Monthly check-ins for HR and managers.
 export function MonthlyCheckins({ isHR }: { isHR: boolean }) {
   const [month, setMonth] = useState(() => defaultCheckinMonth())
   const [staff, setStaff] = useState<StaffRow[]>([])
@@ -172,7 +172,7 @@ export function MonthlyCheckins({ isHR }: { isHR: boolean }) {
             ? <>Open until {checkinDeadlineLabel(month)}.</>
             : !isHR
               ? <><Lock size={12} /> Closed on {checkinDeadlineLabel(month)} — only HR can change these now.</>
-              : <>Heads and managers can edit until {checkinDeadlineLabel(month)}; HR can edit any time.</>}
+              : <>Managers can edit until {checkinDeadlineLabel(month)}; HR can edit any time.</>}
         </p>
       )}
 
@@ -217,7 +217,7 @@ export function MonthlyCheckins({ isHR }: { isHR: boolean }) {
         <p className="text-sm text-destructive">{loadErr}</p>
       ) : staff.length === 0 ? (
         <p className="text-sm text-muted-foreground italic text-center py-10">
-          {isHR ? "No active staff." : "No staff in your department yet."}
+          {isHR ? "No active staff." : "No one in your team yet."}
         </p>
       ) : visible.length === 0 ? (
         <p className="text-sm text-muted-foreground italic text-center py-10">Nobody matches this filter.</p>

@@ -19,7 +19,7 @@ export default async function KpiPage() {
     <KpiPageClient
       isHR={role === "hr"}
       currentEmployeeId={employeeId}
-      canCheckin={role === "hr" || role === "dept_head" || role === "manager"}
+      canCheckin={role === "hr" || role === "manager"}
     />
   )
 }

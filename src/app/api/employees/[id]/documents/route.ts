@@ -21,7 +21,7 @@ export async function GET(
 
   const isHR = role === "hr"
 
-  // Everyone except HR (incl. managers and department heads) sees only their own documents
+  // Everyone except HR (incl. managers) sees only their own documents
   if (!isHR) {
     const myEmployeeId = await getEmployeeIdForUser(supabase, user.id)
     if (myEmployeeId !== id) {

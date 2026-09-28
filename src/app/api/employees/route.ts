@@ -30,7 +30,7 @@ export async function GET(req: Request) {
     query = query.eq("is_archived", false) as typeof query
   }
 
-  if (role === "manager" || role === "dept_head") {
+  if (role === "manager") {
     const employeeId = await getEmployeeIdForUser(supabase, user.id)
     const scope = await getTeamScope(supabase, role, employeeId)
     if (scope.kind === "none") return NextResponse.json({ employees: [] })

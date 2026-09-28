@@ -139,17 +139,6 @@ export async function PATCH(
     return NextResponse.json({ error: "Failed to update employee" }, { status: 500 })
   }
 
-  // A head only runs their own department: moving them to another department
-  // (or out of one) or archiving them drops their head role.
-  if (isHR && ("department_id" in updates || updates.is_archived === true)) {
-    let drop = supabase.from("department_heads").delete().eq("employee_id", id)
-    if (updates.is_archived !== true && updates.department_id) {
-      drop = drop.neq("department_id", updates.department_id as string)
-    }
-    const { error: headError } = await drop
-    if (headError) console.error("[PATCH /api/employees/[id]] department head cleanup", headError)
-  }
-
   // Archiving someone also disables their portal login (HR restores it from
   // the profile's Portal login card if they return). Never touches admins.
   if (isHR && updates.is_archived === true) {

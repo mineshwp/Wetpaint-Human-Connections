@@ -43,7 +43,7 @@ export function monthLabel(key: string): string {
 }
 
 /**
- * The month heads should be working on: last month until the window closes on
+ * The month managers should be working on: last month until the window closes on
  * the 10th, then the current month.
  */
 export function defaultCheckinMonth(now = new Date()): string {
@@ -51,7 +51,7 @@ export function defaultCheckinMonth(now = new Date()): string {
   return now.getDate() <= CHECKIN_CLOSE_DAY ? shiftMonth(current, -1) : current
 }
 
-/** Whether a head/manager may still write this month's check-in. */
+/** Whether a manager may still write this month's check-in. */
 export function isCheckinWindowOpen(key: string, now = new Date()): boolean {
   const current = monthKey(now)
   if (key === current) return true

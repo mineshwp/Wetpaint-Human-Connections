@@ -1,14 +1,12 @@
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { readImpersonationCookies } from "@/lib/impersonation"
-import { deriveRole } from "@/lib/roles"
 import { AppShell } from "@/components/layout/AppShell"
 import { signOut } from "./actions"
 import type { UserRole } from "@/lib/types"
 
 const ROLE_LABELS: Record<UserRole, string> = {
   hr: "HR / Admin",
-  dept_head: "Department Head",
   manager: "Manager",
   staff: "Staff",
   applicant: "Applicant",
@@ -43,7 +41,7 @@ export default async function AppLayout({
       .is("accepted_at", null),
   ])
   const employeeId: string | null = me?.employee_id ?? null
-  const role = await deriveRole(supabase, (me?.active_role as UserRole | undefined) ?? null, employeeId)
+  const role = (me?.active_role as UserRole | undefined) ?? null
   const impersonating = role === "hr" ? viewCookies : null
   const effectiveRole = impersonating ? impersonating.role : role
   const effectiveEmployeeId = impersonating ? impersonating.employeeId : employeeId
@@ -82,7 +80,7 @@ export default async function AppLayout({
           ? `/employees/${effectiveEmployeeId}`
           : null
       }
-      sidebarKeepEmployeesLink={effectiveRole === "manager" || effectiveRole === "dept_head"}
+      sidebarKeepEmployeesLink={effectiveRole === "manager"}
       ownEmployeeId={employeeId}
       impersonating={impersonating}
       signOutAction={signOut}

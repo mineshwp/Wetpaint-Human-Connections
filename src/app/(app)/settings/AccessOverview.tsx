@@ -14,8 +14,8 @@ const LOGIN_BADGE: Record<AccessRow["login"], { text: string; cls: string }> = {
 }
 
 // HR's single view of who can see what. Changes are made where they live:
-// access level on the person's profile (Portal login), heads in Manage
-// departments, and team membership via Edit → Department / Reports to.
+// access level on the person's profile (Portal login card), and team shape via
+// Edit employee → Department / Reports to.
 export function AccessOverview({ rows }: { rows: AccessRow[] }) {
   const [q, setQ] = useState("")
   const visible = rows.filter((r) =>
@@ -30,10 +30,12 @@ export function AccessOverview({ rows }: { rows: AccessRow[] }) {
           <h2 className="font-bold text-lg">Who can see what</h2>
         </div>
         <p className="text-xs text-muted-foreground leading-relaxed">
-          Change a person&apos;s access on their profile (Portal login card). Department heads are set in
-          Employees → Manage departments and see their whole department. A manager on
-          &ldquo;direct reports&rdquo; sees the people whose <span className="font-medium">Reports to</span> is
-          them (Edit employee). Everyone can always see their own profile.
+          Change a person&apos;s access on their profile (Portal login card). A manager sees either their
+          direct reports, their whole reporting line (their reports, their reports&apos; reports, and so on),
+          or their whole department. Teams come from <span className="font-medium">Reports to</span> and
+          <span className="font-medium"> Department</span> on Edit employee. Managers see profiles (no ID, date
+          of birth, banking, salary or documents), published KPI reviews and monthly check-ins for their team.
+          Everyone can always see their own profile.
         </p>
       </div>
 

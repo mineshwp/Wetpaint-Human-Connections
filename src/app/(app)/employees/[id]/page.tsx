@@ -76,7 +76,7 @@ export default async function EmployeeDetailPage({
   const employee: EmployeeFull = mapEmployeeFull(row, employeeFieldAccess(role, isOwnProfile))
 
   // Fetch sub-resources in parallel
-  const [docsResult, notesResult, trainingResult, headResult] = await Promise.all([
+  const [docsResult, notesResult, trainingResult] = await Promise.all([
     canViewDocuments
       ? (() => {
           let q = supabase
@@ -104,10 +104,6 @@ export default async function EmployeeDetailPage({
       .select("*")
       .eq("employee_id", id)
       .order("date_completed", { ascending: false, nullsFirst: false }),
-
-    isHR
-      ? supabase.from("department_heads").select("department_id").eq("employee_id", id).limit(1)
-      : Promise.resolve({ data: [], error: null }),
   ])
 
   const documents: EmployeeDocument[] = (docsResult.data ?? []) as EmployeeDocument[]
@@ -128,7 +124,6 @@ export default async function EmployeeDetailPage({
       canImpersonate={canImpersonate}
       setImpersonationAction={setImpersonation}
       showBackLink={role !== "staff"}
-      isDepartmentHead={(headResult.data ?? []).length > 0}
     />
   )
 }
