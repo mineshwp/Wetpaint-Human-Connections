@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { getUserRole, getEmployeeIdForUser } from "@/lib/auth"
+import { requireHR } from "@/lib/hr-api"
+import { createAdminClient } from "@/lib/supabase/admin"
+import { DOCUMENTS_BUCKET, DOCUMENT_CATEGORIES } from "@/lib/documents"
+
+const DOC_SELECT = "id, category, name, file_url, file_size, mime_type, uploaded_by, created_at, hidden_from_employee"
 
 export async function GET(
   _req: Request,
@@ -31,9 +36,7 @@ export async function GET(
 
   let query = supabase
     .from("documents")
-    .select(
-      "id, category, name, file_url, file_size, mime_type, uploaded_by, created_at, hidden_from_employee"
-    )
+    .select(DOC_SELECT)
     .eq("employee_id", id)
     .order("created_at", { ascending: false })
 
@@ -49,4 +52,50 @@ export async function GET(
   }
 
   return NextResponse.json({ documents: data ?? [] })
+}
+
+// Step 2 of an upload (HR only): record a file already uploaded to the signed
+// URL from ./upload-url. Body: { path, name, category, size?, mime?, hidden_from_employee? }
+export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const ctx = await requireHR({ write: true })
+  if (ctx.error) return ctx.error
+  const { id } = await params
+
+  const body = await req.json().catch(() => null)
+  const path = typeof body?.path === "string" ? body.path : ""
+  const name = typeof body?.name === "string" ? body.name.trim().slice(0, 200) : ""
+  const category = typeof body?.category === "string" && body.category in DOCUMENT_CATEGORIES ? body.category : "other"
+  if (!name || !path.startsWith(`${id}/`) || path.includes("..")) {
+    return NextResponse.json({ error: "Invalid upload" }, { status: 400 })
+  }
+
+  // The file must really be there (and in this employee's folder).
+  const admin = createAdminClient()
+  const folder = path.slice(0, path.lastIndexOf("/"))
+  const file = path.slice(path.lastIndexOf("/") + 1)
+  const { data: found } = await admin.storage.from(DOCUMENTS_BUCKET).list(folder, { search: file, limit: 1 })
+  const obj = found?.find((f) => f.name === file)
+  if (!obj) return NextResponse.json({ error: "Upload not found — try again" }, { status: 400 })
+
+  const meta = (obj.metadata ?? {}) as { size?: number; mimetype?: string }
+  const { data, error } = await ctx.supabase
+    .from("documents")
+    .insert({
+      employee_id: id,
+      category,
+      name,
+      file_url: path,
+      file_size: meta.size ?? (typeof body?.size === "number" ? body.size : null),
+      mime_type: meta.mimetype ?? (typeof body?.mime === "string" ? body.mime : null),
+      uploaded_by: ctx.employeeId,
+      hidden_from_employee: body?.hidden_from_employee === true,
+    })
+    .select(DOC_SELECT)
+    .single()
+  if (error) {
+    console.error("[POST /api/employees/[id]/documents]", error)
+    await admin.storage.from(DOCUMENTS_BUCKET).remove([path])
+    return NextResponse.json({ error: "Failed to save document" }, { status: 500 })
+  }
+  return NextResponse.json({ document: data }, { status: 201 })
 }

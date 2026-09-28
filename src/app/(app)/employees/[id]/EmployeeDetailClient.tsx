@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useRef } from "react"
 import Link from "next/link"
 import { createBrowserClient } from "@supabase/ssr"
 import {
@@ -24,8 +24,10 @@ import {
   ExternalLink,
   Check,
   Loader2,
+  Upload,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { DOCUMENT_CATEGORIES, MAX_DOCUMENT_BYTES } from "@/lib/documents"
 import { PortalLoginCard } from "./PortalLoginCard"
 import type {
   EmployeeFull,
@@ -81,19 +83,7 @@ function formatBytes(bytes: number | null): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
-const CATEGORY_LABELS: Record<string, string> = {
-  contract: "Contract",
-  id: "ID Document",
-  payslip: "Payslip",
-  kpi: "KPI",
-  training: "Training",
-  offer_letter: "Offer Letter",
-  tax: "Tax / SARS",
-  qualification: "Qualification",
-  sick_note: "Sick Note",
-  onboarding_doc: "Onboarding",
-  other: "Other",
-}
+const CATEGORY_LABELS = DOCUMENT_CATEGORIES
 
 function escHtml(s: string | null | undefined): string {
   if (!s) return ""
@@ -1095,16 +1085,136 @@ function TrainingTab({
 
 // ─── Tab 4: Documents ─────────────────────────────────────────────────────────
 
+// HR: drop files (or pick them) to upload. Each file goes straight to the
+// private bucket via a one-time signed URL, then is recorded.
+function DocumentUploader({ employeeId, onUploaded }: {
+  employeeId: string
+  onUploaded: (doc: EmployeeDocument) => void
+}) {
+  const inputRef = useRef<HTMLInputElement>(null)
+  const [dragging, setDragging] = useState(false)
+  const [category, setCategory] = useState("other")
+  const [hidden, setHidden] = useState(false)
+  const [progress, setProgress] = useState<string | null>(null)
+  const [errors, setErrors] = useState<string[]>([])
+
+  async function uploadOne(file: File): Promise<string | null> {
+    if (file.size > MAX_DOCUMENT_BYTES) return `${file.name}: over 25 MB`
+    const start = await fetch(`/api/employees/${employeeId}/documents/upload-url`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: file.name, size: file.size }),
+    })
+    const s = await start.json().catch(() => null)
+    if (!start.ok) return `${file.name}: ${s?.error ?? "couldn't start upload"}`
+
+    const supabase = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
+    const { error: upErr } = await supabase.storage.from(s.bucket).uploadToSignedUrl(s.path, s.token, file, {
+      contentType: file.type || "application/octet-stream",
+    })
+    if (upErr) return `${file.name}: upload failed (${upErr.message})`
+
+    const save = await fetch(`/api/employees/${employeeId}/documents`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path: s.path, name: file.name, category, size: file.size, mime: file.type, hidden_from_employee: hidden }),
+    })
+    const d = await save.json().catch(() => null)
+    if (!save.ok) return `${file.name}: ${d?.error ?? "couldn't save"}`
+    onUploaded(d.document as EmployeeDocument)
+    return null
+  }
+
+  async function handleFiles(list: FileList | File[]) {
+    const files = Array.from(list)
+    if (files.length === 0 || progress) return
+    setErrors([])
+    const errs: string[] = []
+    for (let i = 0; i < files.length; i++) {
+      setProgress(files.length > 1 ? `Uploading ${i + 1} of ${files.length}…` : `Uploading ${files[0].name}…`)
+      const e = await uploadOne(files[i])
+      if (e) errs.push(e)
+    }
+    setProgress(null)
+    setErrors(errs)
+    if (inputRef.current) inputRef.current.value = ""
+  }
+
+  return (
+    <SectionCard>
+      <div
+        onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={(e) => { e.preventDefault(); setDragging(false); handleFiles(e.dataTransfer.files) }}
+        className={cn(
+          "rounded-xl border-2 border-dashed px-4 py-6 text-center transition-colors",
+          dragging ? "border-primary bg-primary/5" : "border-border"
+        )}
+      >
+        <Upload size={24} className="mx-auto mb-2 text-muted-foreground" />
+        <p className="text-sm text-foreground">
+          Drag and drop files here, or{" "}
+          <button type="button" onClick={() => inputRef.current?.click()} disabled={!!progress}
+            className="font-semibold text-primary hover:underline disabled:opacity-50">
+            choose files
+          </button>
+        </p>
+        <p className="text-xs text-muted-foreground mt-1">PDF, Word, Excel, images — up to 25 MB each</p>
+        <input ref={inputRef} type="file" multiple className="hidden" aria-label="Choose files to upload"
+          onChange={(e) => { if (e.target.files) handleFiles(e.target.files) }} />
+
+        <div className="mt-4 flex flex-wrap items-center justify-center gap-4 text-xs">
+          <label className="flex items-center gap-2">
+            <span className="text-muted-foreground">Category</span>
+            <select value={category} onChange={(e) => setCategory(e.target.value)}
+              className="rounded-md border border-border bg-card px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary">
+              {Object.entries(CATEGORY_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            </select>
+          </label>
+          <label className="flex items-center gap-1.5 cursor-pointer">
+            <input type="checkbox" checked={hidden} onChange={(e) => setHidden(e.target.checked)} />
+            <span className="text-muted-foreground">Hide from staff member</span>
+          </label>
+        </div>
+
+        {progress && (
+          <p className="mt-3 text-xs text-muted-foreground flex items-center justify-center gap-1.5">
+            <Loader2 size={12} className="animate-spin" /> {progress}
+          </p>
+        )}
+        {errors.length > 0 && (
+          <ul className="mt-3 text-xs text-destructive space-y-0.5">{errors.map((e) => <li key={e}>{e}</li>)}</ul>
+        )}
+      </div>
+    </SectionCard>
+  )
+}
+
 function DocumentsTab({
   initialDocs,
   isHR,
+  employeeId,
+  onCountChange,
 }: {
   initialDocs: EmployeeDocument[]
   isHR: boolean
+  employeeId: string
+  onCountChange: (n: number) => void
 }) {
   const [docs, setDocs] = useState(initialDocs)
   const [togglingId, setTogglingId] = useState<string | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => { onCountChange(docs.length) }, [docs.length, onCountChange])
+
+  async function deleteDoc(doc: EmployeeDocument) {
+    if (!window.confirm(`Delete “${doc.name}”? This can't be undone.`)) return
+    setDeletingId(doc.id)
+    setError(null)
+    const res = await fetch(`/api/documents/${doc.id}`, { method: "DELETE" })
+    setDeletingId(null)
+    if (res.ok) setDocs((prev) => prev.filter((d) => d.id !== doc.id))
+    else setError("Failed to delete document.")
+  }
 
   async function toggleVisibility(docId: string, current: boolean) {
     setTogglingId(docId)
@@ -1128,6 +1238,8 @@ function DocumentsTab({
 
   return (
     <div className="space-y-4">
+      {isHR && <DocumentUploader employeeId={employeeId} onUploaded={(d) => setDocs((prev) => [d, ...prev])} />}
+
       {error && (
         <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
           {error}
@@ -1195,8 +1307,9 @@ function DocumentsTab({
                       </td>
                     )}
                     <td className="px-4 py-3 text-right">
+                      <div className="flex items-center justify-end gap-3">
                       <a
-                        href={doc.file_url}
+                        href={`/api/documents/${doc.id}/download`}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="flex items-center gap-1 text-xs font-medium hover:underline"
@@ -1205,6 +1318,14 @@ function DocumentsTab({
                         <Download size={12} />
                         Download
                       </a>
+                      {isHR && (
+                        <button type="button" onClick={() => deleteDoc(doc)} disabled={deletingId === doc.id}
+                          aria-label={`Delete ${doc.name}`}
+                          className="text-muted-foreground hover:text-destructive disabled:opacity-50">
+                          {deletingId === doc.id ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
+                        </button>
+                      )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -1423,6 +1544,7 @@ export function EmployeeDetailClient({
   showBackLink = true,
 }: Props) {
   const [tab, setTab] = useState<Tab>("personal")
+  const [docCount, setDocCount] = useState(initialDocuments.length)
   const [nowMs] = useState(() => Date.now())
 
   const { pct: completeness, missing } = isHR
@@ -1651,7 +1773,7 @@ export function EmployeeDetailClient({
         />
         <MiniStat
           label="Documents"
-          value={String(initialDocuments.length)}
+          value={String(docCount)}
           icon={<FileText size={18} />}
           iconClass="text-orange-600 bg-orange-50"
         />
@@ -1682,6 +1804,8 @@ export function EmployeeDetailClient({
         <DocumentsTab
           initialDocs={initialDocuments}
           isHR={isHR}
+          employeeId={emp.id}
+          onCountChange={setDocCount}
         />
       )}
       {activeTab === "notes" && canViewNotes && (

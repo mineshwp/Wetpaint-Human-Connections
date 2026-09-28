@@ -151,6 +151,10 @@ GET    /api/employees/[id]/leave             → leave balances for employee
 GET    /api/employees/[id]/kpi-summary       → latest KPI score summary
 GET    /api/employees/[id]/documents         → documents (access-controlled)
 PATCH  /api/documents/[id]/visibility        → toggle hidden_from_employee (HR only)
+POST   /api/employees/[id]/documents/upload-url → one-time signed upload URL (HR only); browser uploads straight to the private `employee-documents` bucket
+POST   /api/employees/[id]/documents           → record an uploaded file (HR only; checks it exists in that employee's folder)
+DELETE /api/documents/[id]                     → delete document + file (HR only)
+GET    /api/documents/[id]/download            → access-checked redirect to a 60s signed URL (HR any; staff own non-hidden)
 GET    /api/employees/[id]/notes             → HR notes (HR only)
 POST   /api/employees/[id]/notes             → add HR note (HR only)
 GET/POST/DELETE /api/employees/[id]/login        → portal login status / create or reset (temp password) / disable (HR only). Access is NOT set here
@@ -401,6 +405,7 @@ Always return proper HTTP status codes: 400, 401, 403, 404, 500.
 | Training tracker + weekly HR expiry reminder (Mondays) | ✅ Built — deploy pending |
 | Quarterly HR report (`/kpi/report`) | ✅ Built — deploy pending |
 | Manager access levels: direct reports / whole reporting line / whole department (login card) + Settings "Who can see what" | ✅ Done |
+| Document upload on the employee profile (HR: drag & drop / choose files, category, hide from staff, delete; private bucket, 25 MB/file) | ✅ Done |
 | Settings tabs (Administrators, Departments, Who can see what, AI) | ✅ Done |
 | Settings → Departments: add/edit/delete + pick managers (several per department). A department manager = person in that department with `access_level = manager_department`; removing one resets them to `manager_reports` (if anyone reports to them) or `staff`; deleting a department does the same for its managers | ✅ Done |
 | AI settings (encrypted key, model, prompt + try-it, spend cap, usage log) + HR approval/editing of action points | ✅ Done |
