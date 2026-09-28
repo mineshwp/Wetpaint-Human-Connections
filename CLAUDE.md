@@ -172,9 +172,23 @@ kpi_template_items
   id, section_id, title, description, min_score, max_score, position, is_active
 
 kpi_reviews
-  id, employee_id, period, title, deadline, status ("draft" | "active" | "completed"), action_points, action_points_generated_at
-  # action_points: AI-generated on publish (status → active) via OpenAI, gated
-  # on OPENAI_API_KEY (+ optional OPENAI_MODEL, default gpt-4o-mini).
+  id, employee_id, period, title, deadline, status ("draft" | "active" | "completed"),
+  action_points, action_points_generated_at, action_points_approved_at, action_points_approved_by
+  # action_points = HR-APPROVED text only (what staff/managers see). On publish
+  # the AI writes a draft to kpi_action_point_drafts (HR-only); HR edits and
+  # approves it on the review. Never write AI output straight to action_points.
+
+kpi_action_point_drafts
+  review_id (PK), content, source ("ai" | "hr"), model, generated_at, updated_at, updated_by
+
+ai_settings  (single row id=1, HR only)
+  action_points_enabled, include_names (default false — no names sent to OpenAI),
+  model (default gpt-6-luna), reasoning_effort, max_output_tokens,
+  monthly_budget_usd (in-app spend cap), action_points_prompt (null = default in
+  src/lib/ai/prompts.ts), key_secret_id / key_last4 (key itself in Supabase Vault,
+  read only via service-role RPC hc_ai_get_key; OPENAI_API_KEY env is a fallback)
+
+ai_runs  (HR read-only log of every AI call: feature, model, tokens, cost_usd, status)
 
 kpi_review_invitees
   id, review_id, invitee_id, status ("pending" | "accepted" | "declined" | "completed")
@@ -221,6 +235,11 @@ POST   /api/kpi/template/sections/[id]             → add item to section (HR o
 GET    /api/kpi/checkins?month=YYYY-MM              → team list with that month's check-ins (HR, managers)
 GET    /api/kpi/checkins?employee_id=&period=Q3%202026 → one person's check-ins for a quarter
 PUT    /api/kpi/checkins                            → save a check-in (window + scope enforced)
+GET/PUT/POST/DELETE /api/kpi/reviews/[id]/action-points → draft+approved state / save or approve / AI regenerate / hide from staff (HR only)
+GET/PUT /api/settings/ai                           → AI settings, usage, recent runs (HR only; key never returned)
+POST/DELETE /api/settings/ai/key                   → save (validated with OpenAI) / remove the API key
+POST   /api/settings/ai/test                        → test key, list models
+POST   /api/settings/ai/preview                     → try the prompt on a review (dry run, logged, counts to cap)
 ```
 
 ### KPI access rules
@@ -316,6 +335,12 @@ Always return proper HTTP status codes: 400, 401, 403, 404, 500.
 - Auth helpers (getUserRole, etc.) → `src/lib/auth.ts`
 - No `data/` folder — no mock data, ever
 - Use `cn()` from `clsx` + `tailwind-merge` for conditional classes
+- **AI:** every OpenAI call goes through `generateText` in `src/lib/ai/openai.ts`
+  (Vault key, monthly spend cap, `ai_runs` logging, Responses API with
+  `store: false` and a hashed `safety_identifier`). Send the minimum personal
+  data (no names unless `include_names`; never ID, contact or banking). AI output
+  that staff will read must go through HR approval first. Default prompts live
+  in `src/lib/ai/prompts.ts`; prices for the cost estimate in `src/lib/ai/pricing.ts`.
 
 ---
 
@@ -381,6 +406,8 @@ Always return proper HTTP status codes: 400, 401, 403, 404, 500.
 | Training tracker + weekly HR expiry reminder (Mondays) | ✅ Built — deploy pending |
 | Quarterly HR report (`/kpi/report`) | ✅ Built — deploy pending |
 | Manager access levels: direct reports / whole reporting line / whole department (login card) + Settings "Who can see what" | ✅ Done |
+| Settings tabs (Administrators, Who can see what, AI) | ✅ Done |
+| AI settings (encrypted key, model, prompt + try-it, spend cap, usage log) + HR approval/editing of action points | ✅ Done — push pending |
 
 Update this table as features are completed.
 

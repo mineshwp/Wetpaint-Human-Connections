@@ -1,5 +1,8 @@
 import { createClient } from "@/lib/supabase/server"
 import { CHECKIN_STATUSES, monthLabel, monthStart, periodMonths } from "@/lib/kpi/checkins"
+import { generateText, loadAiSettings, type GenerateResult } from "@/lib/ai/openai"
+import { DEFAULT_ACTION_POINTS_PROMPT } from "@/lib/ai/prompts"
+import { createAdminClient } from "@/lib/supabase/admin"
 
 type DB = Awaited<ReturnType<typeof createClient>>
 
@@ -8,7 +11,8 @@ interface Section { title: string; type: string; kpi_template_items: Item[] }
 
 // Build a compact, readable breakdown of a review's KPIs, scores and comments
 // to feed the model.
-async function buildContext(supabase: DB, reviewId: string): Promise<{ employeeName: string; period: string; breakdown: string } | null> {
+// Names are left out unless HR turns "Include staff names" on (Settings → AI).
+async function buildContext(supabase: DB, reviewId: string, includeNames: boolean): Promise<{ employeeName: string; jobTitle: string | null; period: string; breakdown: string } | null> {
   const { data: review } = await supabase
     .from("kpi_reviews")
     .select("period, employee_id, employee:employees!kpi_reviews_employee_id_fkey(first_name, last_name, job_title)")
@@ -17,7 +21,7 @@ async function buildContext(supabase: DB, reviewId: string): Promise<{ employeeN
   if (!review) return null
 
   const emp = review.employee as unknown as { first_name: string; last_name: string; job_title: string | null } | null
-  const employeeName = emp ? `${emp.first_name} ${emp.last_name}` : "the staff member"
+  const employeeName = includeNames && emp ? `${emp.first_name} ${emp.last_name}` : "the staff member"
 
   const months = periodMonths(review.period)
   const [{ data: sections }, { data: scores }, { data: finals }, { data: checkins }] = await Promise.all([
@@ -77,56 +81,74 @@ async function buildContext(supabase: DB, reviewId: string): Promise<{ employeeN
     }
   }
 
-  return { employeeName, period: review.period, breakdown: lines.join("\n") }
+  return { employeeName, jobTitle: emp?.job_title ?? null, period: review.period, breakdown: lines.join("\n") }
 }
 
-// Generate action points for a review via OpenAI and store them. Dormant until
-// OPENAI_API_KEY is set — returns { generated: false } and does nothing then.
-// Best-effort: never throws.
-export async function generateActionPoints(supabase: DB, reviewId: string): Promise<{ generated: boolean; reason?: string }> {
+export type ActionPointsResult = GenerateResult | { ok: false; reason: "disabled" | "no_review" | "kept_hr_draft"; message: string }
+
+/**
+ * Ask OpenAI for a review's action points.
+ *  - dryRun: return the text only (Settings → AI "Try it on a review").
+ *  - otherwise: save it as an AI draft for HR to edit and approve. Staff never
+ *    see a draft; approval copies it to kpi_reviews.action_points.
+ * `onPublish` skips when the feature is off, or when HR has already approved
+ * or hand-edited this review's action points (so a re-publish never
+ * overwrites HR's work). Never throws.
+ */
+export async function generateActionPoints(
+  supabase: DB,
+  reviewId: string,
+  opts: { triggeredBy?: string | null; dryRun?: boolean; onPublish?: boolean; promptOverride?: string } = {}
+): Promise<ActionPointsResult> {
   try {
-    const apiKey = process.env.OPENAI_API_KEY
-    if (!apiKey) return { generated: false, reason: "no_api_key" }
+    const settings = await loadAiSettings()
+    if (opts.onPublish && !settings.actionPointsEnabled) {
+      return { ok: false, reason: "disabled", message: "Automatic action points are turned off in Settings → AI." }
+    }
 
-    const ctx = await buildContext(supabase, reviewId)
-    if (!ctx) return { generated: false, reason: "no_review" }
+    const admin = createAdminClient()
+    if (opts.onPublish) {
+      const [{ data: review }, { data: draft }] = await Promise.all([
+        admin.from("kpi_reviews").select("action_points").eq("id", reviewId).maybeSingle(),
+        admin.from("kpi_action_point_drafts").select("source").eq("review_id", reviewId).maybeSingle(),
+      ])
+      if (review?.action_points || draft?.source === "hr") {
+        return { ok: false, reason: "kept_hr_draft", message: "Kept HR's action points." }
+      }
+    }
 
-    const model = process.env.OPENAI_MODEL || "gpt-4o-mini"
-    const system = "You are an HR performance coach. Given a staff member's KPI scores and reviewer comments for a quarter, write concise, specific, actionable improvement points for the NEXT quarter. Focus on the lowest-scoring areas and any concerns raised in comments or monthly manager check-ins. Return 3–6 bullet points, each a short imperative sentence. Output plain text bullets starting with '- ', no preamble, no headings."
-    const userMsg = `Staff member: ${ctx.employeeName}\nReview period: ${ctx.period}\n\nKPI results and comments:\n${ctx.breakdown}\n\nWrite the action points this person should focus on to improve next quarter.`
+    const ctx = await buildContext(supabase, reviewId, settings.includeNames)
+    if (!ctx) return { ok: false, reason: "no_review", message: "Review not found." }
 
-    const res = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        model,
-        messages: [{ role: "system", content: system }, { role: "user", content: userMsg }],
-        temperature: 0.3,
-        max_tokens: 500,
-      }),
+    const who = settings.includeNames ? `Staff member: ${ctx.employeeName}` : "Staff member: (name withheld)"
+    const input = `${who}${ctx.jobTitle ? `\nRole: ${ctx.jobTitle}` : ""}\nReview period: ${ctx.period}\n\nKPI results, comments and check-ins:\n${ctx.breakdown}\n\nWrite the action points this person should focus on next quarter.`
+
+    const result = await generateText({
+      feature: opts.dryRun ? "action_points_preview" : "action_points",
+      instructions: (opts.promptOverride ?? settings.actionPointsPrompt ?? DEFAULT_ACTION_POINTS_PROMPT).trim(),
+      input,
+      reviewId,
+      triggeredBy: opts.triggeredBy,
+      settings,
     })
+    if (!result.ok || opts.dryRun) return result
 
-    if (!res.ok) {
-      console.error("[generateActionPoints] OpenAI error", res.status, await res.text().catch(() => ""))
-      return { generated: false, reason: `openai_${res.status}` }
-    }
-
-    const json = await res.json()
-    const content: string = json?.choices?.[0]?.message?.content?.trim() ?? ""
-    if (!content) return { generated: false, reason: "empty" }
-
-    const { error } = await supabase
-      .from("kpi_reviews")
-      .update({ action_points: content, action_points_generated_at: new Date().toISOString() })
-      .eq("id", reviewId)
+    const { error } = await admin.from("kpi_action_point_drafts").upsert({
+      review_id: reviewId,
+      content: result.text,
+      source: "ai",
+      model: result.model,
+      generated_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      updated_by: opts.triggeredBy ?? null,
+    })
     if (error) {
-      console.error("[generateActionPoints] store error", error)
-      return { generated: false, reason: "store_failed" }
+      console.error("[generateActionPoints] store draft", error)
+      return { ok: false, reason: "no_review", message: "Couldn't save the draft." }
     }
-
-    return { generated: true }
+    return result
   } catch (e) {
     console.error("[generateActionPoints]", e)
-    return { generated: false, reason: "exception" }
+    return { ok: false, reason: "no_review", message: "Something went wrong generating action points." }
   }
 }

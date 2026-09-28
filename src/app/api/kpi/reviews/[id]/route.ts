@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
-import { getUserRole } from "@/lib/auth"
+import { getUserRole, getEmployeeIdForUser } from "@/lib/auth"
 import { generateActionPoints } from "@/lib/kpi/action-points"
 import { blockWhileImpersonating } from "@/lib/impersonation"
 import { canViewReview } from "@/lib/kpi/access"
@@ -62,12 +62,16 @@ export async function PATCH(
 
   if (error) return NextResponse.json({ error: "Failed to update review" }, { status: 500 })
 
-  // When a quarter is published (status → active), regenerate the AI action
-  // points from the latest scores + comments. Dormant until OPENAI_API_KEY is
-  // set; best-effort so it never blocks the status change.
-  let actionPoints: { generated: boolean; reason?: string } | undefined
+  // When a quarter is published (status → active), draft AI action points
+  // for HR to review. Staff see nothing until HR approves. Best-effort: never
+  // blocks the status change. Settings → AI controls it.
+  let actionPoints: { generated: boolean; reason?: string; message?: string } | undefined
   if (body.status === "active") {
-    actionPoints = await generateActionPoints(supabase, id)
+    const r = await generateActionPoints(supabase, id, {
+      onPublish: true,
+      triggeredBy: await getEmployeeIdForUser(supabase, user.id),
+    })
+    actionPoints = r.ok ? { generated: true } : { generated: false, reason: r.reason, message: r.message }
   }
 
   return NextResponse.json({ ...data, actionPoints })

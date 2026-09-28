@@ -1,6 +1,6 @@
 import Link from "next/link"
 import { redirect } from "next/navigation"
-import { ShieldCheck, UserCog } from "lucide-react"
+import { ShieldCheck, Sparkles, UserCog } from "lucide-react"
 import { createClient } from "@/lib/supabase/server"
 import { getUserRole } from "@/lib/auth"
 import { listAdmins } from "@/lib/admins"
@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/layout/PageHeader"
 import { cn } from "@/lib/utils"
 import { AdminsPanel } from "./AdminsPanel"
 import { AccessOverview } from "./AccessOverview"
+import { AiSettingsPanel } from "./AiSettingsPanel"
 import { loadAccessOverview } from "@/lib/access-overview"
 
 export const metadata = { title: "Settings — Human Connections" }
@@ -16,6 +17,7 @@ export const metadata = { title: "Settings — Human Connections" }
 const TABS = [
   { id: "admins", label: "Administrators", icon: UserCog },
   { id: "access", label: "Who can see what", icon: ShieldCheck },
+  { id: "ai", label: "AI (OpenAI)", icon: Sparkles },
 ] as const
 
 type TabId = (typeof TABS)[number]["id"]
@@ -57,6 +59,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
 
       {tab === "admins" && <AdminsPanel initialAdmins={await listAdmins()} currentUserId={user.id} />}
       {tab === "access" && <AccessOverview rows={await loadAccessOverview()} />}
+      {tab === "ai" && <AiSettingsPanel />}
     </div>
   )
 }

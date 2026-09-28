@@ -12,6 +12,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { MonthlyCheckins, QuarterCheckinsStrip } from "./MonthlyCheckins"
+import { ActionPointsEditor } from "./ActionPointsEditor"
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -1128,8 +1129,8 @@ function FinalCommentsAccordion({ visible, byAuthor, withComment, isHR, currentE
 
 // ─── Action Points ──────────────────────────────────────────────────────────────
 
-// AI-generated action points. Generated automatically when a quarter is
-// published (status → active); this component just displays what was stored.
+// Action points as staff and managers see them: only text HR has approved
+// (AI-drafted, then checked and edited by HR — see ActionPointsEditor).
 function ActionPoints({ isHR, isOwnReview, actionPoints, generatedAt }: {
   isHR: boolean
   /** The viewer is the staff member being reviewed — address them directly. */
@@ -1163,7 +1164,7 @@ function ActionPoints({ isHR, isOwnReview, actionPoints, generatedAt }: {
         </div>
         {generatedAt && (
           <span className="hidden sm:inline-flex items-center gap-1 text-[10px] text-muted-foreground shrink-0">
-            <Sparkles size={11} className="text-primary" /> AI generated
+            <Sparkles size={11} className="text-primary" /> AI-assisted, reviewed by HR
           </span>
         )}
         <div className={cn("w-7 h-7 rounded-full border border-border flex items-center justify-center text-muted-foreground transition-transform shrink-0", !open && "-rotate-90")}>
@@ -1190,10 +1191,10 @@ function ActionPoints({ isHR, isOwnReview, actionPoints, generatedAt }: {
               <p className="font-semibold text-sm">No action points yet</p>
               <p className="text-xs text-muted-foreground mt-1 max-w-md mx-auto">
                 {isHR
-                  ? "These are generated automatically when the quarter is published — from the scores and comments."
+                  ? "HR drafts and approves these after publishing the review."
                   : isOwnReview
-                    ? "These appear automatically once HR publishes your scored review."
-                    : "These appear automatically once HR publishes this scored review."}
+                    ? "These appear once HR has reviewed and approved them."
+                    : "These appear once HR has reviewed and approved them."}
               </p>
             </div>
           )}
@@ -1362,7 +1363,9 @@ function QuarterPanel({ review, template, scores, finalComments, allEmployees, c
       )}
 
       {isHR && <QuarterCheckinsStrip employeeId={review.employee_id} period={review.period} />}
-      <ActionPoints isHR={isHR} isOwnReview={!isHR && review.employee_id === currentEmployeeId} actionPoints={review.action_points} generatedAt={review.action_points_generated_at} />
+      {isHR
+        ? <ActionPointsEditor reviewId={review.id} reviewStatus={review.status} />
+        : <ActionPoints isHR={isHR} isOwnReview={review.employee_id === currentEmployeeId} actionPoints={review.action_points} generatedAt={review.action_points_generated_at} />}
 
       <div className="flex flex-col gap-3">
         {reviewTemplate.length === 0 ? (
@@ -2737,7 +2740,11 @@ export function KpiPageClient({ isHR, currentEmployeeId, canCheckin = false }: {
     // Publishing triggers AI action points server-side — reload so they show.
     if (status === "active") {
       const data = await res.json().catch(() => null)
-      showToast(data?.actionPoints?.generated ? "Published — action points generated" : "Review published")
+      showToast(data?.actionPoints?.generated
+        ? "Published — AI action points drafted for your approval"
+        : data?.actionPoints?.reason && !["disabled", "kept_hr_draft"].includes(data.actionPoints.reason)
+          ? `Published — action points not drafted: ${data.actionPoints.message ?? data.actionPoints.reason}`
+          : "Review published")
       await loadAll({ silent: true })
     }
   }
