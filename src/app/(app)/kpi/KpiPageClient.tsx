@@ -2850,14 +2850,15 @@ export function KpiPageClient({ isHR, currentEmployeeId, isManager = false }: { 
       showToast("Failed to update status")
       return
     }
-    // Publishing triggers AI action points server-side — reload so they show.
-    if (status === "active") {
+    if (status === "active") showToast("Review published")
+    // Completing triggers AI action points server-side — reload so they show.
+    if (status === "completed") {
       const data = await res.json().catch(() => null)
       showToast(data?.actionPoints?.generated
-        ? "Published — AI action points drafted for your approval"
+        ? "Completed — AI action points drafted for your approval"
         : data?.actionPoints?.reason && !["disabled", "kept_hr_draft"].includes(data.actionPoints.reason)
-          ? `Published — action points not drafted: ${data.actionPoints.message ?? data.actionPoints.reason}`
-          : "Review published")
+          ? `Completed — action points not drafted: ${data.actionPoints.message ?? data.actionPoints.reason}`
+          : "Review completed")
       await loadAll({ silent: true })
     }
   }

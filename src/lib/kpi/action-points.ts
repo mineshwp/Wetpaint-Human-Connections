@@ -71,23 +71,23 @@ export type ActionPointsResult = GenerateResult | { ok: false; reason: "disabled
  *  - dryRun: return the text only (Settings → AI "Try it on a review").
  *  - otherwise: save it as an AI draft for HR to edit and approve. Staff never
  *    see a draft; approval copies it to kpi_reviews.action_points.
- * `onPublish` skips when the feature is off, or when HR has already approved
- * or hand-edited this review's action points (so a re-publish never
- * overwrites HR's work). Never throws.
+ * `onComplete` (the automatic run when HR marks a review Complete) skips when
+ * the feature is off, or when HR has already approved or hand-edited this
+ * review's action points (so it never overwrites HR's work). Never throws.
  */
 export async function generateActionPoints(
   supabase: DB,
   reviewId: string,
-  opts: { triggeredBy?: string | null; dryRun?: boolean; onPublish?: boolean; promptOverride?: string } = {}
+  opts: { triggeredBy?: string | null; dryRun?: boolean; onComplete?: boolean; promptOverride?: string } = {}
 ): Promise<ActionPointsResult> {
   try {
     const settings = await loadAiSettings()
-    if (opts.onPublish && !settings.actionPointsEnabled) {
+    if (opts.onComplete && !settings.actionPointsEnabled) {
       return { ok: false, reason: "disabled", message: "Automatic action points are turned off in Settings → AI." }
     }
 
     const admin = createAdminClient()
-    if (opts.onPublish) {
+    if (opts.onComplete) {
       const [{ data: review }, { data: draft }] = await Promise.all([
         admin.from("kpi_reviews").select("action_points").eq("id", reviewId).maybeSingle(),
         admin.from("kpi_action_point_drafts").select("source").eq("review_id", reviewId).maybeSingle(),

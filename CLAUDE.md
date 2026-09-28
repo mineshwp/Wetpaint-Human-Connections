@@ -174,7 +174,7 @@ kpi_template_items
 kpi_reviews
   id, employee_id, period, title, deadline, status ("draft" | "active" | "completed"),
   action_points, action_points_generated_at, action_points_approved_at, action_points_approved_by
-  # action_points = HR-APPROVED text only (what staff/managers see). On publish
+  # action_points = HR-APPROVED text only (what staff/managers see). On complete
   # the AI writes a draft to kpi_action_point_drafts (HR-only); HR edits and
   # approves it on the review. Never write AI output straight to action_points.
 
@@ -388,7 +388,7 @@ Always return proper HTTP status codes: 400, 401, 403, 404, 500.
 | Alphabetical A–Z / Z–A sort on Employees + KPI lists | ✅ Done |
 | KPI Q1-as-default inheritance (new Q2/Q3/Q4 review auto-inherits period template + staff's baseline-quarter KPIs; baseline = same-year Q1, else earliest existing same-year quarter, else latest prior-year period so a new year carries forward; editable after) | ✅ Done |
 | Multi-year KPI support (year filter with current-year default; year-aware quarter↔period; create/set up future-year reviews) | ✅ Done |
-| KPI Action Points — auto-generated on publish via OpenAI (dormant until `OPENAI_API_KEY` env var is set; regenerates each publish; stored on `kpi_reviews.action_points`) | ✅ Done |
+| KPI Action Points — AI draft auto-generated when HR marks a review Complete (status → `completed`, once per transition; skipped if HR already approved/edited); HR approves before staff see it. Manual "draft with AI" still works once published | ✅ Done |
 | KPI quarter + year performance summary (Q1–Q4 + year score, % and /10 via rating guide) | ✅ Done |
 | Archive cascade (archiving an employee archives their KPI reviews; archived reviews hidden from lists) | ✅ Done |
 | HR "View as" any active/onboarding staff member (exact view, their role; view-only enforced on every write API) | ✅ Done |

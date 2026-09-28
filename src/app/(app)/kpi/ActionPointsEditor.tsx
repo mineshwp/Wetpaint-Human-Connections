@@ -101,7 +101,7 @@ export function ActionPointsEditor({ reviewId, reviewStatus, onApprovedChange }:
                 </p>
               )}
               <textarea value={text} onChange={(e) => setText(e.target.value)} rows={7} maxLength={5000}
-                placeholder={published ? "Write action points, one per line starting with \"- \", or ask the AI for a draft." : "Publish the review first. The AI drafts action points when you publish."}
+                placeholder={published ? "Write action points, one per line starting with \"- \", or ask the AI for a draft." : "Publish the review first. The AI drafts action points when you mark it Complete."}
                 className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm leading-relaxed focus:outline-none focus:ring-1 focus:ring-primary" />
               <div className="flex items-center gap-2 flex-wrap">
                 <button type="button" onClick={() => call("approve")} disabled={!!busy || !published || !text.trim() || (!dirty && !hasDraft && !!s.approved)}

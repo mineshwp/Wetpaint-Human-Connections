@@ -53,6 +53,9 @@ export async function PATCH(
   if (body.deadline !== undefined) allowed.deadline = body.deadline
   if (body.period !== undefined) allowed.period = body.period
 
+  const { data: before } = await supabase.from("kpi_reviews").select("status").eq("id", id).maybeSingle()
+  if (!before) return NextResponse.json({ error: "Not found" }, { status: 404 })
+
   const { data, error } = await supabase
     .from("kpi_reviews")
     .update(allowed)
@@ -62,13 +65,13 @@ export async function PATCH(
 
   if (error) return NextResponse.json({ error: "Failed to update review" }, { status: 500 })
 
-  // When a quarter is published (status → active), draft AI action points
-  // for HR to review. Staff see nothing until HR approves. Best-effort: never
-  // blocks the status change. Settings → AI controls it.
+  // When HR marks a quarter's review Complete, draft AI action points for
+  // that period for HR to approve. Staff see nothing until HR approves.
+  // Best-effort: never blocks the status change. Settings → AI controls it.
   let actionPoints: { generated: boolean; reason?: string; message?: string } | undefined
-  if (body.status === "active") {
+  if (body.status === "completed" && before.status !== "completed") {
     const r = await generateActionPoints(supabase, id, {
-      onPublish: true,
+      onComplete: true,
       triggeredBy: await getEmployeeIdForUser(supabase, user.id),
     })
     actionPoints = r.ok ? { generated: true } : { generated: false, reason: r.reason, message: r.message }
