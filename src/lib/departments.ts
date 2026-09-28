@@ -12,6 +12,8 @@ export type DeptRow = {
   name: string
   colour: string
   employeeCount: number
+  /** Current (non-archived) staff in the department. */
+  members: DeptPerson[]
   managers: DeptPerson[]
 }
 
@@ -29,6 +31,7 @@ export async function loadDepartmentsData(): Promise<DepartmentsData> {
 
   const counts = new Map<string, number>()
   const managers = new Map<string, DeptPerson[]>()
+  const members = new Map<string, DeptPerson[]>()
   const people: DeptPerson[] = []
   for (const e of emps ?? []) {
     // Count everyone (archived too) — deleting a department moves them all.
@@ -41,6 +44,7 @@ export async function loadDepartmentsData(): Promise<DepartmentsData> {
       departmentId: e.department_id ?? null,
     }
     people.push(p)
+    if (e.department_id) members.set(e.department_id, [...(members.get(e.department_id) ?? []), p])
     if (e.department_id && e.access_level === "manager_department") {
       managers.set(e.department_id, [...(managers.get(e.department_id) ?? []), p])
     }
@@ -53,6 +57,7 @@ export async function loadDepartmentsData(): Promise<DepartmentsData> {
       name: d.name,
       colour: d.colour,
       employeeCount: counts.get(d.id) ?? 0,
+      members: members.get(d.id) ?? [],
       managers: managers.get(d.id) ?? [],
     })),
   }

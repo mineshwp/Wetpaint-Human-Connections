@@ -1,7 +1,8 @@
 "use client"
 
 import { useState } from "react"
-import { X, Plus, Pencil, Trash2, Check, Loader2, Building2, UserCog } from "lucide-react"
+import Link from "next/link"
+import { X, Plus, Pencil, Trash2, Check, Loader2, Building2, UserCog, ChevronDown } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { DepartmentsData, DeptPerson, DeptRow as Dept } from "@/lib/departments"
 
@@ -108,6 +109,7 @@ function DeptRow({ dept, others, people, deptName, onSave, onDelete, onSetManage
   onSetManagers: (id: string, employeeIds: string[]) => Promise<string | null>
 }) {
   const [editing, setEditing] = useState(false)
+  const [showStaff, setShowStaff] = useState(false)
   const [name, setName] = useState(dept.name)
   const [colour, setColour] = useState(dept.colour)
   const [busy, setBusy] = useState(false)
@@ -150,9 +152,11 @@ function DeptRow({ dept, others, people, deptName, onSave, onDelete, onSetManage
             <span className="flex-1 min-w-0 truncate text-sm font-medium">{dept.name}</span>
           </>
         )}
-        <span className="text-xs text-muted-foreground shrink-0">
+        <button type="button" onClick={() => setShowStaff((v) => !v)} aria-expanded={showStaff}
+          className="inline-flex items-center gap-0.5 text-xs text-muted-foreground hover:text-foreground shrink-0 rounded px-1 -mx-1">
           {dept.employeeCount} staff
-        </span>
+          <ChevronDown size={12} className={cn("transition-transform", showStaff && "rotate-180")} />
+        </button>
         {!editing && !confirming && (
           <div className="flex items-center gap-1 shrink-0">
             <button type="button" onClick={() => { setName(dept.name); setColour(dept.colour); setEditing(true); setErr(null) }}
@@ -169,6 +173,29 @@ function DeptRow({ dept, others, people, deptName, onSave, onDelete, onSetManage
 
       {!editing && !confirming && (
         <Managers dept={dept} people={people} deptName={deptName} onSetManagers={onSetManagers} />
+      )}
+
+      {showStaff && (
+        <div className="mt-2.5 rounded-md border border-border bg-muted/30 px-3 py-2">
+          {dept.members.length === 0 ? (
+            <p className="text-xs text-muted-foreground italic">No current staff.</p>
+          ) : (
+            <ul className="grid sm:grid-cols-2 gap-x-4 gap-y-1">
+              {dept.members.map((m) => (
+                <li key={m.id} className="text-xs truncate">
+                  <Link href={`/employees/${m.id}`} className="font-medium hover:text-primary hover:underline">{m.name}</Link>
+                  {m.jobTitle && <span className="text-muted-foreground"> — {m.jobTitle}</span>}
+                  {dept.managers.some((x) => x.id === m.id) && <span className="ml-1 text-[10px] font-semibold text-primary uppercase">Manager</span>}
+                </li>
+              ))}
+            </ul>
+          )}
+          {dept.employeeCount > dept.members.length && (
+            <p className="mt-1.5 text-[11px] text-muted-foreground">
+              + {dept.employeeCount - dept.members.length} archived
+            </p>
+          )}
+        </div>
       )}
 
       {editing && (
