@@ -96,7 +96,7 @@ export function AccessOverview({ initial }: { initial: AccessData }) {
         <p className="text-xs text-muted-foreground leading-relaxed">
           Set each person&apos;s <span className="font-medium">Reports to</span> and <span className="font-medium">access</span> here —
           it works before they have a login, so everything is ready when you create one. Managers see their team&apos;s
-          profiles (no ID, date of birth, banking, salary or documents), published KPI reviews and monthly check-ins.
+          profiles (no ID, date of birth, banking, salary or documents) and published KPI reviews.
           Everyone can always see their own profile. HR admins see everyone.
         </p>
       </div>

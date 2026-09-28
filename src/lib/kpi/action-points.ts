@@ -1,5 +1,4 @@
 import { createClient } from "@/lib/supabase/server"
-import { CHECKIN_STATUSES, monthLabel, monthStart, periodMonths } from "@/lib/kpi/checkins"
 import { generateText, loadAiSettings, type GenerateResult } from "@/lib/ai/openai"
 import { DEFAULT_ACTION_POINTS_PROMPT } from "@/lib/ai/prompts"
 import { createAdminClient } from "@/lib/supabase/admin"
@@ -15,7 +14,7 @@ interface Section { title: string; type: string; kpi_template_items: Item[] }
 async function buildContext(supabase: DB, reviewId: string, includeNames: boolean): Promise<{ employeeName: string; jobTitle: string | null; period: string; breakdown: string } | null> {
   const { data: review } = await supabase
     .from("kpi_reviews")
-    .select("period, employee_id, employee:employees!kpi_reviews_employee_id_fkey(first_name, last_name, job_title)")
+    .select("period, employee:employees!kpi_reviews_employee_id_fkey(first_name, last_name, job_title)")
     .eq("id", reviewId)
     .maybeSingle()
   if (!review) return null
@@ -23,8 +22,7 @@ async function buildContext(supabase: DB, reviewId: string, includeNames: boolea
   const emp = review.employee as unknown as { first_name: string; last_name: string; job_title: string | null } | null
   const employeeName = includeNames && emp ? `${emp.first_name} ${emp.last_name}` : "the staff member"
 
-  const months = periodMonths(review.period)
-  const [{ data: sections }, { data: scores }, { data: finals }, { data: checkins }] = await Promise.all([
+  const [{ data: sections }, { data: scores }, { data: finals }] = await Promise.all([
     supabase
       .from("kpi_template_sections")
       .select("title, type, kpi_template_items(id, title, description, max_score, review_id, is_active)")
@@ -33,14 +31,6 @@ async function buildContext(supabase: DB, reviewId: string, includeNames: boolea
       .order("position"),
     supabase.from("kpi_scores").select("item_id, score, comments").eq("review_id", reviewId),
     supabase.from("kpi_final_comments").select("comment").eq("review_id", reviewId),
-    months.length
-      ? supabase
-          .from("kpi_monthly_checkins")
-          .select("month, status, comment")
-          .eq("employee_id", review.employee_id)
-          .in("month", months.map(monthStart))
-          .order("month")
-      : Promise.resolve({ data: [] as { month: string; status: string; comment: string | null }[] }),
   ])
 
   // Average submitted scores per item, and collect any comments.
@@ -69,16 +59,6 @@ async function buildContext(supabase: DB, reviewId: string, includeNames: boolea
   if (finalComments.length) {
     lines.push(`\n## Closing comments`)
     for (const c of finalComments) lines.push(`- ${c}`)
-  }
-
-  // The quarter's monthly manager check-ins, if any.
-  if (checkins && checkins.length) {
-    const label = new Map(CHECKIN_STATUSES.map((st) => [st.value as string, st.label]))
-    lines.push(`\n## Monthly manager check-ins`)
-    for (const c of checkins) {
-      const m = monthLabel(String(c.month).slice(0, 7))
-      lines.push(`- ${m}: ${label.get(c.status) ?? c.status}${c.comment ? ` — ${c.comment}` : ""}`)
-    }
   }
 
   return { employeeName, jobTitle: emp?.job_title ?? null, period: review.period, breakdown: lines.join("\n") }
@@ -121,7 +101,7 @@ export async function generateActionPoints(
     if (!ctx) return { ok: false, reason: "no_review", message: "Review not found." }
 
     const who = settings.includeNames ? `Staff member: ${ctx.employeeName}` : "Staff member: (name withheld)"
-    const input = `${who}${ctx.jobTitle ? `\nRole: ${ctx.jobTitle}` : ""}\nReview period: ${ctx.period}\n\nKPI results, comments and check-ins:\n${ctx.breakdown}\n\nWrite the action points this person should focus on next quarter.`
+    const input = `${who}${ctx.jobTitle ? `\nRole: ${ctx.jobTitle}` : ""}\nReview period: ${ctx.period}\n\nKPI results and comments:\n${ctx.breakdown}\n\nWrite the action points this person should focus on next quarter.`
 
     const result = await generateText({
       feature: opts.dryRun ? "action_points_preview" : "action_points",

@@ -11,7 +11,6 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import { MonthlyCheckins, QuarterCheckinsStrip } from "./MonthlyCheckins"
 import { ActionPointsEditor } from "./ActionPointsEditor"
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -1362,7 +1361,6 @@ function QuarterPanel({ review, template, scores, finalComments, allEmployees, c
         <InviteePanel review={review} allEmployees={allEmployees} template={template} onAddInvitee={onAddInvitee} onRemoveInvitee={onRemoveInvitee} onSetSections={onSetSections} />
       )}
 
-      {isHR && <QuarterCheckinsStrip employeeId={review.employee_id} period={review.period} />}
       {isHR
         ? <ActionPointsEditor reviewId={review.id} reviewStatus={review.status} />
         : <ActionPoints isHR={isHR} isOwnReview={review.employee_id === currentEmployeeId} actionPoints={review.action_points} generatedAt={review.action_points_generated_at} />}
@@ -2678,9 +2676,9 @@ function ManageTemplateModal({ currentPeriod, onClose, onCurrentPeriodChange, sh
 
 // ─── Main Page ──────────────────────────────────────────────────────────────────
 
-type Tab = "reviews" | "mykpi" | "team" | "toscore" | "checkins"
+type Tab = "reviews" | "mykpi" | "team" | "toscore"
 
-export function KpiPageClient({ isHR, currentEmployeeId, canCheckin = false, isManager = false }: { isHR: boolean; currentEmployeeId: string | null; canCheckin?: boolean; isManager?: boolean }) {
+export function KpiPageClient({ isHR, currentEmployeeId, isManager = false }: { isHR: boolean; currentEmployeeId: string | null; isManager?: boolean }) {
   const [tab, setTab]                     = useState<Tab>(isHR ? "reviews" : "mykpi")
   const [reviewTemplates, setReviewTemplates] = useState<Record<string, TemplateSection[]>>({})
   const [reviews, setReviews]             = useState<Review[]>([])
@@ -2973,7 +2971,6 @@ export function KpiPageClient({ isHR, currentEmployeeId, canCheckin = false, isM
     { id: "mykpi" as Tab, label: "My KPI", icon: Target },
     ...(isManager ? [{ id: "team" as Tab, label: "My Team", icon: Users }] : []),
     ...(toScoreCount > 0 || tab === "toscore" ? [{ id: "toscore" as Tab, label: "Reviews to Score", icon: FileText, badge: pendingInvites }] : []),
-    ...(canCheckin ? [{ id: "checkins" as Tab, label: "Monthly Check-ins", icon: ListChecks }] : []),
   ]
 
   return (
@@ -3056,8 +3053,6 @@ export function KpiPageClient({ isHR, currentEmployeeId, canCheckin = false, isM
               availableYears={availableYears}
             />
           )}
-
-          {tab === "checkins" && canCheckin && <MonthlyCheckins isHR={isHR} />}
 
           {(tab === "mykpi" || tab === "team" || tab === "toscore") && (
             <>

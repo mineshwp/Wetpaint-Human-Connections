@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { getUserRole } from "@/lib/auth"
 import { PageHeader } from "@/components/layout/PageHeader"
-import { CHECKIN_STATUSES, monthLabel, monthStart, periodMonths } from "@/lib/kpi/checkins"
+import { monthLabel, monthStart, periodMonths } from "@/lib/kpi/months"
 import { groupByExpiry, loadTraining } from "@/lib/training"
 import { PrintButton } from "./PrintButton"
 
@@ -39,7 +39,7 @@ function Stat({ label, value, note }: { label: string; value: string | number; n
 }
 
 // HR-only quarterly numbers for HR's quarterly update: headcount movement,
-// KPI review progress, monthly check-ins and training. Printable.
+// KPI review progress and training. Printable.
 export default async function QuarterlyReportPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -56,14 +56,9 @@ export default async function QuarterlyReportPage({ searchParams }: { searchPara
 
   // HR checked above; service client so resignation dates etc. are readable.
   const admin = createAdminClient()
-  const [{ data: emps }, { data: reviews }, { data: checkins }, training] = await Promise.all([
+  const [{ data: emps }, { data: reviews }, training] = await Promise.all([
     admin.from("employees").select("id, first_name, last_name, status, is_archived, start_date, resignation_date, department:departments(name)"),
     admin.from("kpi_reviews").select("id, employee_id, status").eq("period", quarter).eq("is_archived", false),
-    admin
-      .from("kpi_monthly_checkins")
-      .select("employee_id, month, status, comment, employee:employees!kpi_monthly_checkins_employee_id_fkey(first_name, last_name)")
-      .in("month", months.map(monthStart))
-      .order("month"),
     loadTraining(supabase),
   ])
 
@@ -77,19 +72,6 @@ export default async function QuarterlyReportPage({ searchParams }: { searchPara
   const reviewedIds = new Set(revs.map((r) => r.employee_id))
   const withoutReview = current.filter((e) => !reviewedIds.has(e.id)).length
 
-  const cis = checkins ?? []
-  const byMonth = months.map((m) => {
-    const rows = cis.filter((c) => String(c.month).startsWith(m))
-    return {
-      month: m,
-      done: rows.length,
-      concern: rows.filter((c) => c.status === "concern").length,
-      support: rows.filter((c) => c.status === "needs_support").length,
-    }
-  })
-  const flagged = cis.filter((c) => c.status === "concern" || c.status === "needs_support")
-  const statusLabel = new Map(CHECKIN_STATUSES.map((s) => [s.value as string, s.label]))
-
   const completedTraining = training.filter((t) => t.dateCompleted && t.dateCompleted >= qStart && t.dateCompleted <= qEnd)
   const { expired, expiring } = groupByExpiry(training)
 
@@ -97,9 +79,6 @@ export default async function QuarterlyReportPage({ searchParams }: { searchPara
   const outstanding = [
     drafts > 0 && `${drafts} KPI review${drafts === 1 ? "" : "s"} still in draft`,
     withoutReview > 0 && `${withoutReview} current staff without a ${quarter} review`,
-    ...byMonth
-      .filter((m) => m.month <= new Date().toISOString().slice(0, 7) && m.done < current.length)
-      .map((m) => `${current.length - m.done} check-ins not done for ${monthLabel(m.month)}`),
     expired.length > 0 && `${expired.length} training record${expired.length === 1 ? "" : "s"} expired`,
   ].filter(Boolean) as string[]
 
@@ -136,46 +115,6 @@ export default async function QuarterlyReportPage({ searchParams }: { searchPara
           <Stat label="In draft" value={drafts} />
           <Stat label="No review yet" value={withoutReview} />
         </div>
-      </section>
-
-      <section className="space-y-2">
-        <h3 className="text-sm font-semibold">Monthly check-ins</h3>
-        <div className="overflow-x-auto rounded-xl border border-border bg-card">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/40 text-xs text-muted-foreground">
-              <tr>
-                <th className="text-left font-semibold px-3 py-2">Month</th>
-                <th className="text-left font-semibold px-3 py-2">Done</th>
-                <th className="text-left font-semibold px-3 py-2">Needs support</th>
-                <th className="text-left font-semibold px-3 py-2">Concern</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {byMonth.map((m) => (
-                <tr key={m.month}>
-                  <td className="px-3 py-2">{monthLabel(m.month)}</td>
-                  <td className="px-3 py-2">{m.done} / {current.length}</td>
-                  <td className="px-3 py-2">{m.support}</td>
-                  <td className="px-3 py-2">{m.concern}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        {flagged.length > 0 && (
-          <ul className="space-y-1 text-sm">
-            {flagged.map((c, i) => {
-              const e = c.employee as unknown as { first_name: string; last_name: string } | null
-              return (
-                <li key={i}>
-                  <span className="font-medium">{e ? `${e.first_name} ${e.last_name}` : "Staff member"}</span>
-                  {" · "}{monthLabel(String(c.month).slice(0, 7))} · {statusLabel.get(c.status)}
-                  {c.comment ? <span className="text-muted-foreground"> — {c.comment}</span> : null}
-                </li>
-              )
-            })}
-          </ul>
-        )}
       </section>
 
       <section className="space-y-2">

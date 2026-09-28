@@ -98,51 +98,6 @@ export async function sendAdminRevokedEmail(to: string, name: string) {
   })
 }
 
-export async function sendCheckinReminderEmail(opts: {
-  to: string
-  name: string
-  monthLabel: string
-  deadlineLabel: string
-  teamCount: number
-  url: string
-}): Promise<boolean> {
-  if (!resend) {
-    console.warn("[email] RESEND_API_KEY not set — skipping check-in reminder email")
-    return false
-  }
-  const { to, name, monthLabel, deadlineLabel, teamCount, url } = opts
-  try {
-    await resend.emails.send({
-      from: FROM,
-      to,
-      subject: `Monthly check-ins for ${monthLabel} are due by ${deadlineLabel}`,
-      html: `
-        <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px">
-          <p style="font-size:15px;color:#111">Hi ${name},</p>
-          <p style="font-size:15px;color:#333;line-height:1.6">
-            Please complete the <strong>${monthLabel}</strong> check-in for your
-            ${teamCount} team member${teamCount === 1 ? "" : "s"} by <strong>${deadlineLabel}</strong>:
-            a status (On track, Needs support or Concern) and one line each.
-          </p>
-          <p style="font-size:15px;color:#333;line-height:1.6">
-            Log in and open <strong>KPI Reviews → Monthly Check-ins</strong>:
-          </p>
-          <p style="margin:24px 0">
-            <a href="${url}" style="background:#111;color:#fff;text-decoration:none;padding:10px 20px;border-radius:8px;font-size:14px">Open Human Connections</a>
-          </p>
-          <p style="margin-top:32px;font-size:13px;color:#888">
-            — Wetpaint Human Connections
-          </p>
-        </div>
-      `,
-    })
-    return true
-  } catch (e) {
-    console.error("[email] check-in reminder failed:", e)
-    return false
-  }
-}
-
 export async function sendTrainingReminderEmail(opts: {
   to: string
   name: string

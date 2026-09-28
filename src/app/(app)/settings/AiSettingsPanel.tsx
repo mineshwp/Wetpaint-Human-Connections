@@ -178,7 +178,7 @@ export function AiSettingsPanel() {
       </Card>
 
       <Card icon={Sparkles} title="Action points"
-        subtitle="When HR publishes a KPI review, the AI drafts action points from the scores, comments and monthly check-ins. HR edits and approves them on the review — staff see nothing until then.">
+        subtitle="When HR publishes a KPI review, the AI drafts action points from the scores and comments. HR edits and approves them on the review — staff see nothing until then.">
         <label className="flex items-start gap-2.5 text-sm cursor-pointer">
           <input type="checkbox" checked={form.actionPointsEnabled} onChange={(e) => set("actionPointsEnabled", e.target.checked)} className="mt-0.5" />
           <span>Draft action points automatically when a review is published</span>
@@ -201,7 +201,7 @@ export function AiSettingsPanel() {
           </div>
           <textarea id="ai-prompt" value={prompt} onChange={(e) => setPrompt(e.target.value)} rows={12} maxLength={8000}
             className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm leading-relaxed font-mono focus:outline-none focus:ring-1 focus:ring-primary" />
-          <p className="text-[11px] text-muted-foreground">The review data (scores, reviewer comments, check-ins) is added after these instructions automatically.</p>
+          <p className="text-[11px] text-muted-foreground">The review data (scores and reviewer comments) is added after these instructions automatically.</p>
         </div>
 
         <div className="rounded-lg border border-border bg-muted/20 p-3 space-y-2">
