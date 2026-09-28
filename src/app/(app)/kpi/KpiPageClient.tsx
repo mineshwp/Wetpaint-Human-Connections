@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useMemo, useCallback, useRef } from "react"
+import Link from "next/link"
 import {
   ChevronDown, ChevronRight, ChevronLeft, Plus, Trash2, X, Check,
   Users, UserPlus, Send, Clock, CheckCircle2, XCircle,
@@ -10,6 +11,7 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+import { MonthlyCheckins, QuarterCheckinsStrip } from "./MonthlyCheckins"
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -1359,6 +1361,7 @@ function QuarterPanel({ review, template, scores, finalComments, allEmployees, c
         <InviteePanel review={review} allEmployees={allEmployees} template={template} onAddInvitee={onAddInvitee} onRemoveInvitee={onRemoveInvitee} onSetSections={onSetSections} />
       )}
 
+      {isHR && <QuarterCheckinsStrip employeeId={review.employee_id} period={review.period} />}
       <ActionPoints isHR={isHR} isOwnReview={!isHR && review.employee_id === currentEmployeeId} actionPoints={review.action_points} generatedAt={review.action_points_generated_at} />
 
       <div className="flex flex-col gap-3">
@@ -1839,6 +1842,10 @@ function HRAdminView({ reviewTemplates, reviews, scores, finalComments, allEmplo
           <Button size="sm" variant="outline" onClick={onManageTemplate} className="gap-1.5 h-9 text-xs">
             <SlidersHorizontal size={13} /> Manage Template
           </Button>
+          <Link href="/kpi/report"
+            className="inline-flex items-center gap-1.5 h-9 rounded-md border border-border bg-background px-3 text-xs font-medium hover:bg-muted transition-colors">
+            <FileText size={13} /> Quarterly report
+          </Link>
           <Button size="sm" onClick={() => onShowCreate()} className="gap-1.5 h-9 text-xs">
             <Plus size={13} /> New Review
           </Button>
@@ -2553,9 +2560,9 @@ function ManageTemplateModal({ currentPeriod, onClose, onCurrentPeriodChange, sh
 
 // ─── Main Page ──────────────────────────────────────────────────────────────────
 
-type Tab = "reviews" | "myassignments"
+type Tab = "reviews" | "myassignments" | "checkins"
 
-export function KpiPageClient({ isHR, currentEmployeeId }: { isHR: boolean; currentEmployeeId: string | null }) {
+export function KpiPageClient({ isHR, currentEmployeeId, canCheckin = false }: { isHR: boolean; currentEmployeeId: string | null; canCheckin?: boolean }) {
   const [tab, setTab]                     = useState<Tab>(isHR ? "reviews" : "myassignments")
   const [reviewTemplates, setReviewTemplates] = useState<Record<string, TemplateSection[]>>({})
   const [reviews, setReviews]             = useState<Review[]>([])
@@ -2839,6 +2846,7 @@ export function KpiPageClient({ isHR, currentEmployeeId }: { isHR: boolean; curr
   const tabs: { id: Tab; label: string; icon: React.ElementType }[] = [
     ...(isHR ? [{ id: "reviews" as Tab, label: "All Reviews", icon: BarChart3 }] : []),
     { id: "myassignments" as Tab, label: "My Reviews", icon: FileText },
+    ...(canCheckin ? [{ id: "checkins" as Tab, label: "Monthly Check-ins", icon: ListChecks }] : []),
   ]
 
   return (
@@ -2851,7 +2859,7 @@ export function KpiPageClient({ isHR, currentEmployeeId }: { isHR: boolean; curr
       )}
 
       {/* Tab bar — only shown for non-HR (who have only one tab) or when HR is on assignments tab */}
-      {(!isHR || tab === "myassignments") && (
+      {(!isHR || tab !== "reviews") && (
         <div className="flex items-center gap-1 mb-6 border-b border-border">
           {tabs.map(t => {
             const Icon = t.icon
@@ -2919,6 +2927,8 @@ export function KpiPageClient({ isHR, currentEmployeeId }: { isHR: boolean; curr
               availableYears={availableYears}
             />
           )}
+
+          {tab === "checkins" && canCheckin && <MonthlyCheckins isHR={isHR} />}
 
           {tab === "myassignments" && (
             <>

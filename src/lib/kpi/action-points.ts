@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server"
+import { CHECKIN_STATUSES, monthLabel, monthStart, periodMonths } from "@/lib/kpi/checkins"
 
 type DB = Awaited<ReturnType<typeof createClient>>
 
@@ -10,7 +11,7 @@ interface Section { title: string; type: string; kpi_template_items: Item[] }
 async function buildContext(supabase: DB, reviewId: string): Promise<{ employeeName: string; period: string; breakdown: string } | null> {
   const { data: review } = await supabase
     .from("kpi_reviews")
-    .select("period, employee:employees!kpi_reviews_employee_id_fkey(first_name, last_name, job_title)")
+    .select("period, employee_id, employee:employees!kpi_reviews_employee_id_fkey(first_name, last_name, job_title)")
     .eq("id", reviewId)
     .maybeSingle()
   if (!review) return null
@@ -18,7 +19,8 @@ async function buildContext(supabase: DB, reviewId: string): Promise<{ employeeN
   const emp = review.employee as unknown as { first_name: string; last_name: string; job_title: string | null } | null
   const employeeName = emp ? `${emp.first_name} ${emp.last_name}` : "the staff member"
 
-  const [{ data: sections }, { data: scores }, { data: finals }] = await Promise.all([
+  const months = periodMonths(review.period)
+  const [{ data: sections }, { data: scores }, { data: finals }, { data: checkins }] = await Promise.all([
     supabase
       .from("kpi_template_sections")
       .select("title, type, kpi_template_items(id, title, description, max_score, review_id, is_active)")
@@ -27,6 +29,14 @@ async function buildContext(supabase: DB, reviewId: string): Promise<{ employeeN
       .order("position"),
     supabase.from("kpi_scores").select("item_id, score, comments").eq("review_id", reviewId),
     supabase.from("kpi_final_comments").select("comment").eq("review_id", reviewId),
+    months.length
+      ? supabase
+          .from("kpi_monthly_checkins")
+          .select("month, status, comment")
+          .eq("employee_id", review.employee_id)
+          .in("month", months.map(monthStart))
+          .order("month")
+      : Promise.resolve({ data: [] as { month: string; status: string; comment: string | null }[] }),
   ])
 
   // Average submitted scores per item, and collect any comments.
@@ -57,6 +67,16 @@ async function buildContext(supabase: DB, reviewId: string): Promise<{ employeeN
     for (const c of finalComments) lines.push(`- ${c}`)
   }
 
+  // The quarter's monthly manager check-ins, if any.
+  if (checkins && checkins.length) {
+    const label = new Map(CHECKIN_STATUSES.map((st) => [st.value as string, st.label]))
+    lines.push(`\n## Monthly manager check-ins`)
+    for (const c of checkins) {
+      const m = monthLabel(String(c.month).slice(0, 7))
+      lines.push(`- ${m}: ${label.get(c.status) ?? c.status}${c.comment ? ` — ${c.comment}` : ""}`)
+    }
+  }
+
   return { employeeName, period: review.period, breakdown: lines.join("\n") }
 }
 
@@ -72,7 +92,7 @@ export async function generateActionPoints(supabase: DB, reviewId: string): Prom
     if (!ctx) return { generated: false, reason: "no_review" }
 
     const model = process.env.OPENAI_MODEL || "gpt-4o-mini"
-    const system = "You are an HR performance coach. Given a staff member's KPI scores and reviewer comments for a quarter, write concise, specific, actionable improvement points for the NEXT quarter. Focus on the lowest-scoring areas and any concerns raised in comments. Return 3–6 bullet points, each a short imperative sentence. Output plain text bullets starting with '- ', no preamble, no headings."
+    const system = "You are an HR performance coach. Given a staff member's KPI scores and reviewer comments for a quarter, write concise, specific, actionable improvement points for the NEXT quarter. Focus on the lowest-scoring areas and any concerns raised in comments or monthly manager check-ins. Return 3–6 bullet points, each a short imperative sentence. Output plain text bullets starting with '- ', no preamble, no headings."
     const userMsg = `Staff member: ${ctx.employeeName}\nReview period: ${ctx.period}\n\nKPI results and comments:\n${ctx.breakdown}\n\nWrite the action points this person should focus on to improve next quarter.`
 
     const res = await fetch("https://api.openai.com/v1/chat/completions", {

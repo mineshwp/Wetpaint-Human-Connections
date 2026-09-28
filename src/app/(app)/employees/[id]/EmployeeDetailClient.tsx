@@ -26,6 +26,7 @@ import {
   Loader2,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { PortalLoginCard } from "./PortalLoginCard"
 import type {
   EmployeeFull,
   EmployeeDocument,
@@ -1405,6 +1406,8 @@ interface Props {
   setImpersonationAction?: (formData: FormData) => Promise<void>
   /** False for staff — their own profile is the only page they have. */
   showBackLink?: boolean
+  /** HR only: whether this employee heads a department (shown on the login card). */
+  isDepartmentHead?: boolean
 }
 
 export function EmployeeDetailClient({
@@ -1420,6 +1423,7 @@ export function EmployeeDetailClient({
   canImpersonate,
   setImpersonationAction,
   showBackLink = true,
+  isDepartmentHead = false,
 }: Props) {
   const [tab, setTab] = useState<Tab>("personal")
   const [nowMs] = useState(() => Date.now())
@@ -1632,6 +1636,14 @@ export function EmployeeDetailClient({
           </div>
         )}
       </div>
+
+      {isHR && (
+        <PortalLoginCard
+          employeeId={emp.id}
+          employeeName={`${emp.firstName} ${emp.lastName}`}
+          isHead={isDepartmentHead}
+        />
+      )}
 
       {/* ── Stats row ────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 gap-4">

@@ -1,7 +1,8 @@
 "use client"
 
 import { useState } from "react"
-import { Menu, Eye, Users } from "lucide-react"
+import Link from "next/link"
+import { Menu, Eye, Users, KeyRound } from "lucide-react"
 import { Sidebar } from "./Sidebar"
 import { ViewAsPicker } from "./ViewAsPicker"
 
@@ -154,6 +155,13 @@ export function AppShell({
                         <Eye className="h-3.5 w-3.5" />
                         Exit Staff View
                       </button>
+                    )}
+
+                    {!impersonating && (
+                      <Link href="/login/reset-password" onClick={() => setUserMenuOpen(false)} className={menuItemClass}>
+                        <KeyRound className="h-3.5 w-3.5 text-muted-foreground" />
+                        Change password
+                      </Link>
                     )}
 
                     <form action={signOutAction}>

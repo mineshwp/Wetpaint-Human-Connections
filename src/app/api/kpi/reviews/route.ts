@@ -46,6 +46,8 @@ export async function GET() {
         .from("kpi_reviews")
         .select(selectClause)
         .eq("employee_id", myEmployeeId)
+        // Your own review appears once HR publishes it.
+        .in("status", ["active", "completed"])
         .eq("is_archived", false)
         .order("created_at", { ascending: false }),
       supabase

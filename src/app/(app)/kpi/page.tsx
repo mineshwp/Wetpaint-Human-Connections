@@ -15,5 +15,11 @@ export default async function KpiPage() {
 
   if (!role || role === "applicant") redirect("/employees")
 
-  return <KpiPageClient isHR={role === "hr"} currentEmployeeId={employeeId} />
+  return (
+    <KpiPageClient
+      isHR={role === "hr"}
+      currentEmployeeId={employeeId}
+      canCheckin={role === "hr" || role === "dept_head" || role === "manager"}
+    />
+  )
 }

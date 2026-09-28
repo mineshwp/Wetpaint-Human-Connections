@@ -17,6 +17,7 @@ import {
   X,
   Loader2,
   Building2,
+  GraduationCap,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Employee, Department, EmploymentStatus } from "@/lib/types"
@@ -474,6 +475,15 @@ export function EmployeeListClient({ employees, archivedEmployees, departments, 
           >
             <Building2 size={15} /> Manage departments
           </button>
+        )}
+
+        {isHR && (
+          <Link
+            href="/employees/training"
+            className="h-9 rounded-lg border border-border bg-card px-3 text-sm text-foreground hover:bg-muted transition-colors flex items-center gap-1.5"
+          >
+            <GraduationCap size={15} /> Training tracker
+          </Link>
         )}
 
         {isHR && (

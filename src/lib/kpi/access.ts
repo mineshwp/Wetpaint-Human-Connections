@@ -11,8 +11,9 @@ export const PUBLISHED_LOCK_MESSAGE =
   "This review has been published — only HR can make changes now."
 
 /**
- * Who can read a review: HR; the staff member it's about; an invitee; or a
- * department head over the staff member's department once it is published.
+ * Who can read a review: HR; any invitee; and — once it is published — the
+ * staff member it's about and the head of their department. Mirrored by the
+ * database function hc_can_view_review.
  */
 export async function canViewReview(
   supabase: SupabaseClient,
@@ -33,7 +34,7 @@ export async function canViewReview(
     .eq("id", reviewId)
     .single()
   if (!review) return false
-  if (review.employee_id === myEmployeeId) return true
+  if (review.employee_id === myEmployeeId && isPublished(review.status)) return true
 
   const { data: inv } = await supabase
     .from("kpi_review_invitees")

@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 import type { UserRole } from "./types"
 import { readImpersonationCookies } from "./impersonation"
 import { deriveRole, getHeadedDepartmentIds } from "./roles"
+import { createAdminClient } from "./supabase/admin"
 
 /** The signed-in user's own role, ignoring any "view as" session. */
 export async function getRealUserRole(
@@ -65,44 +66,73 @@ export async function canAccessEmployee(
   if (myEmployeeId === targetEmployeeId) return true
   if (role === "staff") return false
 
-  // Department head: anyone in a department they head
-  if (role === "dept_head") {
-    const [headed, { data: targetEmp }] = await Promise.all([
-      getHeadedDepartmentIds(supabase, myEmployeeId),
-      supabase.from("employees").select("department_id").eq("id", targetEmployeeId).single(),
-    ])
-    return !!targetEmp?.department_id && headed.includes(targetEmp.department_id)
-  }
-
-  // Manager: anyone in same department
-  const [{ data: myEmp }, { data: targetEmp }] = await Promise.all([
-    supabase.from("employees").select("department_id").eq("id", myEmployeeId).single(),
-    supabase.from("employees").select("department_id").eq("id", targetEmployeeId).single(),
+  const [scope, { data: target }] = await Promise.all([
+    getTeamScope(supabase, role, myEmployeeId),
+    supabase.from("employees").select("department_id, manager_id").eq("id", targetEmployeeId).single(),
   ])
-
-  return (
-    !!myEmp?.department_id && myEmp.department_id === targetEmp?.department_id
-  )
+  if (!target) return false
+  if (scope.kind === "departments") return !!target.department_id && scope.ids.includes(target.department_id)
+  if (scope.kind === "reports") return target.manager_id === scope.managerId
+  return false
 }
 
 /**
- * Departments whose staff a manager / department head may list: a manager's
- * own department, or every department a head heads. Empty for anyone else.
+ * Who a department head or manager may list and open (besides themselves):
+ *  - department head → every department they head
+ *  - manager → their whole department, or only their direct reports
+ *    (people whose "Reports to" is them), as HR sets on the login card
+ *  - anyone else → nobody
  */
-export async function getScopedDepartmentIds(
+export type TeamScope =
+  | { kind: "none" }
+  | { kind: "departments"; ids: string[] }
+  | { kind: "reports"; managerId: string }
+
+export type ManagerScope = "department" | "reports"
+
+/** A Manager login's scope. Service client: HR may be viewing as that person. */
+export async function getManagerScope(employeeId: string): Promise<ManagerScope> {
+  const { data } = await createAdminClient()
+    .from("app_users")
+    .select("manager_scope")
+    .eq("employee_id", employeeId)
+    .limit(1)
+    .maybeSingle()
+  return data?.manager_scope === "reports" ? "reports" : "department"
+}
+
+export async function getTeamScope(
   supabase: SupabaseClient,
   role: UserRole | null,
   myEmployeeId: string | null
-): Promise<string[]> {
-  if (!myEmployeeId) return []
-  if (role === "dept_head") return getHeadedDepartmentIds(supabase, myEmployeeId)
+): Promise<TeamScope> {
+  if (!myEmployeeId) return { kind: "none" }
+  if (role === "dept_head") {
+    const ids = await getHeadedDepartmentIds(supabase, myEmployeeId)
+    return ids.length ? { kind: "departments", ids } : { kind: "none" }
+  }
   if (role === "manager") {
+    if ((await getManagerScope(myEmployeeId)) === "reports") {
+      return { kind: "reports", managerId: myEmployeeId }
+    }
     const { data } = await supabase
       .from("employees")
       .select("department_id")
       .eq("id", myEmployeeId)
       .single()
-    return data?.department_id ? [data.department_id] : []
+    return data?.department_id ? { kind: "departments", ids: [data.department_id] } : { kind: "none" }
   }
-  return []
+  return { kind: "none" }
+}
+
+// Matches no row — used when a scope is empty.
+const NO_MATCH = "00000000-0000-0000-0000-000000000000"
+
+/** Restrict an employees query builder to a team scope (returns the same builder type). */
+export function applyTeamScope<Q>(query: Q, scope: TeamScope): Q {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const q = query as any
+  if (scope.kind === "departments") return q.in("department_id", scope.ids)
+  if (scope.kind === "reports") return q.eq("manager_id", scope.managerId)
+  return q.eq("id", NO_MATCH)
 }

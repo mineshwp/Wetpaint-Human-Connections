@@ -2,7 +2,7 @@ import { redirect } from "next/navigation"
 import Link from "next/link"
 import { UserPlus } from "lucide-react"
 import { createClient } from "@/lib/supabase/server"
-import { getUserRole, getEmployeeIdForUser, getScopedDepartmentIds } from "@/lib/auth"
+import { getUserRole, getEmployeeIdForUser, getTeamScope, applyTeamScope } from "@/lib/auth"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { EmployeeListClient } from "./EmployeeListClient"
 import type { Employee, Department } from "@/lib/types"
@@ -74,11 +74,10 @@ export default async function EmployeesPage() {
 
   if (role === "manager" || role === "dept_head") {
     const employeeId = await getEmployeeIdForUser(supabase, user.id)
-    // No scoped departments → match nothing rather than falling back to everyone.
-    const deptIds = await getScopedDepartmentIds(supabase, role, employeeId)
-    const scope = deptIds.length > 0 ? deptIds : ["00000000-0000-0000-0000-000000000000"]
-    activeQuery = activeQuery.in("department_id", scope) as typeof activeQuery
-    archivedQuery = archivedQuery.in("department_id", scope) as typeof archivedQuery
+    // An empty scope matches nothing rather than falling back to everyone.
+    const scope = await getTeamScope(supabase, role, employeeId)
+    activeQuery = applyTeamScope(activeQuery, scope)
+    archivedQuery = applyTeamScope(archivedQuery, scope)
   }
 
   const [activeResult, archivedResult, deptResult] = await Promise.all([

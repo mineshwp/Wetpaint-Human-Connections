@@ -39,6 +39,26 @@ Use it to understand the intended UI patterns, component structure, and business
 - Login page is already built — do not touch it
 - Middleware already protects all routes: unauthenticated users are redirected to `/login`
 - After login, redirect to `/employees` (the default landing page for now)
+- **Logins are HR-set temporary passwords, never emailed links** (Microsoft Safe
+  Links auto-opens and burns one-time links). Staff/manager logins: Portal login
+  card on the employee profile (`/api/employees/[id]/login`). HR admins: Settings.
+  Users change their password via the user menu → `/login/reset-password`.
+
+### Database security (RLS)
+
+- Every table has RLS; policies mirror the app rules via helpers `hc_is_hr()`,
+  `hc_employee_id()`, `hc_can_see_employee()`, `hc_can_view_review()`,
+  `hc_can_score()`, `hc_is_team_lead_of()` (see `supabase/migrations/`).
+- Nothing is granted to `anon`. Column guards stop non-HR sessions changing
+  roles or protected employee fields.
+- Signed-in users may read only directory columns of `employees`. Full records
+  (ID, DOB, banking, salary, personal, next of kin) are read with the service
+  client (`createAdminClient`) **after** the app's access check, then masked by
+  `mapEmployeeFull`. New employee columns are not readable by sessions until
+  granted. (Pending: `20260926_06` re-applies this after deploy — see migrations.)
+- **PostgREST gotcha:** a table whose composite primary key is two FKs is
+  treated as a many-to-many junction and makes existing embeds ambiguous
+  (PGRST201). Give link tables a surrogate `id` PK + a unique index.
 
 ---
 
@@ -50,7 +70,7 @@ Roles are stored in Supabase (table: `user_roles` or a `roles` column on the use
 |---|---|
 | `hr_admin` | Full access |
 | `dept_head` | Staff of the department they head (must be a member of it) + their published KPIs (derived from `department_heads`, never stored) |
-| `manager` | Department/team view only |
+| `manager` | HR picks per login: whole department (default) or direct reports only (`app_users.manager_scope`; "Reports to" = `employees.manager_id`) |
 | `staff` | Own data only |
 
 Rules:
@@ -67,7 +87,9 @@ Rules:
 /employees                      → Employee list (HR/Admin + Manager)
 /employees/[id]                 → Employee detail view (HR/Admin + Manager)
 /employees/[id]/edit            → Edit employee (HR/Admin only)
-/kpi                            → KPI reviews list + inline detail accordion (HR/Admin + assigned invitees)
+/kpi                            → KPI reviews list + inline detail accordion (HR/Admin + assigned invitees); Monthly Check-ins tab (HR, heads, managers)
+/kpi/report                     → Quarterly HR report (HR only, printable)
+/employees/training             → Training tracker: expired / expiring / all (HR only)
 ```
 
 All routes under `/employees` and `/kpi` require authentication (handled by middleware).
@@ -134,7 +156,7 @@ GET    /api/employees/[id]/documents         → documents (access-controlled)
 PATCH  /api/documents/[id]/visibility        → toggle hidden_from_employee (HR only)
 GET    /api/employees/[id]/notes             → HR notes (HR only)
 POST   /api/employees/[id]/notes             → add HR note (HR only)
-POST   /api/employees/[id]/invite            → send Supabase invite email (HR only)
+GET/POST/PATCH/DELETE /api/employees/[id]/login → portal login status / create or reset (temp password) / role / disable (HR only)
 ```
 
 ---
@@ -166,6 +188,15 @@ kpi_scores
 kpi_settings
   key, value  (e.g. key="current_period", value="Q1 2026")
 
+kpi_monthly_checkins
+  id, employee_id, month (1st of month), author_id, status ("on_track" | "needs_support" | "concern"), comment
+  # One per staff member per month. Heads/managers write for their department
+  # (never themselves) during the month and until the 10th of the next; then HR
+  # only. Staff don't see their own. Reminder email on the 1st (daily cron).
+
+department_heads
+  id, department_id, employee_id  (a head must be a member of that department)
+
 kpi_rating_scale
   score (1-10 PK), label, annual_increase, birthday_bonus
   # Global reference rubric (not per-period). % values stored as free text so
@@ -193,6 +224,10 @@ GET    /api/kpi/settings                           → fetch settings (e.g. curr
 GET    /api/kpi/rating-scale                        → rating guide rows (any authenticated user)
 PUT    /api/kpi/rating-scale                        → bulk-upsert rating guide rows (HR only)
 POST   /api/kpi/template/sections/[id]             → add item to section (HR only)
+GET    /api/kpi/checkins?month=YYYY-MM              → team list with that month's check-ins (HR, heads, managers)
+GET    /api/kpi/checkins?employee_id=&period=Q3%202026 → one person's check-ins for a quarter
+PUT    /api/kpi/checkins                            → save a check-in (window + scope enforced)
+POST/DELETE /api/departments/[id]/heads             → assign / remove a department head (HR only)
 ```
 
 ### KPI access rules
@@ -347,6 +382,12 @@ Always return proper HTTP status codes: 400, 401, 403, 404, 500.
 | Staff see only their own profile (land on it after login; sidebar "My Profile") | ✅ Done |
 | Department heads (dept-scoped staff + published KPI view; sensitive fields masked; no documents) | ✅ Done |
 | KPI publish lock (reviewers edit only while draft; HR-only after publish) | ✅ Done |
+| Staff portal logins (HR temp passwords, role, disable/restore; change password) | ✅ Built — deploy pending |
+| Database RLS hardening | ✅ Applied — final column grant (`20260926_06`) pending deploy |
+| Monthly manager check-ins (tab, quarter strip, action points input, reminder on the 1st) | ✅ Built — deploy pending |
+| Training tracker + weekly HR expiry reminder (Mondays) | ✅ Built — deploy pending |
+| Quarterly HR report (`/kpi/report`) | ✅ Built — deploy pending |
+| Manager access: whole department or direct reports (login card) + Settings "Who can see what" overview | ✅ Done |
 
 Update this table as features are completed.
 

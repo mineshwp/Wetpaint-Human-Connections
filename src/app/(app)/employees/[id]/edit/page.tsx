@@ -1,5 +1,6 @@
 import { notFound, redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { getUserRole } from "@/lib/auth"
 import { EditEmployeeClient } from "./EditEmployeeClient"
 import type { Department, Employee, EmployeeFull } from "@/lib/types"
@@ -36,8 +37,10 @@ export default async function EditEmployeePage({
   const role = await getUserRole(supabase, user.id)
   if (role !== "hr") redirect(`/employees/${id}`)
 
+  // HR only (checked above). Service client for the full record: sensitive
+  // columns aren't granted to signed-in users.
   const [empResult, deptResult, allEmpResult] = await Promise.all([
-    supabase
+    createAdminClient()
       .from("employees")
       .select(`
         id, employee_number, first_name, last_name, email, phone, job_title,

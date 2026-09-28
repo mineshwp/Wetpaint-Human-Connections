@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { getUserRole, getEmployeeIdForUser, getScopedDepartmentIds } from "@/lib/auth"
+import { getUserRole, getEmployeeIdForUser, getTeamScope, applyTeamScope } from "@/lib/auth"
 import type { Employee } from "@/lib/types"
 import { blockWhileImpersonating } from "@/lib/impersonation"
 
@@ -32,10 +32,10 @@ export async function GET(req: Request) {
 
   if (role === "manager" || role === "dept_head") {
     const employeeId = await getEmployeeIdForUser(supabase, user.id)
-    const deptIds = await getScopedDepartmentIds(supabase, role, employeeId)
-    if (deptIds.length === 0) return NextResponse.json({ employees: [] })
+    const scope = await getTeamScope(supabase, role, employeeId)
+    if (scope.kind === "none") return NextResponse.json({ employees: [] })
 
-    query = query.in("department_id", deptIds) as typeof query
+    query = applyTeamScope(query, scope)
   }
 
   const { data, error } = await query

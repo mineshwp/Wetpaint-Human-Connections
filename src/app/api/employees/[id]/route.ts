@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { getUserRole, getEmployeeIdForUser, canAccessEmployee } from "@/lib/auth"
 import { EMPLOYEE_FULL_SELECT, mapEmployeeFull, employeeFieldAccess } from "@/lib/employees"
 import type { EmployeeFull } from "@/lib/types"
@@ -28,7 +29,9 @@ export async function GET(
   const allowed = await canAccessEmployee(supabase, user.id, role, id)
   if (!allowed) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
 
-  const { data: row, error } = await supabase
+  // Service client: sensitive columns aren't granted to signed-in users. Access
+  // was checked above; mapEmployeeFull strips what this viewer may not see.
+  const { data: row, error } = await createAdminClient()
     .from("employees")
     .select(EMPLOYEE_FULL_SELECT)
     .eq("id", id)
@@ -145,6 +148,21 @@ export async function PATCH(
     }
     const { error: headError } = await drop
     if (headError) console.error("[PATCH /api/employees/[id]] department head cleanup", headError)
+  }
+
+  // Archiving someone also disables their portal login (HR restores it from
+  // the profile's Portal login card if they return). Never touches admins.
+  if (isHR && updates.is_archived === true) {
+    const admin = createAdminClient()
+    const { data: login } = await admin
+      .from("app_users")
+      .select("id, active_role")
+      .eq("employee_id", id)
+      .maybeSingle()
+    if (login && login.active_role !== "hr") {
+      const { error: banError } = await admin.auth.admin.updateUserById(login.id, { ban_duration: "876000h" })
+      if (banError) console.error("[PATCH /api/employees/[id]] disable login on archive", banError)
+    }
   }
 
   // Cascade archive state to the employee's KPI reviews (HR only)

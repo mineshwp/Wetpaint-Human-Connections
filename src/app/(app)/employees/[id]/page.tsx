@@ -1,5 +1,6 @@
 import { notFound, redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { getUserRole, getEmployeeIdForUser, canAccessEmployee } from "@/lib/auth"
 import { getImpersonationContext } from "@/lib/impersonation"
 import { setImpersonation } from "@/app/(app)/actions"
@@ -61,8 +62,10 @@ export default async function EmployeeDetailPage({
   const canViewNotes = isHR
   const canImpersonate = isHR && !viewingAs
 
-  // Fetch employee record
-  const { data: row, error: empError } = await supabase
+  // Fetch employee record. Sensitive columns aren't readable with the user's
+  // session (database column grants), so read with the service client — access
+  // was checked above and mapEmployeeFull strips what this viewer may not see.
+  const { data: row, error: empError } = await createAdminClient()
     .from("employees")
     .select(EMPLOYEE_FULL_SELECT)
     .eq("id", id)
@@ -73,7 +76,7 @@ export default async function EmployeeDetailPage({
   const employee: EmployeeFull = mapEmployeeFull(row, employeeFieldAccess(role, isOwnProfile))
 
   // Fetch sub-resources in parallel
-  const [docsResult, notesResult, trainingResult] = await Promise.all([
+  const [docsResult, notesResult, trainingResult, headResult] = await Promise.all([
     canViewDocuments
       ? (() => {
           let q = supabase
@@ -101,6 +104,10 @@ export default async function EmployeeDetailPage({
       .select("*")
       .eq("employee_id", id)
       .order("date_completed", { ascending: false, nullsFirst: false }),
+
+    isHR
+      ? supabase.from("department_heads").select("department_id").eq("employee_id", id).limit(1)
+      : Promise.resolve({ data: [], error: null }),
   ])
 
   const documents: EmployeeDocument[] = (docsResult.data ?? []) as EmployeeDocument[]
@@ -121,6 +128,7 @@ export default async function EmployeeDetailPage({
       canImpersonate={canImpersonate}
       setImpersonationAction={setImpersonation}
       showBackLink={role !== "staff"}
+      isDepartmentHead={(headResult.data ?? []).length > 0}
     />
   )
 }

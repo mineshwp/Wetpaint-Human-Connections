@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
+import { sendMonthlyCheckinReminders } from "@/lib/kpi/checkin-reminders"
+import { sendWeeklyTrainingReminders } from "@/lib/training-reminders"
 
 // Keep-alive endpoint hit by a Vercel Cron job (see vercel.json).
 // Runs a tiny query so Supabase registers activity and does not auto-pause
@@ -42,5 +44,26 @@ export async function GET(request: Request) {
     return NextResponse.json({ ok: false, error: error.message }, { status: 500 })
   }
 
-  return NextResponse.json({ ok: true, ts: new Date().toISOString() })
+  // On the 1st of each month, remind heads and managers to do last month's
+  // check-ins. Piggybacks on this daily job so no new public cron path is needed.
+  let reminders: { sent: number; month: string } | undefined
+  if (new Date().getUTCDate() === 1) {
+    try {
+      reminders = await sendMonthlyCheckinReminders()
+    } catch (e) {
+      console.error("[cron/keepalive] check-in reminders", e)
+    }
+  }
+
+  // Mondays: training follow-ups for HR.
+  let training: { sent: number; skipped?: string } | undefined
+  if (new Date().getUTCDay() === 1) {
+    try {
+      training = await sendWeeklyTrainingReminders()
+    } catch (e) {
+      console.error("[cron/keepalive] training reminders", e)
+    }
+  }
+
+  return NextResponse.json({ ok: true, ts: new Date().toISOString(), reminders, training })
 }
