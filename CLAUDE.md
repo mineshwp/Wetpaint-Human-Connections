@@ -86,7 +86,7 @@ Rules:
 /employees                      → Employee list (HR/Admin + Manager)
 /employees/[id]                 → Employee detail view (HR/Admin + Manager)
 /employees/[id]/edit            → Edit employee (HR/Admin only)
-/kpi                            → KPI reviews list + inline detail accordion (HR/Admin + assigned invitees); Monthly Check-ins tab (HR, managers)
+/kpi                            → Tabs: All Reviews (HR) · My KPI (own published reviews + quarter summary) · My Team (managers: published reviews of their team) · Reviews to Score (reviews you're invited to; shown only if any) · Monthly Check-ins (HR, managers)
 /kpi/report                     → Quarterly HR report (HR only, printable)
 /employees/training             → Training tracker: expired / expiring / all (HR only)
 ```
@@ -236,6 +236,7 @@ GET    /api/kpi/checkins?month=YYYY-MM              → team list with that mont
 GET    /api/kpi/checkins?employee_id=&period=Q3%202026 → one person's check-ins for a quarter
 PUT    /api/kpi/checkins                            → save a check-in (window + scope enforced)
 GET/PUT/POST/DELETE /api/kpi/reviews/[id]/action-points → draft+approved state / save or approve / AI regenerate / hide from staff (HR only)
+GET    /api/kpi/team                                → the manager's team for the My Team tab (label + members)
 GET/PATCH /api/settings/access                    → who can see what: everyone's Reports to / access / login; bulk-set Reports to or access (HR only; no reporting loops)
 GET/PUT /api/settings/ai                           → AI settings, usage, recent runs (HR only; key never returned)
 POST/DELETE /api/settings/ai/key                   → save (validated with OpenAI) / remove the API key
@@ -410,6 +411,7 @@ Always return proper HTTP status codes: 400, 401, 403, 404, 500.
 | Settings tabs (Administrators, Who can see what, AI) | ✅ Done |
 | AI settings (encrypted key, model, prompt + try-it, spend cap, usage log) + HR approval/editing of action points | ✅ Done |
 | Access on the person (not the login) + editable "Who can see what" (filters, bulk Reports to / access, team view) | ✅ Done |
+| KPI page tabs split by purpose: My KPI / My Team / Reviews to Score | ✅ Done |
 
 Update this table as features are completed.
 
