@@ -100,11 +100,28 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 }
 
 // Ask the AI for a fresh draft (replaces the current draft, never the approved text).
-export async function POST(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+// Body { auto: true }: the automatic draft for a completed review that has
+// none yet (sent when HR opens it) — skipped when AI action points are off,
+// the review isn't completed, or HR already has a draft/approved text.
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const ctx = await hrContext(true)
   if (ctx.error) return ctx.error
   const { supabase, employeeId } = ctx
   const { id } = await params
+  const body = await req.json().catch(() => null)
+
+  if (body?.auto) {
+    const s = await state(supabase, id)
+    if (!s) return NextResponse.json({ error: "Review not found" }, { status: 404 })
+    if (s.reviewStatus !== "completed" || s.draft || s.approved) return NextResponse.json({ ...s, skipped: true })
+    const r = await generateActionPoints(supabase, id, { triggeredBy: employeeId, onComplete: true })
+    if (!r.ok && (r.reason === "disabled" || r.reason === "kept_hr_draft")) {
+      return NextResponse.json({ ...(await state(supabase, id)), skipped: true })
+    }
+    if (!r.ok) return NextResponse.json({ error: r.message, reason: r.reason }, { status: r.reason === "budget" || r.reason === "no_api_key" ? 400 : 502 })
+    return NextResponse.json(await state(supabase, id))
+  }
+
   const r = await generateActionPoints(supabase, id, { triggeredBy: employeeId })
   if (!r.ok) return NextResponse.json({ error: r.message, reason: r.reason }, { status: r.reason === "budget" || r.reason === "no_api_key" ? 400 : 502 })
   return NextResponse.json(await state(supabase, id))

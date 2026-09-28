@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { ChevronDown, Check, Eye, EyeOff, ListChecks, Loader2, RotateCcw, Sparkles } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -25,7 +25,8 @@ export function ActionPointsEditor({ reviewId, reviewStatus, onApprovedChange }:
   const [open, setOpen] = useState(true)
   const [s, setS] = useState<State | null>(null)
   const [text, setText] = useState("")
-  const [busy, setBusy] = useState<null | "save" | "approve" | "regen" | "unpublish">(null)
+  const [busy, setBusy] = useState<null | "save" | "approve" | "regen" | "unpublish" | "auto">(null)
+  const autoTried = useRef(false)
   const [err, setErr] = useState<string | null>(null)
   const [note, setNote] = useState<string | null>(null)
 
@@ -36,10 +37,28 @@ export function ActionPointsEditor({ reviewId, reviewStatus, onApprovedChange }:
 
   useEffect(() => {
     let cancelled = false
-    fetch(`/api/kpi/reviews/${reviewId}/action-points`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => { if (!cancelled && d) apply(d) })
-      .catch(() => { if (!cancelled) setErr("Couldn't load action points") })
+    async function load() {
+      const res = await fetch(`/api/kpi/reviews/${reviewId}/action-points`)
+      const d: State | null = res.ok ? await res.json() : null
+      if (cancelled || !d) return
+      apply(d)
+      // A completed review with nothing yet gets its AI draft now (covers
+      // reviews completed before auto-drafting, or a draft that failed).
+      // Staff still see nothing until HR approves.
+      if (d.reviewStatus !== "completed" || d.draft || d.approved || autoTried.current) return
+      autoTried.current = true
+      setBusy("auto")
+      const r = await fetch(`/api/kpi/reviews/${reviewId}/action-points`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ auto: true }),
+      })
+      const out = await r.json().catch(() => null)
+      setBusy(null)
+      if (cancelled) return
+      if (!r.ok) { setErr(`Couldn't draft action points automatically: ${out?.error ?? "unknown error"}`); return }
+      apply(out)
+      if (out?.draft && !out.skipped) setNote("AI draft ready — check it, edit anything, then approve.")
+    }
+    load().catch(() => { if (!cancelled) setErr("Couldn't load action points") })
     return () => { cancelled = true }
   }, [reviewId, reviewStatus, apply])
 
@@ -98,6 +117,11 @@ export function ActionPointsEditor({ reviewId, reviewStatus, onApprovedChange }:
                 <p className="text-xs text-muted-foreground">
                   {hasDraft ? "Staff currently see the previously approved version. " : ""}
                   Approved{s.approvedBy ? ` by ${s.approvedBy}` : ""} {fmt(s.approvedAt)}.
+                </p>
+              )}
+              {busy === "auto" && (
+                <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                  <Loader2 size={12} className="animate-spin text-primary" /> Drafting action points with AI…
                 </p>
               )}
               <textarea value={text} onChange={(e) => setText(e.target.value)} rows={7} maxLength={5000}
