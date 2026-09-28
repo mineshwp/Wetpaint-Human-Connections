@@ -153,8 +153,11 @@ function DeptRow({ dept, others, people, deptName, onSave, onDelete, onSetManage
           </>
         )}
         <button type="button" onClick={() => setShowStaff((v) => !v)} aria-expanded={showStaff}
-          className="inline-flex items-center gap-0.5 text-xs text-muted-foreground hover:text-foreground shrink-0 rounded px-1 -mx-1">
-          {dept.employeeCount} staff
+          className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground shrink-0 rounded px-1 -mx-1">
+          {dept.members.length} staff
+          {dept.employeeCount > dept.members.length && (
+            <span className="text-muted-foreground/70">| {dept.employeeCount - dept.members.length} archived</span>
+          )}
           <ChevronDown size={12} className={cn("transition-transform", showStaff && "rotate-180")} />
         </button>
         {!editing && !confirming && (
@@ -190,11 +193,6 @@ function DeptRow({ dept, others, people, deptName, onSave, onDelete, onSetManage
               ))}
             </ul>
           )}
-          {dept.employeeCount > dept.members.length && (
-            <p className="mt-1.5 text-[11px] text-muted-foreground">
-              + {dept.employeeCount - dept.members.length} archived
-            </p>
-          )}
         </div>
       )}
 
@@ -222,7 +220,7 @@ function DeptRow({ dept, others, people, deptName, onSave, onDelete, onSetManage
               <> {dept.managers.map((m) => m.name).join(" and ")} will no longer be department {dept.managers.length === 1 ? "manager" : "managers"}.</>
             )}
             {dept.employeeCount > 0 && (
-              <> It has <span className="font-semibold">{dept.employeeCount} staff</span>. Choose where to move them:</>
+              <> It has <span className="font-semibold">{dept.members.length} staff{dept.employeeCount > dept.members.length ? ` and ${dept.employeeCount - dept.members.length} archived` : ""}</span>. Choose where to move them:</>
             )}
           </p>
           {dept.employeeCount > 0 && (
