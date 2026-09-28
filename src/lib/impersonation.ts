@@ -3,6 +3,7 @@ import { NextResponse } from "next/server"
 import type { SupabaseClient } from "@supabase/supabase-js"
 import type { UserRole } from "./types"
 import { createAdminClient } from "./supabase/admin"
+import { resolveRole } from "./access-levels"
 
 // "View as" — HR/Admin previews the app exactly as another employee sees it.
 // Stored in httpOnly cookies set by /api/impersonate. The cookies are only
@@ -101,14 +102,16 @@ export async function startViewAs(
   let role: UserRole = "staff"
   if (!(opts.asStaff && isSelf)) {
     // app_users RLS is own-row-only, so the target's role needs the service role.
-    const { data: target } = await createAdminClient()
-      .from("app_users")
-      .select("active_role")
-      .eq("employee_id", emp.id)
-      .limit(1)
-      .maybeSingle()
-    const targetRole = target?.active_role as UserRole | undefined
-    if (targetRole && VIEWABLE_ROLES.includes(targetRole)) role = targetRole
+    // No login yet → viewed with the access level HR has set for them, so a
+    // manager can be checked before they ever sign in.
+    const admin = createAdminClient()
+    const [{ data: target }, { data: level }] = await Promise.all([
+      admin.from("app_users").select("active_role").eq("employee_id", emp.id).limit(1).maybeSingle(),
+      admin.from("employees").select("access_level").eq("id", emp.id).maybeSingle(),
+    ])
+    const stored = (target?.active_role as UserRole | undefined) ?? "staff"
+    const resolved = resolveRole(stored, level?.access_level)
+    if (resolved && VIEWABLE_ROLES.includes(resolved)) role = resolved
   }
 
   const employeeName = `${emp.first_name} ${emp.last_name}`.trim()

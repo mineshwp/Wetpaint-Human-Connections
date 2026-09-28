@@ -1,34 +1,14 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import Link from "next/link"
 import { KeyRound, Loader2, Copy, Check, ShieldOff, ShieldCheck } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { accessLabel } from "@/lib/access-levels"
 
 type Login =
   | { state: "none" }
-  | { state: "pending" | "active" | "disabled"; role: string; managerScope: "department" | "reports" | "line"; userId: string }
-
-// What HR picks on the card = stored role + manager scope.
-type Access = "staff" | "manager_reports" | "manager_line" | "manager_department"
-const ACCESS_OPTIONS: { value: Access; label: string }[] = [
-  { value: "staff", label: "Staff — own profile" },
-  { value: "manager_reports", label: "Manager — their direct reports" },
-  { value: "manager_line", label: "Manager — their whole reporting line" },
-  { value: "manager_department", label: "Manager — their whole department" },
-]
-const SCOPE_OF: Record<Exclude<Access, "staff">, "reports" | "line" | "department"> = {
-  manager_reports: "reports",
-  manager_line: "line",
-  manager_department: "department",
-}
-function toBody(a: Access) {
-  return a === "staff" ? { role: "staff" } : { role: "manager", manager_scope: SCOPE_OF[a] }
-}
-function fromLogin(l: Login | null): Access | null {
-  if (!l || l.state === "none") return null
-  if (l.role !== "manager") return "staff"
-  return l.managerScope === "reports" ? "manager_reports" : l.managerScope === "line" ? "manager_line" : "manager_department"
-}
+  | { state: "pending" | "active" | "disabled"; role: string; userId: string }
 
 const STATE_LABEL: Record<string, { text: string; cls: string }> = {
   none: { text: "No login", cls: "bg-muted text-muted-foreground border-border" },
@@ -37,22 +17,16 @@ const STATE_LABEL: Record<string, { text: string; cls: string }> = {
   disabled: { text: "Disabled", cls: "bg-red-50 text-red-700 border-red-200" },
 }
 
-const ACCESS_LABEL: Record<Access, string> = {
-  staff: "Staff",
-  manager_reports: "Manager · direct reports",
-  manager_line: "Manager · whole reporting line",
-  manager_department: "Manager · whole department",
-}
-
-// HR-only: create, reset, re-role or disable an employee's portal login.
+// HR-only: create, reset, disable or restore an employee's portal login.
 // Logins use a temporary password HR hands over (no emailed links — Safe Links
-// consumes them). A manager's team comes from "Reports to" or their department.
+// consumes them). What they can see is their access level, set in
+// Settings → Who can see what (works before they have a login).
 export function PortalLoginCard({ employeeId, employeeName }: {
   employeeId: string
   employeeName: string
 }) {
   const [login, setLogin] = useState<Login | null>(null)
-  const [access, setAccess] = useState<Access>("staff")
+  const [accessLevel, setAccessLevel] = useState<string>("staff")
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const [temp, setTemp] = useState<string | null>(null)
@@ -62,18 +36,18 @@ export function PortalLoginCard({ employeeId, employeeName }: {
     let cancelled = false
     fetch(`/api/employees/${employeeId}/login`)
       .then((r) => r.json())
-      .then((d) => { if (!cancelled) setLogin(d.login ?? { state: "none" }) })
+      .then((d) => {
+        if (cancelled) return
+        setLogin(d.login ?? { state: "none" })
+        setAccessLevel(d.accessLevel ?? "staff")
+      })
       .catch(() => { if (!cancelled) setErr("Couldn't load login status") })
     return () => { cancelled = true }
   }, [employeeId])
 
-  async function call(method: "POST" | "PATCH" | "DELETE", body?: object) {
+  async function call(method: "POST" | "DELETE") {
     setBusy(true); setErr(null)
-    const res = await fetch(`/api/employees/${employeeId}/login`, {
-      method,
-      headers: { "Content-Type": "application/json" },
-      body: body ? JSON.stringify(body) : undefined,
-    })
+    const res = await fetch(`/api/employees/${employeeId}/login`, { method })
     const data = await res.json().catch(() => null)
     setBusy(false)
     if (!res.ok) { setErr(data?.error ?? "Something went wrong"); return }
@@ -83,9 +57,7 @@ export function PortalLoginCard({ employeeId, employeeName }: {
 
   const state = login?.state ?? "none"
   const badge = STATE_LABEL[state]
-  const storedRole = login && login.state !== "none" ? login.role : null
-  const isAdmin = storedRole === "hr"
-  const storedAccess = fromLogin(login)
+  const isAdmin = login && login.state !== "none" && login.role === "hr"
 
   return (
     <div className="rounded-xl border border-border bg-card p-4 space-y-3">
@@ -95,12 +67,15 @@ export function PortalLoginCard({ employeeId, employeeName }: {
         {login && (
           <span className={cn("text-[11px] font-medium rounded-full border px-2 py-0.5", badge.cls)}>{badge.text}</span>
         )}
-        {storedRole && (
+        {!login && !err && <Loader2 size={13} className="animate-spin text-muted-foreground" />}
+        {login && (
           <span className="text-xs text-muted-foreground">
-            {isAdmin ? "HR / Admin" : storedAccess ? ACCESS_LABEL[storedAccess] : storedRole}
+            Access: {isAdmin ? "HR / Admin" : accessLabel(accessLevel)}
+            {!isAdmin && (
+              <> · <Link href="/settings?tab=access" className="underline hover:text-foreground">change</Link></>
+            )}
           </span>
         )}
-        {!login && !err && <Loader2 size={13} className="animate-spin text-muted-foreground" />}
       </div>
 
       {temp && (
@@ -123,25 +98,12 @@ export function PortalLoginCard({ employeeId, employeeName }: {
       {login && !isAdmin && (
         <div className="flex items-center gap-2 flex-wrap">
           {state === "none" ? (
-            <>
-              <select value={access} onChange={(e) => setAccess(e.target.value as Access)} disabled={busy}
-                aria-label="Access"
-                className="rounded-md border border-border bg-card px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary">
-                {ACCESS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-              </select>
-              <button type="button" onClick={() => call("POST", toBody(access))} disabled={busy}
-                className="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
-                {busy ? <Loader2 size={12} className="animate-spin" /> : <KeyRound size={12} />} Create login
-              </button>
-            </>
+            <button type="button" onClick={() => call("POST")} disabled={busy}
+              className="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
+              {busy ? <Loader2 size={12} className="animate-spin" /> : <KeyRound size={12} />} Create login
+            </button>
           ) : (
             <>
-              <select value={storedAccess ?? "staff"} disabled={busy || state === "disabled"}
-                onChange={(e) => call("PATCH", toBody(e.target.value as Access))}
-                aria-label="Access"
-                className="rounded-md border border-border bg-card px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary">
-                {ACCESS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-              </select>
               <button type="button" onClick={() => call("POST")} disabled={busy}
                 className="inline-flex items-center gap-1 rounded-md border border-border px-3 py-1.5 text-xs hover:bg-muted disabled:opacity-50">
                 {state === "disabled" ? <ShieldCheck size={12} /> : <KeyRound size={12} />}
@@ -161,7 +123,7 @@ export function PortalLoginCard({ employeeId, employeeName }: {
       )}
 
       {isAdmin && (
-        <p className="text-xs text-muted-foreground">Admin access is managed in Settings → Admins.</p>
+        <p className="text-xs text-muted-foreground">Admin access is managed in Settings → Administrators.</p>
       )}
       {err && <p className="text-xs text-destructive">{err}</p>}
     </div>

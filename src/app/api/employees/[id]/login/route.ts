@@ -10,23 +10,19 @@ import { blockWhileImpersonating } from "@/lib/impersonation"
 // send them. HR creates the login, gets a temporary password once, and hands it
 // over; the person changes it from the user menu after signing in.
 //
-// Stored roles here are "staff" or "manager". A Manager sees their whole
-// department, their direct reports, or their whole reporting line
-// (manager_scope). HR admins are managed in Settings → Admins.
+// What the person can see is NOT set here: it's their access level
+// (employees.access_level), set by HR in Settings → Who can see what — even
+// before they have a login. HR admins are managed in Settings → Administrators.
 //
 // app_users RLS is own-row-only, so cross-user reads/writes use the service-role
 // client — HR authorization is enforced first.
 
-const LOGIN_ROLES = ["staff", "manager"] as const
-type LoginRole = (typeof LOGIN_ROLES)[number]
-const MANAGER_SCOPES = ["department", "reports", "line"] as const
-type ManagerScope = (typeof MANAGER_SCOPES)[number]
 // Effectively permanent; lifted when HR restores access.
 const BANNED = "876000h"
 
 export type LoginStatus =
   | { state: "none" }
-  | { state: "pending" | "active" | "disabled"; role: string; managerScope: ManagerScope; userId: string }
+  | { state: "pending" | "active" | "disabled"; role: string; userId: string }
 
 async function authorize() {
   const supabase = await createClient()
@@ -41,7 +37,7 @@ async function loadStatus(employeeId: string): Promise<LoginStatus> {
   const admin = createAdminClient()
   const { data: appUser } = await admin
     .from("app_users")
-    .select("id, active_role, accepted_at, manager_scope")
+    .select("id, active_role, accepted_at")
     .eq("employee_id", employeeId)
     .limit(1)
     .maybeSingle()
@@ -53,7 +49,6 @@ async function loadStatus(employeeId: string): Promise<LoginStatus> {
   return {
     state: disabled ? "disabled" : appUser.accepted_at ? "active" : "pending",
     role: appUser.active_role,
-    managerScope: MANAGER_SCOPES.includes(appUser.manager_scope) ? appUser.manager_scope : "department",
     userId: appUser.id,
   }
 }
@@ -62,13 +57,12 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const auth = await authorize()
   if (auth.error) return auth.error
   const { id } = await params
-  return NextResponse.json({ login: await loadStatus(id) })
+  const { data: emp } = await createAdminClient().from("employees").select("access_level").eq("id", id).maybeSingle()
+  return NextResponse.json({ login: await loadStatus(id), accessLevel: emp?.access_level ?? "staff" })
 }
 
 // Create a login, or reset the password (and restore access) for an existing one.
-// Body: { role?: "staff" | "manager", manager_scope?: "department" | "reports" | "line" }
-// — only applied when creating.
-export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const viewOnly = await blockWhileImpersonating()
   if (viewOnly) return viewOnly
   const auth = await authorize()
@@ -76,9 +70,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const { supabase } = auth
   const { id } = await params
 
-  const body = await req.json().catch(() => ({}))
-  const requestedRole: LoginRole = LOGIN_ROLES.includes(body?.role) ? body.role : "staff"
-  const requestedScope: ManagerScope = MANAGER_SCOPES.includes(body?.manager_scope) ? body.manager_scope : "department"
 
   const { data: emp } = await supabase
     .from("employees")
@@ -138,44 +129,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const { error: insertError } = await admin
     .from("app_users")
     .upsert(
-      { id: authUserId, employee_id: emp.id, active_role: requestedRole, manager_scope: requestedScope, accepted_at: null },
+      { id: authUserId, employee_id: emp.id, active_role: "staff", accepted_at: null },
       { onConflict: "id" }
     )
   if (insertError) return NextResponse.json({ error: insertError.message }, { status: 500 })
 
   return NextResponse.json({ login: await loadStatus(id), tempPassword: temp }, { status: 201 })
-}
-
-// Change what the login can see. Body: { role: "staff" | "manager", manager_scope?: "department" | "reports" | "line" }
-export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const viewOnly = await blockWhileImpersonating()
-  if (viewOnly) return viewOnly
-  const auth = await authorize()
-  if (auth.error) return auth.error
-  const { id } = await params
-
-  const body = await req.json().catch(() => ({}))
-  if (!LOGIN_ROLES.includes(body?.role)) {
-    return NextResponse.json({ error: "role must be staff or manager" }, { status: 400 })
-  }
-
-  const current = await loadStatus(id)
-  if (current.state === "none") return NextResponse.json({ error: "No login yet" }, { status: 404 })
-  if (current.role === "hr") {
-    return NextResponse.json(
-      { error: "This person is an admin — change their access in Settings → Admins" },
-      { status: 400 }
-    )
-  }
-
-  const managerScope: ManagerScope = MANAGER_SCOPES.includes(body?.manager_scope) ? body.manager_scope : "department"
-  const { error } = await createAdminClient()
-    .from("app_users")
-    .update({ active_role: body.role, manager_scope: managerScope, updated_at: new Date().toISOString() })
-    .eq("id", current.userId)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-
-  return NextResponse.json({ login: await loadStatus(id) })
 }
 
 // Disable the login (the account and its history stay; POST restores it).

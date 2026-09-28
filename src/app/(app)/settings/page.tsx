@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils"
 import { AdminsPanel } from "./AdminsPanel"
 import { AccessOverview } from "./AccessOverview"
 import { AiSettingsPanel } from "./AiSettingsPanel"
-import { loadAccessOverview } from "@/lib/access-overview"
+import { loadAccessData } from "@/lib/access-overview"
 
 export const metadata = { title: "Settings — Human Connections" }
 
@@ -34,7 +34,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   const tab: TabId = TABS.some((t) => t.id === rawTab) ? (rawTab as TabId) : "admins"
 
   return (
-    <div className="space-y-6 max-w-4xl">
+    <div className="space-y-6 max-w-6xl">
       <PageHeader title="Settings" />
 
       <nav className="flex items-center gap-1 border-b border-border overflow-x-auto" aria-label="Settings sections">
@@ -58,7 +58,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       </nav>
 
       {tab === "admins" && <AdminsPanel initialAdmins={await listAdmins()} currentUserId={user.id} />}
-      {tab === "access" && <AccessOverview rows={await loadAccessOverview()} />}
+      {tab === "access" && <AccessOverview initial={await loadAccessData()} />}
       {tab === "ai" && <AiSettingsPanel />}
     </div>
   )

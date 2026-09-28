@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { readImpersonationCookies } from "@/lib/impersonation"
+import { getRealUserRole } from "@/lib/auth"
 import { AppShell } from "@/components/layout/AppShell"
 import { signOut } from "./actions"
 import type { UserRole } from "@/lib/types"
@@ -41,7 +42,7 @@ export default async function AppLayout({
       .is("accepted_at", null),
   ])
   const employeeId: string | null = me?.employee_id ?? null
-  const role = (me?.active_role as UserRole | undefined) ?? null
+  const role = await getRealUserRole(supabase, user.id)
   const impersonating = role === "hr" ? viewCookies : null
   const effectiveRole = impersonating ? impersonating.role : role
   const effectiveEmployeeId = impersonating ? impersonating.employeeId : employeeId

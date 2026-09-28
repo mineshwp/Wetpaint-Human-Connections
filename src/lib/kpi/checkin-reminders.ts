@@ -19,10 +19,10 @@ export async function sendMonthlyCheckinReminders(now = new Date()): Promise<{ s
   await admin.from("kpi_settings").upsert({ key: SENT_KEY, value: month }, { onConflict: "key" })
 
   const [{ data: logins }, { data: staff }] = await Promise.all([
-    admin.from("app_users").select("id, employee_id, active_role, manager_scope").eq("active_role", "manager"),
+    admin.from("app_users").select("id, employee_id, active_role").neq("active_role", "hr"),
     admin
       .from("employees")
-      .select("id, first_name, email, department_id, manager_id")
+      .select("id, first_name, email, department_id, manager_id, access_level")
       .eq("is_archived", false)
       .in("status", ["active", "onboarding", "on-leave"]),
   ])
@@ -38,13 +38,13 @@ export async function sendMonthlyCheckinReminders(now = new Date()): Promise<{ s
     const emp = login.employee_id ? byId.get(login.employee_id) : undefined
     if (!emp?.email) continue
 
-    // Same scope rules as getTeamScope in lib/auth.ts.
+    // Same scope rules as getTeamScope in lib/auth.ts (managers only).
     let count = 0
-    if (login.manager_scope === "reports") {
+    if (emp.access_level === "manager_reports") {
       count = (staff ?? []).filter((e) => e.manager_id === emp.id).length
-    } else if (login.manager_scope === "line") {
+    } else if (emp.access_level === "manager_line") {
       count = reportingLine(staff ?? [], emp.id).length
-    } else if (emp.department_id) {
+    } else if (emp.access_level === "manager_department" && emp.department_id) {
       count = teamSize([emp.department_id], emp.id)
     }
     if (count === 0) continue

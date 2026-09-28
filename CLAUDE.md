@@ -69,7 +69,7 @@ Roles are stored in Supabase (table: `user_roles` or a `roles` column on the use
 | Role | Access |
 |---|---|
 | `hr_admin` | Full access |
-| `manager` | HR picks per login (`app_users.manager_scope`): `reports` = direct reports, `line` = whole reporting line, `department` = whole department (default). Teams come from "Reports to" (`employees.manager_id`) / Department. Sees team profiles (masked), published KPI reviews and monthly check-ins |
+| `manager` | Set per PERSON, not login: `employees.access_level` = `manager_reports` (direct reports) / `manager_line` (whole reporting line) / `manager_department` (whole department); `staff` = own data. Teams come from "Reports to" (`employees.manager_id`) / Department. HR edits both in Settings → Who can see what (works before a login exists). Sees team profiles (masked), published KPI reviews and monthly check-ins |
 | `staff` | Own data only |
 
 Rules:
@@ -153,7 +153,7 @@ GET    /api/employees/[id]/documents         → documents (access-controlled)
 PATCH  /api/documents/[id]/visibility        → toggle hidden_from_employee (HR only)
 GET    /api/employees/[id]/notes             → HR notes (HR only)
 POST   /api/employees/[id]/notes             → add HR note (HR only)
-GET/POST/PATCH/DELETE /api/employees/[id]/login → portal login status / create or reset (temp password) / role / disable (HR only)
+GET/POST/DELETE /api/employees/[id]/login        → portal login status / create or reset (temp password) / disable (HR only). Access is NOT set here
 ```
 
 ---
@@ -236,6 +236,7 @@ GET    /api/kpi/checkins?month=YYYY-MM              → team list with that mont
 GET    /api/kpi/checkins?employee_id=&period=Q3%202026 → one person's check-ins for a quarter
 PUT    /api/kpi/checkins                            → save a check-in (window + scope enforced)
 GET/PUT/POST/DELETE /api/kpi/reviews/[id]/action-points → draft+approved state / save or approve / AI regenerate / hide from staff (HR only)
+GET/PATCH /api/settings/access                    → who can see what: everyone's Reports to / access / login; bulk-set Reports to or access (HR only; no reporting loops)
 GET/PUT /api/settings/ai                           → AI settings, usage, recent runs (HR only; key never returned)
 POST/DELETE /api/settings/ai/key                   → save (validated with OpenAI) / remove the API key
 POST   /api/settings/ai/test                        → test key, list models
@@ -407,7 +408,8 @@ Always return proper HTTP status codes: 400, 401, 403, 404, 500.
 | Quarterly HR report (`/kpi/report`) | ✅ Built — deploy pending |
 | Manager access levels: direct reports / whole reporting line / whole department (login card) + Settings "Who can see what" | ✅ Done |
 | Settings tabs (Administrators, Who can see what, AI) | ✅ Done |
-| AI settings (encrypted key, model, prompt + try-it, spend cap, usage log) + HR approval/editing of action points | ✅ Done — push pending |
+| AI settings (encrypted key, model, prompt + try-it, spend cap, usage log) + HR approval/editing of action points | ✅ Done |
+| Access on the person (not the login) + editable "Who can see what" (filters, bulk Reports to / access, team view) | ✅ Done |
 
 Update this table as features are completed.
 
