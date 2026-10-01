@@ -1145,7 +1145,7 @@ function ActionPoints({ isHR, isOwnReview, actionPoints, generatedAt }: {
   actionPoints?: string | null
   generatedAt?: string | null
 }) {
-  const [open, setOpen] = useState(true)
+  const [open, setOpen] = useState(false)
   const points = (actionPoints ?? "")
     .split("\n")
     .map(l => l.replace(/^\s*[-*•]\s?/, "").trim())
@@ -1966,6 +1966,14 @@ function ReviewCards({ list, mode, scores, reviewTemplates, finalComments, curre
   loadAll: (opts?: { silent?: boolean }) => Promise<void>
   showToast: (msg: string) => void
 }) {
+  // Each quarter starts collapsed to its header (title, status, score); click to open.
+  const [openIds, setOpenIds] = useState<Set<string>>(new Set())
+  const toggle = (id: string) => setOpenIds(prev => {
+    const next = new Set(prev)
+    if (next.has(id)) next.delete(id); else next.add(id)
+    return next
+  })
+
   return (
     <div className="space-y-4">
       {list.map(review => {
@@ -1975,9 +1983,20 @@ function ReviewCards({ list, mode, scores, reviewTemplates, finalComments, curre
         const showBody = mode === "score" ? inviteeActive : published
         // Only a reviewer on a draft (or HR) gets editable rows; null = view only.
         const editorId = mode === "score" && (!published || isHR) ? currentEmployeeId : null
+        const isOpen = showBody && openIds.has(review.id)
+        const total = showBody
+          ? computeReviewScore(reviewTemplates[review.id] ?? [], scores[review.id] ?? [], review.kpi_review_invitees ?? [])
+          : null
         return (
-          <div key={review.id} className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
-            <div className="px-5 py-4 flex items-center justify-between border-b border-border gap-4">
+          <div key={review.id} className={cn("rounded-2xl border border-border bg-card overflow-hidden transition-all", isOpen ? "shadow-md" : "shadow-sm")}>
+            <div
+              role={showBody ? "button" : undefined}
+              tabIndex={showBody ? 0 : undefined}
+              aria-expanded={showBody ? isOpen : undefined}
+              onClick={showBody ? () => toggle(review.id) : undefined}
+              onKeyDown={showBody ? e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(review.id) } } : undefined}
+              className={cn("px-5 py-4 flex items-center justify-between gap-4", isOpen && "border-b border-border", showBody && "cursor-pointer select-none transition-colors", showBody && !isOpen && "hover:bg-muted/20")}
+            >
               <div className="min-w-0">
                 <p className="font-bold text-base leading-snug">{review.title}</p>
                 <p className="text-xs text-muted-foreground mt-0.5">
@@ -1990,7 +2009,8 @@ function ReviewCards({ list, mode, scores, reviewTemplates, finalComments, curre
                 {myInv?.status === "pending" && (
                   <>
                     <Button size="sm" className="h-7 text-xs gap-1"
-                      onClick={async () => {
+                      onClick={async (e) => {
+                        e.stopPropagation()
                         await fetch(`/api/kpi/invitees/${myInv.id}/respond`, {
                           method: "POST", headers: { "Content-Type": "application/json" },
                           body: JSON.stringify({ response: "accepted" }),
@@ -2001,7 +2021,8 @@ function ReviewCards({ list, mode, scores, reviewTemplates, finalComments, curre
                       <Check size={11} /> Accept
                     </Button>
                     <Button size="sm" variant="outline" className="h-7 text-xs gap-1 text-destructive border-destructive/40 hover:bg-destructive/10"
-                      onClick={async () => {
+                      onClick={async (e) => {
+                        e.stopPropagation()
                         await fetch(`/api/kpi/invitees/${myInv.id}/respond`, {
                           method: "POST", headers: { "Content-Type": "application/json" },
                           body: JSON.stringify({ response: "declined" }),
@@ -2018,9 +2039,19 @@ function ReviewCards({ list, mode, scores, reviewTemplates, finalComments, curre
                     {(STATUS_DISPLAY[review.status] ?? STATUS_DISPLAY.draft).label}
                   </span>
                 )}
+                {total?.hasScores && (
+                  <span className="hidden sm:inline text-sm font-bold text-foreground tabular-nums">
+                    {fmtScore(total.pct)}<span className="text-xs font-medium text-muted-foreground">%</span>
+                  </span>
+                )}
+                {showBody && (
+                  <div className={cn("w-7 h-7 rounded-full border border-border flex items-center justify-center text-muted-foreground transition-transform shrink-0", !isOpen && "-rotate-90")}>
+                    <ChevronDown size={14} />
+                  </div>
+                )}
               </div>
             </div>
-            {showBody && (
+            {isOpen && (
               <div className="px-5 py-5 space-y-3">
                 {published && !editorId && (
                   <p className="text-xs text-muted-foreground flex items-center gap-1.5">

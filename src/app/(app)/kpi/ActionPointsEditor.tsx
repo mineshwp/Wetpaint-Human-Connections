@@ -22,7 +22,7 @@ export function ActionPointsEditor({ reviewId, reviewStatus, onApprovedChange }:
   reviewStatus: string
   onApprovedChange?: (approved: string | null) => void
 }) {
-  const [open, setOpen] = useState(true)
+  const [open, setOpen] = useState(false)
   const [s, setS] = useState<State | null>(null)
   const [text, setText] = useState("")
   const [busy, setBusy] = useState<null | "save" | "approve" | "regen" | "unpublish" | "auto">(null)
