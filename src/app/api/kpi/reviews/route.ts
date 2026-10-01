@@ -112,6 +112,9 @@ export async function POST(req: NextRequest) {
   if (!employee_id || !period || !title) {
     return NextResponse.json({ error: "employee_id, period and title are required" }, { status: 400 })
   }
+  if (!/^Q[1-4] \d{4}$/.test(period)) {
+    return NextResponse.json({ error: "period must look like \"Q1 2026\"" }, { status: 400 })
+  }
 
   const { data, error } = await supabase
     .from("kpi_reviews")

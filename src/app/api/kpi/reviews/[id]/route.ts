@@ -52,6 +52,12 @@ export async function PATCH(
   if (body.title !== undefined) allowed.title = body.title
   if (body.deadline !== undefined) allowed.deadline = body.deadline
   if (body.period !== undefined) allowed.period = body.period
+  if (allowed.status !== undefined && !["draft", "active", "completed"].includes(String(allowed.status))) {
+    return NextResponse.json({ error: "Invalid status" }, { status: 400 })
+  }
+  if (allowed.period !== undefined && !/^Q[1-4] \d{4}$/.test(String(allowed.period))) {
+    return NextResponse.json({ error: "period must look like \"Q1 2026\"" }, { status: 400 })
+  }
 
   const { data: before } = await supabase.from("kpi_reviews").select("status").eq("id", id).maybeSingle()
   if (!before) return NextResponse.json({ error: "Not found" }, { status: 404 })

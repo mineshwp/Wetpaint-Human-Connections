@@ -144,17 +144,24 @@ function computeReviewScore(
   return { current, max, pct, hasScores }
 }
 
+const SUMMARY_COLS: Record<number, string> = {
+  2: "sm:grid-cols-2", 3: "sm:grid-cols-3", 4: "sm:grid-cols-4", 5: "sm:grid-cols-5",
+}
+
 // Quarter-by-quarter + year summary for one employee. The year score is the
 // average of the scored quarters' percentages, shown as a % and as an out-of-10
 // rating (with the rating-guide band label when available).
-function QuarterScoresSummary({ reviews, scores, reviewTemplates, ratingScale, year }: {
+// publishedOnly (staff/manager views): only quarters that have a review are
+// shown, so unpublished quarters never appear at all.
+function QuarterScoresSummary({ reviews, scores, reviewTemplates, ratingScale, year, publishedOnly = false }: {
   reviews: Review[]
   scores: Record<string, Score[]>
   reviewTemplates: Record<string, TemplateSection[]>
   ratingScale: RatingRow[]
   year: number
+  publishedOnly?: boolean
 }) {
-  const perQuarter = QUARTERS.map((q) => {
+  const allQuarters = QUARTERS.map((q) => {
     const review = reviews.find((r) => periodToYear(r.period) === year && periodToQuarter(r.period) === q)
     if (!review) return { q, review: null as Review | null, pct: null as number | null, hasScores: false }
     const { pct, hasScores } = computeReviewScore(
@@ -164,6 +171,7 @@ function QuarterScoresSummary({ reviews, scores, reviewTemplates, ratingScale, y
     )
     return { q, review, pct: hasScores ? pct : null, hasScores }
   })
+  const perQuarter = publishedOnly ? allQuarters.filter((x) => x.review) : allQuarters
 
   const scored = perQuarter.filter((x) => x.pct !== null) as { q: Quarter; pct: number }[]
   const yearPct = scored.length > 0 ? scored.reduce((a, x) => a + x.pct, 0) / scored.length : null
@@ -177,7 +185,7 @@ function QuarterScoresSummary({ reviews, scores, reviewTemplates, ratingScale, y
       <div className="px-4 py-2.5 border-b border-border">
         <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Performance by quarter</p>
       </div>
-      <div className="grid grid-cols-2 sm:grid-cols-5 divide-y sm:divide-y-0 sm:divide-x divide-border">
+      <div className={cn("grid grid-cols-2 divide-y sm:divide-y-0 sm:divide-x divide-border", SUMMARY_COLS[perQuarter.length + 1])}>
         {perQuarter.map(({ q, review, pct }) => (
           <div key={q} className="px-4 py-3 flex flex-col gap-0.5">
             <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Q{q}</span>
@@ -1413,8 +1421,9 @@ function QuarterPanel({ review, template, scores, finalComments, allEmployees, c
 
 // ─── Staff Row (compact — opens the single-person detail view) ────────────────────
 
-function StaffRow({ employee, reviews, scores, reviewTemplates, onOpen }: {
+function StaffRow({ employee, reviews, scores, reviewTemplates, onOpen, publishedOnly = false }: {
   employee: Employee
+  publishedOnly?: boolean
   reviews: Review[]
   scores: Record<string, Score[]>
   reviewTemplates: Record<string, TemplateSection[]>
@@ -1498,6 +1507,7 @@ function StaffRow({ employee, reviews, scores, reviewTemplates, onOpen }: {
                 </button>
               )
             }
+            if (publishedOnly) return null
             return (
               <button
                 key={q}
@@ -2078,7 +2088,7 @@ function MyKpiView(props: SharedViewProps) {
   return (
     <div className="space-y-4">
       {mine.length > 0 && (
-        <QuarterScoresSummary reviews={mine} scores={scores} reviewTemplates={reviewTemplates} ratingScale={ratingScale} year={selectedYear} />
+        <QuarterScoresSummary reviews={mine} scores={scores} reviewTemplates={reviewTemplates} ratingScale={ratingScale} year={selectedYear} publishedOnly />
       )}
       {mine.length === 0
         ? <EmptyState text={`No published KPI reviews for you in ${selectedYear} yet.`} />
@@ -2132,7 +2142,7 @@ function MyTeamView(props: SharedViewProps) {
           </div>
         </div>
         {theirs.length > 0 && (
-          <QuarterScoresSummary reviews={theirs} scores={scores} reviewTemplates={reviewTemplates} ratingScale={ratingScale} year={selectedYear} />
+          <QuarterScoresSummary reviews={theirs} scores={scores} reviewTemplates={reviewTemplates} ratingScale={ratingScale} year={selectedYear} publishedOnly />
         )}
         {theirs.length === 0
           ? <EmptyState text={`No published reviews for ${open.first_name} in ${selectedYear} yet.`} />
@@ -2160,7 +2170,7 @@ function MyTeamView(props: SharedViewProps) {
         <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
           {shown.map(m => (
             <StaffRow key={m.id} employee={m as Employee} reviews={yearPublished(m.id)} scores={scores} reviewTemplates={reviewTemplates}
-              onOpen={(id) => setOpenId(id)} />
+              onOpen={(id) => setOpenId(id)} publishedOnly />
           ))}
           {shown.length === 0 && <p className="px-4 py-6 text-sm text-muted-foreground italic">Nobody matches.</p>}
         </div>
