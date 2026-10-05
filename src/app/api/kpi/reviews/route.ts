@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 import { getUserRole, getEmployeeIdForUser, getTeamScope, applyTeamScope } from "@/lib/auth"
 import { inheritForNewReview } from "@/lib/kpi/inherit"
 import { blockWhileImpersonating } from "@/lib/impersonation"
+import { createAdminClient } from "@/lib/supabase/admin"
 
 export async function GET() {
   const supabase = await createClient()
@@ -74,6 +75,27 @@ export async function GET() {
         (invitee: { invitee_id: string }) => invitee.invitee_id === myEmployeeId
       )
       if (isAssigned) byId.set(review.id, review)
+    }
+
+    // Your own (and your team's) quarters that HR hasn't published yet show as "Pending": the
+    // review shell only (its KPIs load via the template route). No invitees,
+    // scores, comments or action points. The service client is used because
+    // RLS only exposes your review once it is published.
+    const { data: pending } = await createAdminClient()
+      .from("kpi_reviews")
+      .select(`
+        id, employee_id, period, title, deadline, status, created_at,
+        employee:employees!kpi_reviews_employee_id_fkey(id, first_name, last_name, job_title, department:departments(name))
+      `)
+      .in("employee_id", [myEmployeeId, ...deptEmployeeIds])
+      .eq("status", "draft")
+      .eq("is_archived", false)
+    for (const review of pending ?? []) {
+      if (!byId.has(review.id)) {
+        byId.set(review.id, {
+          ...review, action_points: null, action_points_generated_at: null, kpi_review_invitees: [],
+        } as unknown as NonNullable<typeof ownedResult.data>[number])
+      }
     }
 
     const reviews = Array.from(byId.values()).sort((a, b) =>

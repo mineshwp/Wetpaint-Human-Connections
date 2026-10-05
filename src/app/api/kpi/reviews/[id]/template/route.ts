@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { canViewReview } from "@/lib/kpi/access"
+import { getEmployeeIdForUser, getUserRole, canAccessEmployee } from "@/lib/auth"
+import { createAdminClient } from "@/lib/supabase/admin"
 
 interface RawItem {
   id: string
@@ -36,11 +38,30 @@ export async function GET(
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-  const allowed = await canViewReview(supabase, user.id, reviewId)
-  if (!allowed) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  // Normally the same people who can see the review. Extra: the staff member
+  // (and their manager) can read the KPI list (no scores) of a not-yet-published review so
+  // the quarter shows as Pending with its KPIs. Reads then use the service
+  // client, since RLS hides unpublished reviews' custom KPIs.
+  let db = supabase
+  if (!(await canViewReview(supabase, user.id, reviewId))) {
+    const [role, myEmployeeId] = await Promise.all([
+      getUserRole(supabase, user.id),
+      getEmployeeIdForUser(supabase, user.id),
+    ])
+    const admin = createAdminClient()
+    const { data: pending } = myEmployeeId
+      ? await admin.from("kpi_reviews").select("employee_id").eq("id", reviewId).eq("status", "draft").maybeSingle()
+      : { data: null }
+    const ok = !!pending && (
+      pending.employee_id === myEmployeeId ||
+      (role === "manager" && await canAccessEmployee(supabase, user.id, role, pending.employee_id))
+    )
+    if (!ok) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+    db = admin
+  }
 
   // Templates are per-period: a review reads the template for its own period.
-  const { data: review, error: revErr } = await supabase
+  const { data: review, error: revErr } = await db
     .from("kpi_reviews")
     .select("period")
     .eq("id", reviewId)
@@ -52,13 +73,13 @@ export async function GET(
   if (!review) return NextResponse.json({ error: "Review not found" }, { status: 404 })
 
   const [{ data: sections, error: secErr }, { data: overrides }] = await Promise.all([
-    supabase
+    db
       .from("kpi_template_sections")
       .select("id, title, type, position, is_active, kpi_template_items(id, section_id, title, description, min_score, max_score, position, is_active, review_id)")
       .eq("is_active", true)
       .eq("period", review.period)
       .order("position"),
-    supabase
+    db
       .from("kpi_review_item_overrides")
       .select("item_id, hidden, title, description, min_score, max_score")
       .eq("review_id", reviewId),

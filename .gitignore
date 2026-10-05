@@ -48,3 +48,6 @@ tmp/
 # local debug scripts & playwright logs (not for repo)
 .playwright-mcp/
 scripts/
+
+# Local DB backups — contain employee PII, never commit
+backups/

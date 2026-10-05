@@ -85,7 +85,7 @@ const SECTION_CONFIG: Record<number, { icon: React.ElementType; colorClass: stri
 
 // Status display mapping: DB value → display label
 const STATUS_DISPLAY: Record<string, { label: string; chipCls: string }> = {
-  draft:     { label: "Draft",     chipCls: "bg-amber-50 text-amber-700 border-amber-200" },
+  draft:     { label: "Pending", chipCls: "bg-amber-50 text-amber-700 border-amber-200" },
   active:    { label: "Published", chipCls: "bg-emerald-50 text-emerald-700 border-emerald-200" },
   completed: { label: "Completed", chipCls: "bg-emerald-50 text-emerald-700 border-emerald-200" },
 }
@@ -1320,7 +1320,7 @@ function QuarterPanel({ review, template, scores, finalComments, allEmployees, c
                 onChange={e => onStatusChange(review.id, e.target.value)}
                 className="text-xs rounded-lg border border-border bg-card px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary"
               >
-                <option value="draft">Set Draft</option>
+                <option value="draft">Set Pending</option>
                 <option value="active">Publish</option>
                 <option value="completed">Complete</option>
               </select>
@@ -1875,7 +1875,7 @@ function HRAdminView({ reviewTemplates, reviews, scores, finalComments, allEmplo
             <div className="text-2xl font-bold text-emerald-700">
               {published}<span className="text-sm font-medium text-muted-foreground"> / {totalStaff}</span>
             </div>
-            <div className="text-[11px] text-amber-700 mt-0.5">{draft} draft{draft !== 1 ? "s" : ""}</div>
+            <div className="text-[11px] text-amber-700 mt-0.5">{draft} pending</div>
           </div>
         ))}
       </div>
@@ -1906,7 +1906,7 @@ function HRAdminView({ reviewTemplates, reviews, scores, finalComments, allEmplo
         >
           <option value="all">All status</option>
           <option value="published">Published</option>
-          <option value="draft">Draft</option>
+          <option value="draft">Pending</option>
           <option value="notstarted">Not started</option>
         </select>
         <select
@@ -1980,7 +1980,7 @@ function ReviewCards({ list, mode, scores, reviewTemplates, finalComments, curre
         const myInv = mode === "score" ? review.kpi_review_invitees.find(i => i.invitee_id === currentEmployeeId) : undefined
         const published = review.status === "active" || review.status === "completed"
         const inviteeActive = !!myInv && (myInv.status === "accepted" || myInv.status === "completed")
-        const showBody = mode === "score" ? inviteeActive : published
+        const showBody = mode === "score" ? inviteeActive : (published || mode === "mine" || mode === "team")
         // Only a reviewer on a draft (or HR) gets editable rows; null = view only.
         const editorId = mode === "score" && (!published || isHR) ? currentEmployeeId : null
         const isOpen = showBody && openIds.has(review.id)
@@ -2058,7 +2058,12 @@ function ReviewCards({ list, mode, scores, reviewTemplates, finalComments, curre
                     <Lock size={12} /> Published by HR — view only.
                   </p>
                 )}
-                <ActionPoints isHR={false} isOwnReview={mode === "mine"} actionPoints={review.action_points} generatedAt={review.action_points_generated_at} />
+                {!published && mode !== "score" && (
+                  <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                    <Lock size={12} /> Pending — KPIs for this quarter. Scores appear once HR publishes the review.
+                  </p>
+                )}
+                {published && <ActionPoints isHR={false} isOwnReview={mode === "mine"} actionPoints={review.action_points} generatedAt={review.action_points_generated_at} />}
                 {(reviewTemplates[review.id] ?? []).map((section) => (
                   <SectionAccordion
                     key={section.id} section={section}
@@ -2109,20 +2114,19 @@ type SharedViewProps = {
   selectedYear: number
 }
 
-const isPublishedReview = (r: Review) => r.status === "active" || r.status === "completed"
-
 // My KPI — the viewer's own published reviews, with their quarter summary.
 function MyKpiView(props: SharedViewProps) {
   const { reviews, currentEmployeeId, selectedYear, scores, reviewTemplates, ratingScale } = props
+  // Every quarter shows; ones HR hasn't published yet are "Pending" (KPIs only).
   const mine = reviews.filter(r =>
-    r.employee_id === currentEmployeeId && isPublishedReview(r) && periodToYear(r.period) === selectedYear)
+    r.employee_id === currentEmployeeId && periodToYear(r.period) === selectedYear)
   return (
     <div className="space-y-4">
       {mine.length > 0 && (
-        <QuarterScoresSummary reviews={mine} scores={scores} reviewTemplates={reviewTemplates} ratingScale={ratingScale} year={selectedYear} publishedOnly />
+        <QuarterScoresSummary reviews={mine} scores={scores} reviewTemplates={reviewTemplates} ratingScale={ratingScale} year={selectedYear} />
       )}
       {mine.length === 0
-        ? <EmptyState text={`No published KPI reviews for you in ${selectedYear} yet.`} />
+        ? <EmptyState text={`No KPI reviews for you in ${selectedYear} yet.`} />
         : <ReviewCards {...props} list={mine} mode="mine" />}
     </div>
   )
@@ -2155,7 +2159,7 @@ function MyTeamView(props: SharedViewProps) {
 
   if (!team) return <div className="flex justify-center py-16"><Loader2 size={22} className="animate-spin text-muted-foreground" /></div>
 
-  const yearPublished = (id: string) => reviews.filter(r => r.employee_id === id && isPublishedReview(r) && periodToYear(r.period) === selectedYear)
+  const yearPublished = (id: string) => reviews.filter(r => r.employee_id === id && periodToYear(r.period) === selectedYear)
   const open = openId ? team.members.find(m => m.id === openId) : null
 
   if (open) {
@@ -2173,10 +2177,10 @@ function MyTeamView(props: SharedViewProps) {
           </div>
         </div>
         {theirs.length > 0 && (
-          <QuarterScoresSummary reviews={theirs} scores={scores} reviewTemplates={reviewTemplates} ratingScale={ratingScale} year={selectedYear} publishedOnly />
+          <QuarterScoresSummary reviews={theirs} scores={scores} reviewTemplates={reviewTemplates} ratingScale={ratingScale} year={selectedYear} />
         )}
         {theirs.length === 0
-          ? <EmptyState text={`No published reviews for ${open.first_name} in ${selectedYear} yet.`} />
+          ? <EmptyState text={`No reviews for ${open.first_name} in ${selectedYear} yet.`} />
           : <ReviewCards {...props} list={theirs} mode="team" />}
       </div>
     )
@@ -2186,7 +2190,7 @@ function MyTeamView(props: SharedViewProps) {
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-3 flex-wrap">
-        <p className="text-sm text-muted-foreground">{team.label}{team.members.length ? ` · ${team.members.length} ${team.members.length === 1 ? "person" : "people"}` : ""} · published reviews only</p>
+        <p className="text-sm text-muted-foreground">{team.label}{team.members.length ? ` · ${team.members.length} ${team.members.length === 1 ? "person" : "people"}` : ""}</p>
         {team.members.length > 5 && (
           <div className="relative">
             <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -2201,7 +2205,7 @@ function MyTeamView(props: SharedViewProps) {
         <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
           {shown.map(m => (
             <StaffRow key={m.id} employee={m as Employee} reviews={yearPublished(m.id)} scores={scores} reviewTemplates={reviewTemplates}
-              onOpen={(id) => setOpenId(id)} publishedOnly />
+              onOpen={(id) => setOpenId(id)} />
           ))}
           {shown.length === 0 && <p className="px-4 py-6 text-sm text-muted-foreground italic">Nobody matches.</p>}
         </div>
@@ -3104,8 +3108,8 @@ export function KpiPageClient({ isHR, currentEmployeeId, isManager = false }: { 
                     {tab === "mykpi" ? "My KPI" : tab === "team" ? "My Team" : "Reviews to Score"}
                   </h1>
                   <p className="text-sm text-muted-foreground mt-0.5">
-                    {tab === "mykpi" ? "Your published KPI reviews and scores"
-                      : tab === "team" ? "Published KPI reviews for the people you manage"
+                    {tab === "mykpi" ? "Your KPIs for every quarter, with scores once published"
+                      : tab === "team" ? "KPI reviews for the people you manage"
                       : "Reviews HR has asked you to score"}
                   </p>
                 </div>

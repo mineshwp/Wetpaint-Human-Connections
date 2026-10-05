@@ -77,7 +77,7 @@ export default async function QuarterlyReportPage({ searchParams }: { searchPara
 
   const drafts = revs.length - published
   const outstanding = [
-    drafts > 0 && `${drafts} KPI review${drafts === 1 ? "" : "s"} still in draft`,
+    drafts > 0 && `${drafts} KPI review${drafts === 1 ? "" : "s"} still pending`,
     withoutReview > 0 && `${withoutReview} current staff without a ${quarter} review`,
     expired.length > 0 && `${expired.length} training record${expired.length === 1 ? "" : "s"} expired`,
   ].filter(Boolean) as string[]
@@ -112,7 +112,7 @@ export default async function QuarterlyReportPage({ searchParams }: { searchPara
         <h3 className="text-sm font-semibold">KPI reviews</h3>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
           <Stat label="Published" value={`${published} / ${current.length}`} />
-          <Stat label="In draft" value={drafts} />
+          <Stat label="Pending" value={drafts} />
           <Stat label="No review yet" value={withoutReview} />
         </div>
       </section>
