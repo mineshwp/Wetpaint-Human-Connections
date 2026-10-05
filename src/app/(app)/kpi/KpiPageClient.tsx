@@ -1976,7 +1976,9 @@ function ReviewCards({ list, mode, scores, reviewTemplates, finalComments, curre
 
   return (
     <div className="space-y-4">
-      {list.map(review => {
+      {[...list]
+        .sort((a, b) => ((periodToYear(a.period) ?? 0) - (periodToYear(b.period) ?? 0)) || ((periodToQuarter(a.period) ?? 0) - (periodToQuarter(b.period) ?? 0)))
+        .map(review => {
         const myInv = mode === "score" ? review.kpi_review_invitees.find(i => i.invitee_id === currentEmployeeId) : undefined
         const published = review.status === "active" || review.status === "completed"
         const inviteeActive = !!myInv && (myInv.status === "accepted" || myInv.status === "completed")
