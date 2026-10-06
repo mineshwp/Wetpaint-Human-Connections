@@ -262,7 +262,7 @@ export default function ForgotPasswordPage() {
                 ) : (
                   <Mail className="h-4 w-4" />
                 )}
-                {loading ? "Sending…" : "Send reset link"}
+                {loading ? "Sending…" : "Request new password"}
               </button>
 
               <Link
