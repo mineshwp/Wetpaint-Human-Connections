@@ -202,12 +202,9 @@ export default function ForgotPasswordPage() {
                 <CheckCircle2 className="h-12 w-12 text-green-500" />
               </div>
               <div>
-                <p className="font-semibold text-foreground">Check your inbox</p>
+                <p className="font-semibold text-foreground">Request received</p>
                 <p className="mt-1.5 text-sm text-muted-foreground">
-                  A password reset has been requested. If{" "}
-                  <span className="font-medium text-foreground">{email.trim().toLowerCase()}</span>{" "}
-                  is a registered account, you&apos;ll hear from us shortly. Staff will receive a new
-                  password from HR by email.
+                  If your email address is registered, HR will send your new password by email.
                 </p>
               </div>
               <Link
@@ -221,8 +218,7 @@ export default function ForgotPasswordPage() {
           ) : (
             <form onSubmit={handleSubmit} noValidate className="space-y-5">
               <div className="text-sm text-muted-foreground">
-                Enter your email address. Administrators receive a reset link; for everyone else, HR is
-                notified and will email you a new password.
+                Enter your email address, HR will send you a new password
               </div>
 
               {error && (
