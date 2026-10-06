@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { getUserRole, getEmployeeIdForUser, canAccessEmployee } from "@/lib/auth"
 import { blockWhileImpersonating } from "@/lib/impersonation"
+import { logStaffChange } from "@/lib/hr-digests"
 
 export async function GET(
   _req: Request,
@@ -86,6 +87,13 @@ export async function POST(
   if (error) {
     console.error("[POST /api/employees/[id]/training]", error)
     return NextResponse.json({ error: "Failed to save training" }, { status: 500 })
+  }
+
+  // Courses staff add themselves go in HR's weekly digest.
+  if (!isHR) {
+    await logStaffChange("training", id, {
+      name: data.name, date_completed: data.date_completed, expiry_date: data.expiry_date,
+    })
   }
 
   return NextResponse.json(data, { status: 201 })

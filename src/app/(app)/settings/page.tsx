@@ -1,6 +1,6 @@
 import Link from "next/link"
 import { redirect } from "next/navigation"
-import { Building2, ShieldCheck, Sparkles, UserCog } from "lucide-react"
+import { Bell, Building2, ShieldCheck, Sparkles, UserCog } from "lucide-react"
 import { createClient } from "@/lib/supabase/server"
 import { getUserRole } from "@/lib/auth"
 import { listAdmins } from "@/lib/admins"
@@ -10,6 +10,8 @@ import { AdminsPanel } from "./AdminsPanel"
 import { AccessOverview } from "./AccessOverview"
 import { AiSettingsPanel } from "./AiSettingsPanel"
 import { DepartmentsPanel } from "./DepartmentsPanel"
+import { NotificationsPanel } from "./NotificationsPanel"
+import { getPasswordResetRecipients } from "@/lib/notification-settings"
 import { loadAccessData } from "@/lib/access-overview"
 import { loadDepartmentsData } from "@/lib/departments"
 
@@ -20,6 +22,7 @@ const TABS = [
   { id: "admins", label: "Administrators", icon: UserCog },
   { id: "departments", label: "Departments", icon: Building2 },
   { id: "access", label: "Who can see what", icon: ShieldCheck },
+  { id: "notifications", label: "Notifications", icon: Bell },
   { id: "ai", label: "AI (OpenAI)", icon: Sparkles },
 ] as const
 
@@ -63,6 +66,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       {tab === "admins" && <AdminsPanel initialAdmins={await listAdmins()} currentUserId={user.id} />}
       {tab === "departments" && <DepartmentsPanel initial={await loadDepartmentsData()} />}
       {tab === "access" && <AccessOverview initial={await loadAccessData()} />}
+      {tab === "notifications" && <NotificationsPanel initialEmails={await getPasswordResetRecipients()} />}
       {tab === "ai" && <AiSettingsPanel />}
     </div>
   )

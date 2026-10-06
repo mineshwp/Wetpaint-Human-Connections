@@ -44,8 +44,9 @@ Use it to understand the intended UI patterns, component structure, and business
   card on the employee profile (`/api/employees/[id]/login`). HR admins: Settings.
   HR admins change their password via the user menu → `/login/reset-password`.
   **Forgot password:** `POST /api/auth/forgot-password` (public). HR admins get a
-  reset link emailed; for anyone else HR is emailed to set a temp password and send
-  it to them. Same response either way (no account/admin discovery). One request
+  reset link emailed; for anyone else the people in Settings → Notifications
+  ("Password reset requests go to", `kpi_settings.password_reset_notify_emails`; empty = all
+  HR admins) are emailed to set a temp password and send it to them. Same response either way (no account/admin discovery). One request
   per person per hour (`password_reset_requests`). Only HR admins can change their
   own password (menu item hidden + `/login/reset-password` redirects others).
 
@@ -410,10 +411,11 @@ Always return proper HTTP status codes: 400, 401, 403, 404, 500.
 | Database RLS hardening | ✅ Applied — final column grant (`20260926_06`) pending deploy |
 | Monthly manager check-ins | ❌ Removed 28 Sep 2026 (no longer used). UI, API and reminder email deleted; `kpi_monthly_checkins` table left in the DB untouched |
 | Training tracker + weekly HR expiry reminder (Mondays) | ✅ Built — deploy pending |
+| HR digests of staff self-edits: profile changes daily (field names only, no values), new training weekly (Mondays). Queue = `hr_change_log` (service role only, migration `20261007_01`), written by `PATCH /api/employees/[id]` and `POST …/training` for non-HR callers, sent by the daily keepalive cron via `src/lib/hr-digests.ts` | ✅ Built — migration + deploy pending |
 | Quarterly HR report (`/kpi/report`) | ✅ Built — deploy pending |
 | Manager access levels: direct reports / whole reporting line / whole department (login card) + Settings "Who can see what" | ✅ Done |
 | Document upload on the employee profile (HR: drag & drop / choose files, category, hide from staff, delete; private bucket, 25 MB/file) | ✅ Done |
-| Settings tabs (Administrators, Departments, Who can see what, AI) | ✅ Done |
+| Settings tabs (Administrators, Departments, Who can see what, Notifications, AI) | ✅ Done |
 | Settings → Departments: add/edit/delete + pick managers (several per department). A department manager = person in that department with `access_level = manager_department`; removing one resets them to `manager_reports` (if anyone reports to them) or `staff`; deleting a department does the same for its managers | ✅ Done |
 | AI settings (encrypted key, model, prompt + try-it, spend cap, usage log) + HR approval/editing of action points | ✅ Done |
 | Access on the person (not the login) + editable "Who can see what" (filters, bulk Reports to / access, team view) | ✅ Done |

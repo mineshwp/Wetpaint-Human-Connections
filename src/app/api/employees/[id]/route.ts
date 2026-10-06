@@ -5,6 +5,7 @@ import { getUserRole, getEmployeeIdForUser, canAccessEmployee } from "@/lib/auth
 import { EMPLOYEE_FULL_SELECT, mapEmployeeFull, employeeFieldAccess } from "@/lib/employees"
 import type { EmployeeFull } from "@/lib/types"
 import { blockWhileImpersonating } from "@/lib/impersonation"
+import { changedProfileLabels, logStaffChange } from "@/lib/hr-digests"
 
 export async function GET(
   _req: Request,
@@ -132,12 +133,17 @@ export async function PATCH(
 
   updates.updated_at = new Date().toISOString()
 
+  // Staff self-edits are reported to HR in the daily digest (field names only).
+  const changedLabels = isHR ? [] : await changedProfileLabels(id, updates)
+
   const { error } = await supabase.from("employees").update(updates).eq("id", id)
 
   if (error) {
     console.error("[PATCH /api/employees/[id]]", error)
     return NextResponse.json({ error: "Failed to update employee" }, { status: 500 })
   }
+
+  if (changedLabels.length > 0) await logStaffChange("profile", id, { fields: changedLabels })
 
   // Archiving someone also disables their portal login (HR restores it from
   // the profile's Portal login card if they return). Never touches admins.

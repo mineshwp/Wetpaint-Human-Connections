@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 import { sendWeeklyTrainingReminders } from "@/lib/training-reminders"
+import { sendDailyProfileDigest, sendWeeklyTrainingDigest } from "@/lib/hr-digests"
 
 // Keep-alive endpoint hit by a Vercel Cron job (see vercel.json).
 // Runs a tiny query so Supabase registers activity and does not auto-pause
@@ -54,5 +55,21 @@ export async function GET(request: Request) {
     }
   }
 
-  return NextResponse.json({ ok: true, ts: new Date().toISOString(), training })
+  // Staff self-service changes for HR: profile edits daily, new training on Mondays.
+  let profileDigest: { sent: number; skipped?: string } | undefined
+  try {
+    profileDigest = await sendDailyProfileDigest()
+  } catch (e) {
+    console.error("[cron/keepalive] profile digest", e)
+  }
+  let trainingDigest: { sent: number; skipped?: string } | undefined
+  if (new Date().getUTCDay() === 1) {
+    try {
+      trainingDigest = await sendWeeklyTrainingDigest()
+    } catch (e) {
+      console.error("[cron/keepalive] training digest", e)
+    }
+  }
+
+  return NextResponse.json({ ok: true, ts: new Date().toISOString(), training, profileDigest, trainingDigest })
 }
