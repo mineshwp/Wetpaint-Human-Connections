@@ -49,6 +49,8 @@ Use it to understand the intended UI patterns, component structure, and business
   per person per hour (`password_reset_requests`). Only HR admins can change their
   own password (menu item hidden + `/login/reset-password` redirects others).
 
+**Idle logout:** 15 minutes of inactivity signs the user out (1-minute warning). Browser: `IdleLogout` in `AppShell`; server: `src/middleware.ts` checks the `hc_last_active` cookie (refreshed by page loads and `POST /api/auth/touch`, not by other API calls) and rejects stale sessions. Constants in `src/lib/idle.ts`.
+
 ### Database security (RLS)
 
 - Every table has RLS; policies mirror the app rules via helpers `hc_is_hr()`,

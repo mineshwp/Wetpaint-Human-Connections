@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { IdleLogout } from "./IdleLogout"
 import Link from "next/link"
 import { Menu, Eye, Users, KeyRound } from "lucide-react"
 import { Sidebar } from "./Sidebar"
@@ -72,6 +73,7 @@ export function AppShell({
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
+      <IdleLogout signOutAction={signOutAction} />
       <Sidebar
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
