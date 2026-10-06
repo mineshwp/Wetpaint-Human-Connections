@@ -11,7 +11,7 @@ import { AccessOverview } from "./AccessOverview"
 import { AiSettingsPanel } from "./AiSettingsPanel"
 import { DepartmentsPanel } from "./DepartmentsPanel"
 import { NotificationsPanel } from "./NotificationsPanel"
-import { getPasswordResetRecipients } from "@/lib/notification-settings"
+import { getRecipients } from "@/lib/notification-settings"
 import { loadAccessData } from "@/lib/access-overview"
 import { loadDepartmentsData } from "@/lib/departments"
 
@@ -66,7 +66,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       {tab === "admins" && <AdminsPanel initialAdmins={await listAdmins()} currentUserId={user.id} />}
       {tab === "departments" && <DepartmentsPanel initial={await loadDepartmentsData()} />}
       {tab === "access" && <AccessOverview initial={await loadAccessData()} />}
-      {tab === "notifications" && <NotificationsPanel initialEmails={await getPasswordResetRecipients()} />}
+      {tab === "notifications" && <NotificationsPanel initial={{ passwordReset: await getRecipients("passwordReset"), staffChanges: await getRecipients("staffChanges") }} />}
       {tab === "ai" && <AiSettingsPanel />}
     </div>
   )

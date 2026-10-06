@@ -1,8 +1,10 @@
 import { createAdminClient } from "@/lib/supabase/admin"
 import { sendHrDigestEmail } from "@/lib/email"
+import { resolveRecipients } from "@/lib/notification-settings"
 
 // Staff self-service changes are queued in hr_change_log by the API routes and
-// emailed to every HR admin in a digest by the daily cron: profile changes
+// emailed in a digest by the daily cron to the "staff changes" recipients from
+// Settings → Notifications (all HR admins if none are set): profile changes
 // daily, new training weekly (Mondays). Rows are claimed (notified_at set)
 // before sending so an overlapping run can't double-send, and released again if
 // nobody could be emailed. Service client: runs with no signed-in user.
@@ -63,10 +65,7 @@ async function sendDigest(kind: ChangeKind): Promise<{ sent: number; skipped?: s
 
   const release = () => admin.from("hr_change_log").update({ notified_at: null }).in("id", rows.map((r) => r.id))
 
-  const { data: hr } = await admin
-    .from("app_users")
-    .select("employee:employees(first_name, email)")
-    .eq("active_role", "hr")
+  const recipients = await resolveRecipients("staffChanges")
 
   const base = process.env.NEXT_PUBLIC_SITE_URL ?? "https://wetpaint-human-connections-two.vercel.app"
   const name = (r: Pending) => (r.employee ? `${r.employee.first_name} ${r.employee.last_name}`.trim() : "Unknown")
@@ -83,12 +82,10 @@ async function sendDigest(kind: ChangeKind): Promise<{ sent: number; skipped?: s
   })
 
   let sent = 0
-  for (const h of hr ?? []) {
-    const e = h.employee as unknown as { first_name: string; email: string | null } | null
-    if (!e?.email) continue
+  for (const r of recipients) {
     const ok = await sendHrDigestEmail({
-      to: e.email,
-      name: e.first_name,
+      to: r.email,
+      name: r.name,
       kind,
       items,
       url: kind === "training" ? `${base}/employees/training` : `${base}/employees`,

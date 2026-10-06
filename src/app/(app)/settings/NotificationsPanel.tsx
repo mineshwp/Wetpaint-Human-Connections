@@ -5,8 +5,19 @@ import { Bell, Loader2, AlertCircle, CheckCircle2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
-export function NotificationsPanel({ initialEmails }: { initialEmails: string[] }) {
-  const [value, setValue] = useState(initialEmails.join(", "))
+interface Props {
+  initial: { passwordReset: string[]; staffChanges: string[] }
+}
+
+const inputClass = cn(
+  "h-9 w-full rounded-lg border border-border bg-white px-3 text-sm text-foreground",
+  "placeholder:text-muted-foreground outline-none transition-all",
+  "focus:border-primary/50 focus:ring-2 focus:ring-primary/20 disabled:opacity-50"
+)
+
+export function NotificationsPanel({ initial }: Props) {
+  const [passwordReset, setPasswordReset] = useState(initial.passwordReset.join(", "))
+  const [staffChanges, setStaffChanges] = useState(initial.staffChanges.join(", "))
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
 
@@ -18,19 +29,16 @@ export function NotificationsPanel({ initialEmails }: { initialEmails: string[] 
       const res = await fetch("/api/settings/notifications", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ passwordResetEmails: value }),
+        body: JSON.stringify({ passwordResetEmails: passwordReset, staffChangesEmails: staffChanges }),
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) {
         setMessage({ type: "error", text: (json.error as string) ?? `Failed to save (${res.status})` })
         return
       }
-      const saved = (json.passwordResetEmails as string[]) ?? []
-      setValue(saved.join(", "))
-      setMessage({
-        type: "success",
-        text: saved.length ? "Saved. Password requests will go to these addresses." : "Saved. Password requests will go to all HR admins.",
-      })
+      setPasswordReset(((json.passwordResetEmails as string[]) ?? []).join(", "))
+      setStaffChanges(((json.staffChangesEmails as string[]) ?? []).join(", "))
+      setMessage({ type: "success", text: "Saved." })
     } catch (err) {
       setMessage({ type: "error", text: err instanceof Error ? err.message : "Network error — please try again." })
     } finally {
@@ -44,7 +52,10 @@ export function NotificationsPanel({ initialEmails }: { initialEmails: string[] 
         <Bell className="h-4 w-4 text-primary shrink-0" />
         <div>
           <h2 className="text-sm font-semibold text-foreground">Notifications</h2>
-          <p className="text-xs text-muted-foreground mt-0.5">Choose who is emailed when something needs HR&rsquo;s attention.</p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Choose who is emailed when something needs HR&rsquo;s attention. Separate several addresses with commas
+            (up to 5 per field). Leave a field empty to email all HR admins.
+          </p>
         </div>
       </div>
 
@@ -58,31 +69,30 @@ export function NotificationsPanel({ initialEmails }: { initialEmails: string[] 
         </div>
       )}
 
-      <form onSubmit={save} className="px-5 py-4 space-y-2">
-        <label htmlFor="pw-emails" className="text-xs font-semibold text-foreground">Password reset requests go to</label>
-        <input
-          id="pw-emails"
-          type="text"
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          placeholder="ujala@wetpaint.co.za"
-          disabled={saving}
-          className={cn(
-            "h-9 w-full rounded-lg border border-border bg-white px-3 text-sm text-foreground",
-            "placeholder:text-muted-foreground outline-none transition-all",
-            "focus:border-primary/50 focus:ring-2 focus:ring-primary/20 disabled:opacity-50"
-          )}
-        />
-        <p className="text-xs text-muted-foreground">
-          When staff or managers use &ldquo;Forgot password&rdquo;, this person is emailed to set them a temporary password.
-          Separate several addresses with commas (up to 5). Leave it empty to email all HR admins.
-        </p>
-        <div className="pt-1">
-          <Button type="submit" size="sm" disabled={saving} className="h-9 gap-1.5">
-            {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-            Save
-          </Button>
+      <form onSubmit={save} className="px-5 py-4 space-y-5">
+        <div className="space-y-1.5">
+          <label htmlFor="pw-emails" className="text-xs font-semibold text-foreground">Password reset requests go to</label>
+          <input id="pw-emails" type="text" value={passwordReset} onChange={(e) => setPasswordReset(e.target.value)}
+            placeholder="ujala@wetpaint.co.za" disabled={saving} className={inputClass} />
+          <p className="text-xs text-muted-foreground">
+            When staff or managers use &ldquo;Forgot password&rdquo;, these people are emailed to set them a temporary password.
+          </p>
         </div>
+
+        <div className="space-y-1.5">
+          <label htmlFor="staff-emails" className="text-xs font-semibold text-foreground">Staff changes digests go to</label>
+          <input id="staff-emails" type="text" value={staffChanges} onChange={(e) => setStaffChanges(e.target.value)}
+            placeholder="ujala@wetpaint.co.za" disabled={saving} className={inputClass} />
+          <p className="text-xs text-muted-foreground">
+            A daily email when staff change their own profile details (which fields, not the values) and a weekly
+            email (Mondays) listing courses staff added.
+          </p>
+        </div>
+
+        <Button type="submit" size="sm" disabled={saving} className="h-9 gap-1.5">
+          {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+          Save
+        </Button>
       </form>
     </section>
   )

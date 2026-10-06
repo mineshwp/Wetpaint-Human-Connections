@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { resolvePasswordResetRecipients } from "@/lib/notification-settings"
+import { resolveRecipients } from "@/lib/notification-settings"
 import { sendPasswordResetRequestEmail } from "@/lib/email"
 
 const COOLDOWN_MS = 60 * 60 * 1000
@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (emp && !throttled && !isAdmin && emp.status !== "terminated") {
-      const hrEmails = await resolvePasswordResetRecipients()
+      const hrEmails = (await resolveRecipients("passwordReset")).map((r) => r.email)
       await sendPasswordResetRequestEmail({
         to: hrEmails,
         staffName: `${emp.first_name} ${emp.last_name}`.trim(),

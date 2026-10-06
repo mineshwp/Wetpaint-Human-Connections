@@ -1,11 +1,18 @@
 import { createAdminClient } from "@/lib/supabase/admin"
 import { listAdmins } from "@/lib/admins"
 
-// Who gets the "password reset requested" email. Stored as a comma-separated
-// list in kpi_settings so HR can change it in Settings → Notifications. When
-// empty it falls back to every HR admin, so a request is never dropped.
+// Who gets each kind of HR notification email. Stored as comma-separated lists
+// in kpi_settings so HR can change them in Settings → Notifications. When a
+// list is empty it falls back to every HR admin, so nothing is dropped.
+//   passwordReset → "password reset requested" emails
+//   staffChanges  → the daily profile-change and weekly new-training digests
 
-const KEY = "password_reset_notify_emails"
+export type NotifyKind = "passwordReset" | "staffChanges"
+
+const KEYS: Record<NotifyKind, string> = {
+  passwordReset: "password_reset_notify_emails",
+  staffChanges: "staff_changes_notify_emails",
+}
 export const MAX_NOTIFY_EMAILS = 5
 
 const EMAIL_RE = /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/
@@ -19,21 +26,30 @@ export function invalidEmails(emails: string[]): string[] {
   return emails.filter((e) => !EMAIL_RE.test(e))
 }
 
-export async function getPasswordResetRecipients(): Promise<string[]> {
-  const { data } = await createAdminClient().from("kpi_settings").select("value").eq("key", KEY).maybeSingle()
+export async function getRecipients(kind: NotifyKind): Promise<string[]> {
+  const { data } = await createAdminClient().from("kpi_settings").select("value").eq("key", KEYS[kind]).maybeSingle()
   return typeof data?.value === "string" ? parseEmails(data.value) : []
 }
 
-export async function setPasswordResetRecipients(emails: string[]) {
+export async function setRecipients(kind: NotifyKind, emails: string[]) {
   const { error } = await createAdminClient()
     .from("kpi_settings")
-    .upsert({ key: KEY, value: emails.join(",") }, { onConflict: "key" })
+    .upsert({ key: KEYS[kind], value: emails.join(",") }, { onConflict: "key" })
   if (error) throw new Error(error.message)
 }
 
-/** Configured recipients, or all HR admins when none are set. */
-export async function resolvePasswordResetRecipients(): Promise<string[]> {
-  const configured = await getPasswordResetRecipients()
-  if (configured.length > 0) return configured
-  return (await listAdmins()).map((a) => a.employees?.email).filter((e): e is string => !!e)
+/** Configured recipients for this kind of email (with first names where known), or all HR admins when none are set. */
+export async function resolveRecipients(kind: NotifyKind): Promise<{ email: string; name: string }[]> {
+  const configured = await getRecipients(kind)
+  if (configured.length === 0) {
+    return (await listAdmins())
+      .filter((a) => !!a.employees?.email)
+      .map((a) => ({ email: a.employees!.email, name: a.employees!.first_name }))
+  }
+  const { data } = await createAdminClient()
+    .from("employees")
+    .select("first_name, email")
+    .or(configured.map((e) => `email.ilike.${e}`).join(","))
+  const names = new Map((data ?? []).map((e) => [String(e.email).toLowerCase(), e.first_name as string]))
+  return configured.map((email) => ({ email, name: names.get(email) ?? "there" }))
 }
