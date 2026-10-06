@@ -157,7 +157,7 @@ export function AppShell({
                       </button>
                     )}
 
-                    {!impersonating && (
+                    {!impersonating && isHR && (
                       <Link href="/login/reset-password" onClick={() => setUserMenuOpen(false)} className={menuItemClass}>
                         <KeyRound className="h-3.5 w-3.5 text-muted-foreground" />
                         Change password

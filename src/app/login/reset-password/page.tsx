@@ -123,6 +123,16 @@ export default function ResetPasswordPage() {
     return () => window.removeEventListener("mousemove", onMove)
   }, [])
 
+  // Only HR admins may set their own password. Staff and managers ask HR.
+  useEffect(() => {
+    fetch("/api/auth/can-change-password")
+      .then((r) => (r.ok ? r.json() : { allowed: true }))
+      .then((d) => {
+        if (d.allowed === false) router.replace("/employees")
+      })
+      .catch(() => {})
+  }, [router])
+
   const [password, setPassword] = useState("")
   const [confirm, setConfirm] = useState("")
   const [showPwd, setShowPwd] = useState(false)

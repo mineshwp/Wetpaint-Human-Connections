@@ -42,10 +42,12 @@ Use it to understand the intended UI patterns, component structure, and business
 - **Logins are HR-set temporary passwords, never emailed links** (Microsoft Safe
   Links auto-opens and burns one-time links). Staff/manager logins: Portal login
   card on the employee profile (`/api/employees/[id]/login`). HR admins: Settings.
-  Users change their password via the user menu → `/login/reset-password`.
+  HR admins change their password via the user menu → `/login/reset-password`.
   **Forgot password:** `POST /api/auth/forgot-password` (public). HR admins get a
   reset link emailed; for anyone else HR is emailed to set a temp password and send
-  it to them. Same response either way (no account/admin discovery).
+  it to them. Same response either way (no account/admin discovery). One request
+  per person per hour (`password_reset_requests`). Only HR admins can change their
+  own password (menu item hidden + `/login/reset-password` redirects others).
 
 ### Database security (RLS)
 

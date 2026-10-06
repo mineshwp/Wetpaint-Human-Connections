@@ -4,6 +4,8 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { listAdmins } from "@/lib/admins"
 import { sendPasswordResetRequestEmail } from "@/lib/email"
 
+const COOLDOWN_MS = 60 * 60 * 1000
+
 /**
  * Public. HR admins get a reset link emailed to them. For anyone else, HR is
  * emailed instead and sets a temporary password for them. The response is
@@ -25,8 +27,25 @@ export async function POST(req: NextRequest) {
       .ilike("email", email)
       .maybeSingle()
 
-    let isAdmin = false
+    // One request per person per hour; extra requests get the same response but send nothing.
+    let throttled = false
     if (emp) {
+      const { data: last } = await admin
+        .from("password_reset_requests")
+        .select("last_requested_at")
+        .eq("employee_id", emp.id)
+        .maybeSingle()
+      if (last && Date.now() - new Date(last.last_requested_at).getTime() < COOLDOWN_MS) {
+        throttled = true
+      } else {
+        await admin
+          .from("password_reset_requests")
+          .upsert({ employee_id: emp.id, last_requested_at: new Date().toISOString() })
+      }
+    }
+
+    let isAdmin = false
+    if (emp && !throttled) {
       const { data: appUser } = await admin
         .from("app_users")
         .select("active_role")
@@ -35,7 +54,7 @@ export async function POST(req: NextRequest) {
       isAdmin = appUser?.active_role === "hr"
     }
 
-    if (emp && !isAdmin && emp.status !== "terminated") {
+    if (emp && !throttled && !isAdmin && emp.status !== "terminated") {
       const hrEmails = (await listAdmins())
         .map((a) => a.employees?.email)
         .filter((e): e is string => !!e)
