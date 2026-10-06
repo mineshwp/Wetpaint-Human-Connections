@@ -4,7 +4,6 @@ import Image from "next/image"
 import Link from "next/link"
 import { useState, useEffect, useRef, useCallback, FormEvent } from "react"
 import { ArrowLeft, Mail, AlertCircle, CheckCircle2 } from "lucide-react"
-import { createClient } from "@/lib/supabase/client"
 
 export default function ForgotPasswordPage() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -132,15 +131,15 @@ export default function ForgotPasswordPage() {
     setLoading(true)
 
     try {
-      const supabase = createClient()
-      const origin = window.location.origin
-      const { error: resetError } = await supabase.auth.resetPasswordForEmail(
-        email.trim().toLowerCase(),
-        { redirectTo: `${origin}/auth/callback?next=/login/reset-password` }
-      )
+      const res = await fetch("/api/auth/forgot-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim().toLowerCase() }),
+      })
 
-      if (resetError) {
-        setError("Something went wrong. Please try again.")
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        setError(data.error ?? "Something went wrong. Please try again.")
         return
       }
 
@@ -203,11 +202,14 @@ export default function ForgotPasswordPage() {
                 <CheckCircle2 className="h-12 w-12 text-green-500" />
               </div>
               <div>
-                <p className="font-semibold text-foreground">Check your email</p>
+                <p className="font-semibold text-foreground">Request received</p>
                 <p className="mt-1.5 text-sm text-muted-foreground">
-                  We&apos;ve sent a password reset link to{" "}
-                  <span className="font-medium text-foreground">{email.trim().toLowerCase()}</span>.
-                  The link expires in 1 hour.
+                  If{" "}
+                  <span className="font-medium text-foreground">{email.trim().toLowerCase()}</span>{" "}
+                  is an HR administrator account, a reset link is on its way. The link expires in 1 hour.
+                </p>
+                <p className="mt-3 text-sm text-muted-foreground">
+                  Staff and managers: please ask HR to set a new temporary password for you.
                 </p>
               </div>
               <Link
@@ -221,7 +223,8 @@ export default function ForgotPasswordPage() {
           ) : (
             <form onSubmit={handleSubmit} noValidate className="space-y-5">
               <div className="text-sm text-muted-foreground">
-                Enter your email address and we&apos;ll send you a link to reset your password.
+                HR administrators can have a reset link emailed to them. Staff and managers: please ask HR to
+                reset your password.
               </div>
 
               {error && (
