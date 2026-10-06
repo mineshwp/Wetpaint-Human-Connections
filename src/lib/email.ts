@@ -1,7 +1,8 @@
 import { Resend } from "resend"
 
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null
-const FROM = "Human Connections <no-reply@wetpaint.co.za>"
+// Set EMAIL_FROM once the sending domain is verified in Resend.
+const FROM = process.env.EMAIL_FROM ?? "Human Connections <no-reply@wetpaint.co.za>"
 
 export async function sendAdminGrantedEmail(to: string, name: string) {
   if (!resend) {
