@@ -135,3 +135,50 @@ export async function sendTrainingReminderEmail(opts: {
     return false
   }
 }
+
+const esc = (s: string) =>
+  s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")
+
+/** Tells HR a staff member asked for a password reset, so they can set a new temp password. */
+export async function sendPasswordResetRequestEmail(opts: {
+  to: string[]
+  staffName: string
+  staffEmail: string
+  url: string
+}): Promise<boolean> {
+  if (!resend) {
+    console.warn("[email] RESEND_API_KEY not set — skipping password reset request email")
+    return false
+  }
+  if (opts.to.length === 0) return false
+  const staffName = esc(opts.staffName)
+  const staffEmail = esc(opts.staffEmail)
+  try {
+    await resend.emails.send({
+      from: FROM,
+      to: opts.to,
+      subject: `Password reset requested: ${opts.staffName}`,
+      html: `
+        <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px">
+          <p style="font-size:15px;color:#333;line-height:1.6">
+            <strong>${staffName}</strong> (${staffEmail}) has asked for a password reset on the
+            Wetpaint Human Connections platform.
+          </p>
+          <p style="font-size:15px;color:#333;line-height:1.6">
+            Open their profile, set a new temporary password in the <strong>Portal login</strong>
+            card, and email it to them.
+          </p>
+          <p style="margin:24px 0">
+            <a href="${opts.url}" style="background:#111;color:#fff;text-decoration:none;padding:10px 20px;border-radius:8px;font-size:14px">Open ${staffName}'s profile</a>
+          </p>
+          <p style="font-size:13px;color:#888">If this wasn't expected, you can ignore this email.</p>
+          <p style="margin-top:32px;font-size:13px;color:#888">— Wetpaint Human Connections</p>
+        </div>
+      `,
+    })
+    return true
+  } catch (e) {
+    console.error("[email] password reset request failed:", e)
+    return false
+  }
+}

@@ -202,14 +202,12 @@ export default function ForgotPasswordPage() {
                 <CheckCircle2 className="h-12 w-12 text-green-500" />
               </div>
               <div>
-                <p className="font-semibold text-foreground">Request received</p>
+                <p className="font-semibold text-foreground">Check your inbox</p>
                 <p className="mt-1.5 text-sm text-muted-foreground">
-                  If{" "}
+                  A password reset has been requested. If{" "}
                   <span className="font-medium text-foreground">{email.trim().toLowerCase()}</span>{" "}
-                  is an HR administrator account, a reset link is on its way. The link expires in 1 hour.
-                </p>
-                <p className="mt-3 text-sm text-muted-foreground">
-                  Staff and managers: please ask HR to set a new temporary password for you.
+                  is a registered account, you&apos;ll hear from us shortly. Staff will receive a new
+                  password from HR by email.
                 </p>
               </div>
               <Link
@@ -223,8 +221,8 @@ export default function ForgotPasswordPage() {
           ) : (
             <form onSubmit={handleSubmit} noValidate className="space-y-5">
               <div className="text-sm text-muted-foreground">
-                HR administrators can have a reset link emailed to them. Staff and managers: please ask HR to
-                reset your password.
+                Enter your email address. Administrators receive a reset link; for everyone else, HR is
+                notified and will email you a new password.
               </div>
 
               {error && (

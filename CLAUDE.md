@@ -43,9 +43,9 @@ Use it to understand the intended UI patterns, component structure, and business
   Links auto-opens and burns one-time links). Staff/manager logins: Portal login
   card on the employee profile (`/api/employees/[id]/login`). HR admins: Settings.
   Users change their password via the user menu → `/login/reset-password`.
-  **Forgot password:** staff/managers must ask HR (temp password). Only HR admins
-  can have a reset link emailed — `POST /api/auth/forgot-password` (public; checks
-  the email belongs to an `hr` app_user; identical response either way).
+  **Forgot password:** `POST /api/auth/forgot-password` (public). HR admins get a
+  reset link emailed; for anyone else HR is emailed to set a temp password and send
+  it to them. Same response either way (no account/admin discovery).
 
 ### Database security (RLS)
 
