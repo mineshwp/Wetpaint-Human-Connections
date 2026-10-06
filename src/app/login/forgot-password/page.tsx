@@ -204,7 +204,7 @@ export default function ForgotPasswordPage() {
               <div>
                 <p className="font-semibold text-foreground">Request received</p>
                 <p className="mt-1.5 text-sm text-muted-foreground">
-                  If your email address is registered, HR will send your new password by email.
+                  HR will send your new password by email.
                 </p>
               </div>
               <Link
