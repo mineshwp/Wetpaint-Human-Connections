@@ -8,7 +8,7 @@ import { blockWhileImpersonating } from "@/lib/impersonation"
 // Portal login for one employee (HR only). Onboarding is HR-set-password, like
 // admins: Microsoft Safe Links auto-opens emailed one-time links, so we never
 // send them. HR creates the login, gets a temporary password once, and hands it
-// over; the person changes it from the user menu after signing in.
+// over.
 //
 // What the person can see is NOT set here: it's their access level
 // (employees.access_level), set by HR in Settings → Who can see what — even

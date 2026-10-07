@@ -82,7 +82,7 @@ export function PortalLoginCard({ employeeId, employeeName }: {
         <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 space-y-1.5">
           <p className="text-xs text-foreground">
             Temporary password for <span className="font-semibold">{employeeName}</span> — share it
-            with them directly. It is shown only once; they can change it from the user menu after signing in.
+            with them directly. It is shown only once.
           </p>
           <div className="flex items-center gap-2">
             <code className="rounded bg-card border border-border px-2 py-1 text-sm font-mono select-all">{temp}</code>
