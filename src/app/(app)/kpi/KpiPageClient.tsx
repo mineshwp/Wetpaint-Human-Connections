@@ -12,6 +12,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { ActionPointsEditor } from "./ActionPointsEditor"
+import { isMonthPeriod, monthNumber } from "@/lib/kpi/onboarding"
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -48,6 +49,7 @@ interface FinalComment {
 interface Employee {
   id: string; first_name: string; last_name: string; job_title: string; email?: string
   profile_photo_url?: string | null
+  status?: string
   department?: { name: string } | null
 }
 
@@ -112,6 +114,39 @@ function periodToYear(period: string): number | null {
 
 function quarterToPeriod(q: Quarter, year: number): string {
   return `Q${q} ${year}`
+}
+
+// Onboarding staff are reviewed in Month 1–3; permanent staff in Q1–Q4. A "slot"
+// is one review position on a person: "q1".."q4" or "m1".."m3".
+const MONTHS = [1, 2, 3] as const
+type Month = typeof MONTHS[number]
+type Slot = `q${Quarter}` | `m${Month}`
+const QUARTER_SLOTS: Slot[] = QUARTERS.map(q => `q${q}` as Slot)
+const MONTH_SLOTS: Slot[] = MONTHS.map(m => `m${m}` as Slot)
+
+function slotPeriod(slot: Slot, year: number): string {
+  return slot[0] === "m" ? `Month ${slot[1]}` : quarterToPeriod(Number(slot[1]) as Quarter, year)
+}
+function slotLabel(slot: Slot): string {
+  return slot[0] === "m" ? `Onboarding · Month ${slot[1]}` : QUARTER_LABELS[Number(slot[1]) as Quarter]
+}
+function slotShort(slot: Slot): string {
+  return slot[0] === "m" ? `M${slot[1]}` : `Q${slot[1]}`
+}
+/** "Onboarding KPI · Month 1" for month reviews, otherwise the period as-is. */
+function periodLabel(period: string): string {
+  return isMonthPeriod(period) ? `Onboarding KPI · ${period.trim()}` : period
+}
+// Month reviews have no year, so they are shown whatever year is selected.
+function inYearOrOnboarding(period: string, year: number): boolean {
+  return isMonthPeriod(period) || periodToYear(period) === year
+}
+function reviewSlot(period: string, year: number): Slot | null {
+  const mn = monthNumber(period)
+  if (mn) return `m${mn}`
+  if (periodToYear(period) !== year) return null
+  const q = periodToQuarter(period)
+  return q ? `q${q}` : null
 }
 
 // A review's overall score: per item, average the submitted scores (HR + the
@@ -933,20 +968,25 @@ function ConfirmDeleteModal({ onConfirm, onCancel, deleting }: {
 
 // ─── Create Review Modal ────────────────────────────────────────────────────────
 
-function CreateReviewModal({ employees, currentPeriod, selectedYear, preselectedEmployeeId, preselectedQuarter, onSave, onClose, saving }: {
+function CreateReviewModal({ employees, currentPeriod, selectedYear, preselectedEmployeeId, preselectedSlot, onSave, onClose, saving }: {
   employees: Employee[]; currentPeriod: string; selectedYear: number
-  preselectedEmployeeId?: string; preselectedQuarter?: Quarter
+  preselectedEmployeeId?: string; preselectedSlot?: Slot
   onSave: (d: { employee_id: string; period: string; title: string; deadline: string }) => Promise<void>
   onClose: () => void; saving: boolean
 }) {
   const [employeeId, setEmployeeId] = useState(preselectedEmployeeId ?? employees[0]?.id ?? "")
   // Default to the picked quarter in the selected year; otherwise the current
   // period if it's in the selected year, else Q1 of the selected year.
-  const [period, setPeriod]         = useState(
-    preselectedQuarter
-      ? quarterToPeriod(preselectedQuarter, selectedYear)
+  const defaultPeriodFor = (empId: string) =>
+    employees.find(e => e.id === empId)?.status === "onboarding"
+      ? "Month 1"
       : periodToYear(currentPeriod) === selectedYear ? currentPeriod : `Q1 ${selectedYear}`
+  const [period, setPeriod]         = useState(
+    preselectedSlot
+      ? slotPeriod(preselectedSlot, selectedYear)
+      : defaultPeriodFor(preselectedEmployeeId ?? employees[0]?.id ?? "")
   )
+  const employeeOnboarding = employees.find(e => e.id === employeeId)?.status === "onboarding"
   const [customTitle, setCustomTitle] = useState<string | null>(null)
   const [deadline, setDeadline]     = useState("")
 
@@ -972,16 +1012,23 @@ function CreateReviewModal({ employees, currentPeriod, selectedYear, preselected
         <div className="space-y-3">
           <div>
             <label className="text-xs font-semibold text-muted-foreground block mb-1.5">Employee</label>
-            <select value={employeeId} onChange={e => setEmployeeId(e.target.value)}
+            <select value={employeeId} onChange={e => { setEmployeeId(e.target.value); setPeriod(defaultPeriodFor(e.target.value)) }}
               className="w-full rounded-xl border border-border bg-card px-3 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
             >
-              {employees.map(e => <option key={e.id} value={e.id}>{e.first_name} {e.last_name}</option>)}
+              {employees.map(e => <option key={e.id} value={e.id}>{e.first_name} {e.last_name}{e.status === "onboarding" ? " (onboarding)" : ""}</option>)}
             </select>
           </div>
           <div>
             <label className="text-xs font-semibold text-muted-foreground block mb-1.5">Period</label>
-            <input value={period} onChange={e => setPeriod(e.target.value)} placeholder="e.g. Q1 2026"
-              className="w-full rounded-xl border border-border bg-card px-3 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary" />
+            {employeeOnboarding ? (
+              <select value={period} onChange={e => setPeriod(e.target.value)}
+                className="w-full rounded-xl border border-border bg-card px-3 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary">
+                {MONTH_SLOTS.map(sl => <option key={sl} value={slotPeriod(sl, selectedYear)}>{slotPeriod(sl, selectedYear)}</option>)}
+              </select>
+            ) : (
+              <input value={period} onChange={e => setPeriod(e.target.value)} placeholder="e.g. Q1 2026"
+                className="w-full rounded-xl border border-border bg-card px-3 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary" />
+            )}
           </div>
           <div>
             <label className="text-xs font-semibold text-muted-foreground block mb-1.5">Title</label>
@@ -1427,13 +1474,22 @@ function StaffRow({ employee, reviews, scores, reviewTemplates, onOpen, publishe
   reviews: Review[]
   scores: Record<string, Score[]>
   reviewTemplates: Record<string, TemplateSection[]>
-  onOpen: (employeeId: string, quarter?: Quarter) => void
+  onOpen: (employeeId: string, slot?: Slot) => void
 }) {
+  const onboarding = employee.status === "onboarding"
   const reviewByQuarter = useMemo(() => {
     const map: Partial<Record<Quarter, Review>> = {}
     for (const r of reviews) {
       const q = periodToQuarter(r.period)
       if (q) map[q] = r
+    }
+    return map
+  }, [reviews])
+  const reviewByMonth = useMemo(() => {
+    const map: Partial<Record<Month, Review>> = {}
+    for (const r of reviews) {
+      const m = monthNumber(r.period)
+      if (m) map[m] = r
     }
     return map
   }, [reviews])
@@ -1454,6 +1510,23 @@ function StaffRow({ employee, reviews, scores, reviewTemplates, onOpen, publishe
   const name = `${employee.first_name} ${employee.last_name}`
   const deptName = (employee as { department?: { name: string } | null }).department?.name ?? ""
 
+  // A filled review chip: label, score and status. Per item the score is the
+  // AVERAGE of all submitted scores (same math as the detail view).
+  function reviewChip(slot: Slot, label: string, review: Review) {
+    const statusInfo = STATUS_DISPLAY[review.status] ?? STATUS_DISPLAY.draft
+    const { current, max } = computeReviewScore(reviewTemplates[review.id] ?? [], scores[review.id] ?? [], review.kpi_review_invitees ?? [])
+    return (
+      <button
+        key={slot}
+        type="button"
+        onClick={() => onOpen(employee.id, slot)}
+        className={cn("inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-semibold transition-all hover:shadow-sm", statusInfo.chipCls)}
+      >
+        {label} · {max > 0 ? `${fmtScore(current)}/${max}` : "—"} · {statusInfo.label}
+      </button>
+    )
+  }
+
   return (
     <div className="border-b border-border last:border-b-0">
       <div
@@ -1468,68 +1541,49 @@ function StaffRow({ employee, reviews, scores, reviewTemplates, onOpen, publishe
           </div>
         </div>
 
-        {/* Quarter chips — click a chip to open that quarter directly */}
+        {/* Review chips — click one to open that review directly. Onboarding staff
+            show Month 1–3 (no quarters or year); permanent staff show Q1–Q4 plus
+            any onboarding KPI they already have on record. */}
         <div className="flex items-center gap-1.5 flex-wrap justify-end" onClick={e => e.stopPropagation()}>
-          {QUARTERS.map(q => {
-            const review = reviewByQuarter[q]
-            if (review) {
-              const statusInfo = STATUS_DISPLAY[review.status] ?? STATUS_DISPLAY.draft
-              const reviewScores = scores[review.id] ?? []
-              const rtpl = reviewTemplates[review.id] ?? []
-              const totalMax = rtpl.reduce((a, s) => a + (s.kpi_template_items ?? []).reduce((b, i) => b + i.max_score, 0), 0)
-              // Per item, the score is the AVERAGE of all submitted scores (not
-              // the raw sum of every reviewer's row) — then summed across items,
-              // matching the detail view. A naive sum overshoots the max.
-              const scoresByItem = new Map<string, number[]>()
-              for (const s of reviewScores) {
-                if (s.score != null) {
-                  const arr = scoresByItem.get(s.item_id) ?? []
-                  arr.push(s.score)
-                  scoresByItem.set(s.item_id, arr)
-                }
-              }
-              const current = rtpl.reduce((total, s) =>
-                total + (s.kpi_template_items ?? []).reduce((b, i) => {
-                  const vals = scoresByItem.get(i.id)
-                  return b + (vals && vals.length ? vals.reduce((x, y) => x + y, 0) / vals.length : 0)
-                }, 0), 0)
-              return (
-                <button
-                  key={q}
-                  type="button"
-                  onClick={() => onOpen(employee.id, q)}
-                  className={cn(
-                    "inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-semibold transition-all hover:shadow-sm",
-                    statusInfo.chipCls
-                  )}
-                >
-                  Q{q} · {totalMax > 0 ? `${fmtScore(current)}/${totalMax}` : "—"} · {statusInfo.label}
-                </button>
-              )
-            }
+          {onboarding && (
+            <span className="inline-flex items-center rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-sky-700">
+              Onboarding
+            </span>
+          )}
+          {!onboarding && MONTHS.map(m => {
+            const review = reviewByMonth[m]
+            if (!review) return null
+            return reviewChip(`m${m}`, `Onboarding M${m}`, review)
+          })}
+          {(onboarding ? MONTHS : QUARTERS).map(n => {
+            const slot = (onboarding ? `m${n}` : `q${n}`) as Slot
+            const review = onboarding ? reviewByMonth[n as Month] : reviewByQuarter[n as Quarter]
+            if (review) return reviewChip(slot, slotShort(slot), review)
             if (publishedOnly) return null
             return (
               <button
-                key={q}
+                key={slot}
                 type="button"
-                onClick={() => onOpen(employee.id, q)}
+                onClick={() => onOpen(employee.id, slot)}
                 className="inline-flex items-center rounded-full border border-dashed border-border px-2.5 py-0.5 text-[11px] font-medium text-muted-foreground hover:border-primary/50 hover:text-primary transition-all"
               >
-                Q{q}
+                {slotShort(slot)}
               </button>
             )
           })}
 
-          {/* Year total */}
-          <span
-            className={cn(
-              "inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-bold",
-              yearPct !== null ? "border-primary/30 bg-primary/5 text-primary" : "border-dashed border-border text-muted-foreground"
-            )}
-            title="Average of scored quarters"
-          >
-            Year · {yearPct !== null ? `${fmtScore(yearPct)}/100` : "—"}
-          </span>
+          {/* Year total — permanent staff only */}
+          {!onboarding && (
+            <span
+              className={cn(
+                "inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-bold",
+                yearPct !== null ? "border-primary/30 bg-primary/5 text-primary" : "border-dashed border-border text-muted-foreground"
+              )}
+              title="Average of scored quarters"
+            >
+              Year · {yearPct !== null ? `${fmtScore(yearPct)}/100` : "—"}
+            </span>
+          )}
         </div>
 
         <div className="w-7 h-7 rounded-full border border-border flex items-center justify-center text-muted-foreground shrink-0 ml-1">
@@ -1542,7 +1596,7 @@ function StaffRow({ employee, reviews, scores, reviewTemplates, onOpen, publishe
 
 // ─── Employee Review Detail (single-person full view) ─────────────────────────────
 
-function EmployeeReviewDetail({ employee, reviews, scores, reviewTemplates, finalComments, allEmployees, currentEmployeeId, onScoreChange, onSaveFinalComment, onAddInvitee, onRemoveInvitee, onSetSections, onStatusChange, onDelete, onAddItem, onEditItem, onRemoveItem, onResetItem, onCopyItems, onUpdateReviewDetails, onCreateReview, onBack, initialQuarter, ratingScale, selectedYear }: {
+function EmployeeReviewDetail({ employee, reviews, scores, reviewTemplates, finalComments, allEmployees, currentEmployeeId, onScoreChange, onSaveFinalComment, onAddInvitee, onRemoveInvitee, onSetSections, onStatusChange, onDelete, onAddItem, onEditItem, onRemoveItem, onResetItem, onCopyItems, onUpdateReviewDetails, onCreateReview, onBack, initialSlot, ratingScale, selectedYear }: {
   employee: Employee
   reviews: Review[]
   scores: Record<string, Score[]>
@@ -1563,34 +1617,38 @@ function EmployeeReviewDetail({ employee, reviews, scores, reviewTemplates, fina
   onResetItem?: (reviewId: string, itemId: string) => void
   onCopyItems?: (reviewId: string, fromReviewId: string, sectionId: string) => Promise<void>
   onUpdateReviewDetails?: (reviewId: string, data: { title: string; period: string; deadline: string | null }) => Promise<void>
-  onCreateReview: (employeeId: string, quarter: Quarter) => void
+  onCreateReview: (employeeId: string, slot: Slot) => void
   onBack: () => void
-  initialQuarter?: Quarter
+  initialSlot?: Slot
   ratingScale: RatingRow[]
   selectedYear: number
 }) {
-  const reviewByQuarter = useMemo(() => {
-    const map: Partial<Record<Quarter, Review>> = {}
+  const onboarding = employee.status === "onboarding"
+  const reviewBySlot = useMemo(() => {
+    const map: Partial<Record<Slot, Review>> = {}
     for (const r of reviews) {
-      if (periodToYear(r.period) !== selectedYear) continue
-      const q = periodToQuarter(r.period)
-      if (q) map[q] = r
+      const slot = reviewSlot(r.period, selectedYear)
+      if (slot) map[slot] = r
     }
     return map
   }, [reviews, selectedYear])
 
-  const visibleQuarters = useMemo<Quarter[]>(() => {
-    const withReview = QUARTERS.filter(q => reviewByQuarter[q])
-    const nextEmpty = QUARTERS.find(q => !reviewByQuarter[q])
-    const all = nextEmpty ? [...withReview, nextEmpty] : withReview
-    return all.sort((a, b) => a - b) as Quarter[]
-  }, [reviewByQuarter])
+  // Onboarding staff: Month 1–3 only. Permanent staff: Q1–Q4, then their
+  // onboarding KPI (the Month reviews that already exist) kept on record.
+  const visibleSlots = useMemo<Slot[]>(() => {
+    const pick = (slots: Slot[]) => {
+      const nextEmpty = slots.find(sl => !reviewBySlot[sl])
+      return slots.filter(sl => reviewBySlot[sl] || sl === nextEmpty)
+    }
+    if (onboarding) return pick(MONTH_SLOTS)
+    return [...pick(QUARTER_SLOTS), ...MONTH_SLOTS.filter(sl => reviewBySlot[sl])]
+  }, [reviewBySlot, onboarding])
 
   const name = `${employee.first_name} ${employee.last_name}`
   const deptName = (employee as { department?: { name: string } | null }).department?.name ?? ""
 
-  const [activeQuarter, setActiveQuarter] = useState<Quarter>(initialQuarter ?? visibleQuarters[0] ?? 1)
-  const activeReview = reviewByQuarter[activeQuarter]
+  const [activeSlot, setActiveSlot] = useState<Slot>(initialSlot ?? visibleSlots[0] ?? (onboarding ? "m1" : "q1"))
+  const activeReview = reviewBySlot[activeSlot]
 
   // This employee's OTHER reviews, with per-section custom-KPI counts — used to
   // offer "copy from a previous quarter" on sections that hold per-staff KPIs.
@@ -1623,36 +1681,47 @@ function EmployeeReviewDetail({ employee, reviews, scores, reviewTemplates, fina
               {employee.job_title}{deptName ? ` · ${deptName}` : ""}
             </div>
           </div>
+          {onboarding && (
+            <span className="inline-flex items-center rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-sky-700 shrink-0">
+              Onboarding
+            </span>
+          )}
         </div>
       </div>
 
-      <QuarterScoresSummary reviews={reviews} scores={scores} reviewTemplates={reviewTemplates} ratingScale={ratingScale} year={selectedYear} />
+      {/* Quarters and the year score only show once they are permanent */}
+      {!onboarding && (
+        <QuarterScoresSummary reviews={reviews} scores={scores} reviewTemplates={reviewTemplates} ratingScale={ratingScale} year={selectedYear} />
+      )}
 
-      {/* Quarter tab bar */}
-      <div className="flex items-center gap-0 border-b border-border">
-        {visibleQuarters.map(q => (
-          <button
-            key={q}
-            type="button"
-            onClick={() => setActiveQuarter(q)}
-            className={cn(
-              "px-3 py-2 text-xs font-semibold border-b-2 -mb-px transition-colors whitespace-nowrap",
-              activeQuarter === q
-                ? "border-primary text-primary"
-                : "border-transparent text-muted-foreground hover:text-foreground"
-            )}
-          >
-            {QUARTER_LABELS[q]}
-            {reviewByQuarter[q] && (
-              <span className={cn(
-                "ml-1.5 inline-flex items-center rounded-full border px-1.5 py-0 text-[10px] font-medium",
-                STATUS_DISPLAY[reviewByQuarter[q]!.status]?.chipCls ?? ""
-              )}>
-                {STATUS_DISPLAY[reviewByQuarter[q]!.status]?.label}
-              </span>
-            )}
-          </button>
-        ))}
+      {/* Review tab bar */}
+      <div className="flex items-center gap-0 border-b border-border overflow-x-auto">
+        {visibleSlots.map(sl => {
+          const rv = reviewBySlot[sl]
+          return (
+            <button
+              key={sl}
+              type="button"
+              onClick={() => setActiveSlot(sl)}
+              className={cn(
+                "px-3 py-2 text-xs font-semibold border-b-2 -mb-px transition-colors whitespace-nowrap",
+                activeSlot === sl
+                  ? "border-primary text-primary"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              )}
+            >
+              {slotLabel(sl)}
+              {rv && (
+                <span className={cn(
+                  "ml-1.5 inline-flex items-center rounded-full border px-1.5 py-0 text-[10px] font-medium",
+                  STATUS_DISPLAY[rv.status]?.chipCls ?? ""
+                )}>
+                  {STATUS_DISPLAY[rv.status]?.label}
+                </span>
+              )}
+            </button>
+          )
+        })}
       </div>
 
       {activeReview ? (
@@ -1682,9 +1751,9 @@ function EmployeeReviewDetail({ employee, reviews, scores, reviewTemplates, fina
       ) : (
         <div className="flex flex-col items-center justify-center py-12 text-muted-foreground gap-3">
           <BarChart3 size={28} className="opacity-30" />
-          <p className="text-sm font-medium">No Q{activeQuarter} review set up yet</p>
-          <Button size="sm" onClick={() => onCreateReview(employee.id, activeQuarter)} className="gap-1.5 h-8 text-xs">
-            <Plus size={13} /> Set up Q{activeQuarter}
+          <p className="text-sm font-medium">No {activeSlot[0] === "m" ? `Month ${activeSlot[1]}` : `Q${activeSlot[1]}`} review set up yet</p>
+          <Button size="sm" onClick={() => onCreateReview(employee.id, activeSlot)} className="gap-1.5 h-8 text-xs">
+            <Plus size={13} /> Set up {slotShort(activeSlot)}
           </Button>
         </div>
       )}
@@ -1714,7 +1783,7 @@ function HRAdminView({ reviewTemplates, reviews, scores, finalComments, allEmplo
   onResetItem?: (reviewId: string, itemId: string) => void
   onCopyItems?: (reviewId: string, fromReviewId: string, sectionId: string) => Promise<void>
   onUpdateReviewDetails?: (reviewId: string, data: { title: string; period: string; deadline: string | null }) => Promise<void>
-  onShowCreate: (employeeId?: string, quarter?: Quarter) => void
+  onShowCreate: (employeeId?: string, slot?: Slot) => void
   onManageTemplate: () => void
   onShowRatingGuide: () => void
   ratingScale: RatingRow[]
@@ -1727,23 +1796,27 @@ function HRAdminView({ reviewTemplates, reviews, scores, finalComments, allEmplo
   const [statusFilter, setStatusFilter] = useState("all")
   const [sortOrder, setSortOrder]     = useState<"az" | "za">("az")
   const [selectedId, setSelectedId]   = useState<string | null>(null)
-  const [selectedQuarter, setSelectedQuarter] = useState<Quarter | undefined>(undefined)
+  const [stageFilter, setStageFilter] = useState<"all" | "onboarding" | "permanent">("all")
+  const [selectedSlot, setSelectedSlot] = useState<Slot | undefined>(undefined)
 
-  // Only reviews in the selected year drive the list, chips and stats.
+  // Only reviews in the selected year drive the quarter stats.
   const yearReviews = useMemo(() => reviews.filter(r => periodToYear(r.period) === selectedYear), [reviews, selectedYear])
 
-  // Build a map: employee_id → reviews[] (for the selected year)
+  // Build a map: employee_id → reviews[] (selected year's quarters, plus every
+  // onboarding Month review since those have no year).
   const reviewsByEmployee = useMemo(() => {
     const map: Record<string, Review[]> = {}
-    for (const r of yearReviews) {
+    for (const r of reviews.filter(r => inYearOrOnboarding(r.period, selectedYear))) {
       if (!map[r.employee_id]) map[r.employee_id] = []
       map[r.employee_id].push(r)
     }
     return map
-  }, [yearReviews])
+  }, [reviews, selectedYear])
 
   // Stat cards — published/draft per quarter for the selected year.
   const totalStaff = allEmployees.length
+  const onboardingCount = allEmployees.filter(e => e.status === "onboarding").length
+  const permanentCount = totalStaff - onboardingCount
   const quarterStats = QUARTERS.map(q => {
     const qReviews = yearReviews.filter(r => periodToQuarter(r.period) === q)
     return {
@@ -1769,9 +1842,14 @@ function HRAdminView({ reviewTemplates, reviews, scores, finalComments, allEmplo
       const deptName = (emp as { department?: { name: string } | null }).department?.name ?? ""
       if (deptFilter !== "all" && deptName !== deptFilter) return false
 
+      const isOnb = emp.status === "onboarding"
+      if (stageFilter === "onboarding" && !isOnb) return false
+      if (stageFilter === "permanent" && isOnb) return false
+
       if (statusFilter !== "all") {
         const empReviews = reviewsByEmployee[emp.id] ?? []
-        const q1 = empReviews.find(r => periodToQuarter(r.period) === 1)
+        // Status filter looks at the first review: Month 1 while onboarding, else Q1.
+        const q1 = empReviews.find(r => isOnb ? monthNumber(r.period) === 1 : periodToQuarter(r.period) === 1)
         if (statusFilter === "published" && q1?.status !== "active") return false
         if (statusFilter === "draft" && q1?.status !== "draft") return false
         if (statusFilter === "notstarted" && q1) return false
@@ -1791,7 +1869,7 @@ function HRAdminView({ reviewTemplates, reviews, scores, finalComments, allEmplo
       const bn = `${b.first_name} ${b.last_name}`.trim().toLowerCase()
       return sortOrder === "az" ? an.localeCompare(bn) : bn.localeCompare(an)
     })
-  }, [allEmployees, deptFilter, statusFilter, searchQ, reviewsByEmployee, sortOrder])
+  }, [allEmployees, deptFilter, stageFilter, statusFilter, searchQ, reviewsByEmployee, sortOrder])
 
   // Detail view — a single person, full screen, with a Back button.
   const selectedEmp = selectedId ? allEmployees.find(e => e.id === selectedId) : undefined
@@ -1819,9 +1897,9 @@ function HRAdminView({ reviewTemplates, reviews, scores, finalComments, allEmplo
         onResetItem={onResetItem}
         onCopyItems={onCopyItems}
         onUpdateReviewDetails={onUpdateReviewDetails}
-        onCreateReview={(empId, quarter) => onShowCreate(empId, quarter)}
+        onCreateReview={(empId, slot) => onShowCreate(empId, slot)}
         onBack={() => setSelectedId(null)}
-        initialQuarter={selectedQuarter}
+        initialSlot={selectedSlot}
         ratingScale={ratingScale}
         selectedYear={selectedYear}
       />
@@ -1835,7 +1913,7 @@ function HRAdminView({ reviewTemplates, reviews, scores, finalComments, allEmplo
         <div>
           <h1 className="text-2xl font-bold tracking-tight">KPI Reviews — {selectedYear}</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            {totalStaff} staff member{totalStaff !== 1 ? "s" : ""} · {selectedYear} review year
+            {totalStaff} staff member{totalStaff !== 1 ? "s" : ""}{onboardingCount > 0 ? ` (${onboardingCount} onboarding)` : ""} · {selectedYear} review year
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
@@ -1873,7 +1951,7 @@ function HRAdminView({ reviewTemplates, reviews, scores, finalComments, allEmplo
           <div key={q} className="rounded-xl border border-border bg-card px-4 py-3">
             <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Q{q} Published</div>
             <div className="text-2xl font-bold text-emerald-700">
-              {published}<span className="text-sm font-medium text-muted-foreground"> / {totalStaff}</span>
+              {published}<span className="text-sm font-medium text-muted-foreground"> / {permanentCount}</span>
             </div>
             <div className="text-[11px] text-amber-700 mt-0.5">{draft} pending</div>
           </div>
@@ -1898,6 +1976,16 @@ function HRAdminView({ reviewTemplates, reviews, scores, finalComments, allEmplo
         >
           <option value="all">All departments</option>
           {departments.map(d => <option key={d} value={d}>{d}</option>)}
+        </select>
+        <select
+          value={stageFilter}
+          onChange={e => setStageFilter(e.target.value as "all" | "onboarding" | "permanent")}
+          className="rounded-xl border border-border bg-card px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary sm:w-44"
+          aria-label="Staff stage"
+        >
+          <option value="all">All staff</option>
+          <option value="onboarding">Onboarding</option>
+          <option value="permanent">Permanent</option>
         </select>
         <select
           value={statusFilter}
@@ -1935,7 +2023,7 @@ function HRAdminView({ reviewTemplates, reviews, scores, finalComments, allEmplo
               reviews={reviewsByEmployee[emp.id] ?? []}
               scores={scores}
               reviewTemplates={reviewTemplates}
-              onOpen={(id, quarter) => { setSelectedId(id); setSelectedQuarter(quarter) }}
+              onOpen={(id, slot) => { setSelectedId(id); setSelectedSlot(slot) }}
             />
           ))}
         </div>
@@ -1977,7 +2065,8 @@ function ReviewCards({ list, mode, scores, reviewTemplates, finalComments, curre
   return (
     <div className="space-y-4">
       {[...list]
-        .sort((a, b) => ((periodToYear(a.period) ?? 0) - (periodToYear(b.period) ?? 0)) || ((periodToQuarter(a.period) ?? 0) - (periodToQuarter(b.period) ?? 0)))
+        // Onboarding months first, then quarters in date order.
+        .sort((a, b) => (Number(!isMonthPeriod(a.period)) - Number(!isMonthPeriod(b.period))) || ((monthNumber(a.period) ?? 0) - (monthNumber(b.period) ?? 0)) || ((periodToYear(a.period) ?? 0) - (periodToYear(b.period) ?? 0)) || ((periodToQuarter(a.period) ?? 0) - (periodToQuarter(b.period) ?? 0)))
         .map(review => {
         const myInv = mode === "score" ? review.kpi_review_invitees.find(i => i.invitee_id === currentEmployeeId) : undefined
         const published = review.status === "active" || review.status === "completed"
@@ -2002,7 +2091,7 @@ function ReviewCards({ list, mode, scores, reviewTemplates, finalComments, curre
               <div className="min-w-0">
                 <p className="font-bold text-base leading-snug">{review.title}</p>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  {review.employee.first_name} {review.employee.last_name} · {review.period}
+                  {review.employee.first_name} {review.employee.last_name} · {periodLabel(review.period)}
                   {review.deadline && ` · Due ${new Date(review.deadline).toLocaleDateString("en-ZA", { dateStyle: "medium" })}`}
                 </p>
               </div>
@@ -2121,10 +2210,10 @@ function MyKpiView(props: SharedViewProps) {
   const { reviews, currentEmployeeId, selectedYear, scores, reviewTemplates, ratingScale } = props
   // Every quarter shows; ones HR hasn't published yet are "Pending" (KPIs only).
   const mine = reviews.filter(r =>
-    r.employee_id === currentEmployeeId && periodToYear(r.period) === selectedYear)
+    r.employee_id === currentEmployeeId && inYearOrOnboarding(r.period, selectedYear))
   return (
     <div className="space-y-4">
-      {mine.length > 0 && (
+      {mine.some(r => !isMonthPeriod(r.period)) && (
         <QuarterScoresSummary reviews={mine} scores={scores} reviewTemplates={reviewTemplates} ratingScale={ratingScale} year={selectedYear} />
       )}
       {mine.length === 0
@@ -2138,13 +2227,13 @@ function MyKpiView(props: SharedViewProps) {
 function ReviewsToScoreView(props: SharedViewProps) {
   const { reviews, currentEmployeeId, selectedYear } = props
   const list = reviews.filter(r =>
-    periodToYear(r.period) === selectedYear && r.kpi_review_invitees?.some(i => i.invitee_id === currentEmployeeId))
+    inYearOrOnboarding(r.period, selectedYear) && r.kpi_review_invitees?.some(i => i.invitee_id === currentEmployeeId))
   return list.length === 0
     ? <EmptyState text={`You haven't been asked to score any reviews in ${selectedYear}.`} />
     : <ReviewCards {...props} list={list} mode="score" />
 }
 
-type TeamMember = { id: string; first_name: string; last_name: string; job_title: string; profile_photo_url?: string | null; department?: { name: string } | null }
+type TeamMember = { id: string; first_name: string; last_name: string; job_title: string; profile_photo_url?: string | null; status?: string; department?: { name: string } | null }
 
 // My Team — published reviews for everyone the manager can see.
 function MyTeamView(props: SharedViewProps) {
@@ -2161,7 +2250,7 @@ function MyTeamView(props: SharedViewProps) {
 
   if (!team) return <div className="flex justify-center py-16"><Loader2 size={22} className="animate-spin text-muted-foreground" /></div>
 
-  const yearPublished = (id: string) => reviews.filter(r => r.employee_id === id && periodToYear(r.period) === selectedYear)
+  const yearPublished = (id: string) => reviews.filter(r => r.employee_id === id && inYearOrOnboarding(r.period, selectedYear))
   const open = openId ? team.members.find(m => m.id === openId) : null
 
   if (open) {
@@ -2178,7 +2267,7 @@ function MyTeamView(props: SharedViewProps) {
             <p className="text-xs text-muted-foreground">{open.job_title}{open.department?.name ? ` · ${open.department.name}` : ""}</p>
           </div>
         </div>
-        {theirs.length > 0 && (
+        {theirs.some(r => !isMonthPeriod(r.period)) && (
           <QuarterScoresSummary reviews={theirs} scores={scores} reviewTemplates={reviewTemplates} ratingScale={ratingScale} year={selectedYear} />
         )}
         {theirs.length === 0
@@ -2734,7 +2823,7 @@ export function KpiPageClient({ isHR, currentEmployeeId, isManager = false }: { 
   const [allEmployees, setAllEmployees]   = useState<Employee[]>([])
   const [loading, setLoading]             = useState(true)
   const [showCreate, setShowCreate]       = useState(false)
-  const [createPreselect, setCreatePreselect] = useState<{ employeeId?: string; quarter?: Quarter }>({})
+  const [createPreselect, setCreatePreselect] = useState<{ employeeId?: string; slot?: Slot }>({})
   const [creating, setCreating]           = useState(false)
   const [currentPeriod, setCurrentPeriod] = useState("Q1 2026")
   const [toast, setToast]                 = useState<string | null>(null)
@@ -3006,8 +3095,8 @@ export function KpiPageClient({ isHR, currentEmployeeId, isManager = false }: { 
     setCreating(false)
   }
 
-  function handleShowCreate(employeeId?: string, quarter?: Quarter) {
-    setCreatePreselect({ employeeId, quarter })
+  function handleShowCreate(employeeId?: string, slot?: Slot) {
+    setCreatePreselect({ employeeId, slot })
     setShowCreate(true)
   }
 
@@ -3150,7 +3239,7 @@ export function KpiPageClient({ isHR, currentEmployeeId, isManager = false }: { 
           currentPeriod={currentPeriod}
           selectedYear={selectedYear}
           preselectedEmployeeId={createPreselect.employeeId}
-          preselectedQuarter={createPreselect.quarter}
+          preselectedSlot={createPreselect.slot}
           onSave={handleCreate}
           onClose={() => { setShowCreate(false); setCreatePreselect({}) }}
           saving={creating}

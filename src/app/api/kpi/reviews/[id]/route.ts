@@ -4,6 +4,7 @@ import { getUserRole, getEmployeeIdForUser } from "@/lib/auth"
 import { generateActionPoints } from "@/lib/kpi/action-points"
 import { blockWhileImpersonating } from "@/lib/impersonation"
 import { canViewReview } from "@/lib/kpi/access"
+import { isMonthPeriod, isValidReviewPeriod, PERIOD_STATUS_ERROR } from "@/lib/kpi/onboarding"
 
 export async function GET(
   _req: NextRequest,
@@ -55,12 +56,29 @@ export async function PATCH(
   if (allowed.status !== undefined && !["draft", "active", "completed"].includes(String(allowed.status))) {
     return NextResponse.json({ error: "Invalid status" }, { status: 400 })
   }
-  if (allowed.period !== undefined && !/^Q[1-4] \d{4}$/.test(String(allowed.period))) {
-    return NextResponse.json({ error: "period must look like \"Q1 2026\"" }, { status: 400 })
+  if (allowed.period !== undefined && !isValidReviewPeriod(String(allowed.period))) {
+    return NextResponse.json({ error: "period must look like \"Q1 2026\" or \"Month 1\"" }, { status: 400 })
   }
 
-  const { data: before } = await supabase.from("kpi_reviews").select("status").eq("id", id).maybeSingle()
+  const { data: before } = await supabase
+    .from("kpi_reviews")
+    .select("status, period, employee:employees!kpi_reviews_employee_id_fkey(status)")
+    .eq("id", id)
+    .maybeSingle()
   if (!before) return NextResponse.json({ error: "Not found" }, { status: 404 })
+
+  // Month periods belong to onboarding staff; a permanent person's onboarding
+  // reviews keep their Month period, but can't be moved to a quarter (or back).
+  if (allowed.period !== undefined && allowed.period !== before.period) {
+    const empStatus = (before.employee as { status?: string } | null)?.status
+    const isOnboardingReview = isMonthPeriod(String(allowed.period))
+    if (empStatus === "onboarding" && !isOnboardingReview) {
+      return NextResponse.json({ error: PERIOD_STATUS_ERROR }, { status: 400 })
+    }
+    if (empStatus !== "onboarding" && isOnboardingReview) {
+      return NextResponse.json({ error: "Month 1–3 reviews are only for staff who are onboarding." }, { status: 400 })
+    }
+  }
 
   const { data, error } = await supabase
     .from("kpi_reviews")

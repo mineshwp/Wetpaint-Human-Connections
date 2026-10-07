@@ -12,8 +12,8 @@ export async function GET() {
 
   const { data, error } = await supabase
     .from("employees")
-    .select("id, first_name, last_name, job_title, email, profile_photo_url, department:departments(name)")
-    .eq("status", "active")
+    .select("id, first_name, last_name, job_title, email, profile_photo_url, status, department:departments(name)")
+    .in("status", ["active", "onboarding"])
     .order("last_name")
 
   if (error) return NextResponse.json({ error: "Failed to fetch employees" }, { status: 500 })

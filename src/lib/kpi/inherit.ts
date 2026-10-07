@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server"
+import { isMonthPeriod, monthNumber } from "@/lib/kpi/onboarding"
 
 type DB = Awaited<ReturnType<typeof createClient>>
 
@@ -17,6 +18,18 @@ export function parsePeriod(period: string | null | undefined): { year: number; 
 //     PRIOR year, so starting e.g. Q1 2027 carries forward the 2026 template.
 // Returns null when there's nothing to inherit.
 export async function resolveBaselinePeriod(supabase: DB, targetPeriod: string): Promise<string | null> {
+  // Onboarding: Month 2/3 inherit from Month 1 (if it has a template); Month 1
+  // starts from the current quarter's template.
+  if (isMonthPeriod(targetPeriod)) {
+    if ((monthNumber(targetPeriod) ?? 1) > 1) {
+      const { data: m1 } = await supabase
+        .from("kpi_template_sections").select("id").eq("period", "Month 1").eq("is_active", true).limit(1)
+      if (m1 && m1.length > 0) return "Month 1"
+    }
+    const { data: cur } = await supabase.from("kpi_settings").select("value").eq("key", "current_period").maybeSingle()
+    return cur?.value && parsePeriod(cur.value) ? cur.value : null
+  }
+
   const t = parsePeriod(targetPeriod)
   if (!t) return null
 
@@ -184,15 +197,17 @@ async function findSameYearSiblingReviews(
   period: string,
   excludeReviewId: string,
 ): Promise<{ id: string; period: string }[]> {
+  // Onboarding reviews are siblings of each other (Month 1–3).
+  const onboarding = isMonthPeriod(period)
   const t = parsePeriod(period)
-  if (!t) return []
+  if (!onboarding && !t) return []
   const { data } = await supabase
     .from("kpi_reviews")
     .select("id, period")
     .eq("employee_id", employeeId)
     .eq("is_archived", false)
     .neq("id", excludeReviewId)
-  return (data ?? []).filter((r) => parsePeriod(r.period)?.year === t.year)
+  return (data ?? []).filter((r) => onboarding ? isMonthPeriod(r.period) : parsePeriod(r.period)?.year === t!.year)
 }
 
 // Find the section in `period` whose title matches `title` (trimmed,

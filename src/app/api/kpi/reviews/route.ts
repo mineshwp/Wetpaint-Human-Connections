@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { getUserRole, getEmployeeIdForUser, getTeamScope, applyTeamScope } from "@/lib/auth"
 import { inheritForNewReview } from "@/lib/kpi/inherit"
+import { isValidReviewPeriod, periodMatchesStatus, PERIOD_STATUS_ERROR } from "@/lib/kpi/onboarding"
 import { blockWhileImpersonating } from "@/lib/impersonation"
 import { createAdminClient } from "@/lib/supabase/admin"
 
@@ -20,7 +21,7 @@ export async function GET() {
 
   const selectClause = `
     id, employee_id, period, title, deadline, status, created_at, action_points, action_points_generated_at,
-    employee:employees!kpi_reviews_employee_id_fkey(id, first_name, last_name, job_title, department:departments(name)),
+    employee:employees!kpi_reviews_employee_id_fkey(id, first_name, last_name, job_title, status, department:departments(name)),
     kpi_review_invitees(id, invitee_id, status, invitee:employees!kpi_review_invitees_invitee_id_fkey(id, first_name, last_name), kpi_review_invitee_sections(section_id))
   `
 
@@ -85,7 +86,7 @@ export async function GET() {
       .from("kpi_reviews")
       .select(`
         id, employee_id, period, title, deadline, status, created_at,
-        employee:employees!kpi_reviews_employee_id_fkey(id, first_name, last_name, job_title, department:departments(name))
+        employee:employees!kpi_reviews_employee_id_fkey(id, first_name, last_name, job_title, status, department:departments(name))
       `)
       .in("employee_id", [myEmployeeId, ...deptEmployeeIds])
       .eq("status", "draft")
@@ -134,8 +135,13 @@ export async function POST(req: NextRequest) {
   if (!employee_id || !period || !title) {
     return NextResponse.json({ error: "employee_id, period and title are required" }, { status: 400 })
   }
-  if (!/^Q[1-4] \d{4}$/.test(period)) {
-    return NextResponse.json({ error: "period must look like \"Q1 2026\"" }, { status: 400 })
+  if (!isValidReviewPeriod(period)) {
+    return NextResponse.json({ error: "period must look like \"Q1 2026\" or \"Month 1\"" }, { status: 400 })
+  }
+  const { data: emp } = await supabase.from("employees").select("status").eq("id", employee_id).maybeSingle()
+  if (!emp) return NextResponse.json({ error: "Employee not found" }, { status: 404 })
+  if (!periodMatchesStatus(period, emp.status)) {
+    return NextResponse.json({ error: PERIOD_STATUS_ERROR }, { status: 400 })
   }
 
   const { data, error } = await supabase

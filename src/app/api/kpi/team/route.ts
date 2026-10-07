@@ -32,7 +32,7 @@ export async function GET() {
   const { data, error } = await applyTeamScope(
     supabase
       .from("employees")
-      .select("id, first_name, last_name, job_title, profile_photo_url, department:departments!employees_department_id_fkey(name)")
+      .select("id, first_name, last_name, job_title, profile_photo_url, status, department:departments!employees_department_id_fkey(name)")
       .eq("is_archived", false)
       .neq("id", myEmployeeId)
       .order("first_name"),

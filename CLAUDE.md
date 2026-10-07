@@ -420,6 +420,7 @@ Always return proper HTTP status codes: 400, 401, 403, 404, 500.
 | AI settings (encrypted key, model, prompt + try-it, spend cap, usage log) + HR approval/editing of action points | ✅ Done |
 | Access on the person (not the login) + editable "Who can see what" (filters, bulk Reports to / access, team view) | ✅ Done |
 | KPI page tabs split by purpose: My KPI / My Team / Reviews to Score | ✅ Done |
+| Onboarding KPIs: staff with status `onboarding` are reviewed in `Month 1/2/3` (no quarters or year score); once `active` they start Q1–Q4 and the Month reviews stay on record, labelled "Onboarding KPI". Period rules in `src/lib/kpi/onboarding.ts` (enforced in the reviews POST/PATCH); `/kpi` has an Onboarding / Permanent staff filter; Month templates are cloned from the current quarter's template (Month 2/3 from Month 1) | ✅ Built |
 
 Update this table as features are completed.
 
