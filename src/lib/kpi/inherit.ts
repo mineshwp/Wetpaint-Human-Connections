@@ -189,6 +189,54 @@ export async function copyStaffCustomItems(
   return toInsert.length
 }
 
+// Copy a staff member's per-review overrides of GLOBAL items (customised
+// descriptions / max scores / hidden items, e.g. the Values) from a source
+// review into a target review, matching items by (section title, item title).
+export async function copyReviewOverrides(
+  supabase: DB,
+  targetReviewId: string,
+  targetPeriod: string,
+  fromReviewId: string,
+  fromPeriod: string,
+): Promise<number> {
+  try {
+    const { data: ovs } = await supabase
+      .from("kpi_review_item_overrides")
+      .select("item_id, hidden, title, description, min_score, max_score")
+      .eq("review_id", fromReviewId)
+    if (!ovs || ovs.length === 0) return 0
+
+    const load = async (period: string) => {
+      const { data } = await supabase
+        .from("kpi_template_items")
+        .select("id, title, kpi_template_sections!inner(title, period, is_active)")
+        .is("review_id", null)
+        .eq("is_active", true)
+        .eq("kpi_template_sections.period", period)
+        .eq("kpi_template_sections.is_active", true)
+      return (data ?? []) as unknown as { id: string; title: string; kpi_template_sections: { title: string } }[]
+    }
+    const key = (i: { title: string; kpi_template_sections: { title: string } }) =>
+      `${(i.kpi_template_sections.title ?? "").trim().toLowerCase()}::${(i.title ?? "").trim().toLowerCase()}`
+    const [src, tgt] = await Promise.all([load(fromPeriod), load(targetPeriod)])
+    const srcKey = new Map(src.map((i) => [i.id, key(i)]))
+    const tgtId = new Map(tgt.map((i) => [key(i), i.id]))
+
+    const rows = ovs.flatMap((o) => {
+      const k = srcKey.get(o.item_id)
+      const id = k ? tgtId.get(k) : undefined
+      return id ? [{ review_id: targetReviewId, item_id: id, hidden: o.hidden, title: o.title, description: o.description, min_score: o.min_score, max_score: o.max_score }] : []
+    })
+    if (rows.length === 0) return 0
+    const { error } = await supabase.from("kpi_review_item_overrides").insert(rows)
+    if (error) { console.error("[copyReviewOverrides]", error); return 0 }
+    return rows.length
+  } catch (e) {
+    console.error("[copyReviewOverrides]", e)
+    return 0
+  }
+}
+
 // An employee's other active (non-archived) reviews that fall in the same
 // calendar year as `period`, excluding `excludeReviewId`.
 async function findSameYearSiblingReviews(
@@ -378,17 +426,31 @@ export async function inheritForNewReview(
 
     result.sectionsCreated = await ensurePeriodTemplate(supabase, baseline, review.period)
 
-    const { data: baseReviews } = await supabase
+    // Source = the staff member's most recent EARLIER quarterly review (Q3 -> Q4,
+    // Q4 -> next year's Q1), so what was set up last quarter carries forward.
+    // Falls back to the baseline period's review (onboarding months, or gaps).
+    const { data: mine } = await supabase
       .from("kpi_reviews")
-      .select("id")
+      .select("id, period, created_at")
       .eq("employee_id", review.employee_id)
-      .eq("period", baseline)
       .eq("is_archived", false)
+      .neq("id", review.id)
       .order("created_at", { ascending: true })
-      .limit(1)
-    const baseReview = baseReviews?.[0]
-    if (baseReview) {
-      result.itemsCopied = await copyStaffCustomItems(supabase, review.id, review.period, baseReview.id, baseline)
+    const t = parsePeriod(review.period)
+    let source: { id: string; period: string } | undefined
+    if (t) {
+      source = (mine ?? [])
+        .map((r) => ({ id: r.id, period: r.period as string, pp: parsePeriod(r.period) }))
+        .filter((r) => r.pp && (r.pp.year < t.year || (r.pp.year === t.year && r.pp.quarter < t.quarter)))
+        .sort((a, b) => b.pp!.year - a.pp!.year || b.pp!.quarter - a.pp!.quarter)[0]
+    }
+    if (!source) {
+      const b = (mine ?? []).find((r) => r.period === baseline)
+      if (b) source = { id: b.id, period: b.period as string }
+    }
+    if (source) {
+      result.itemsCopied = await copyStaffCustomItems(supabase, review.id, review.period, source.id, source.period)
+      await copyReviewOverrides(supabase, review.id, review.period, source.id, source.period)
     }
   } catch (e) {
     console.error("[inheritForNewReview]", e)

@@ -398,7 +398,7 @@ Always return proper HTTP status codes: 400, 401, 403, 404, 500.
 | KPI per-period templates (select/edit a period's template; new period copies from another) | ✅ Done |
 | KPI rating guide (global 1–10 rubric; HR edits, all view) | ✅ Done |
 | Alphabetical A–Z / Z–A sort on Employees + KPI lists | ✅ Done |
-| KPI Q1-as-default inheritance (new Q2/Q3/Q4 review auto-inherits period template + staff's baseline-quarter KPIs; baseline = same-year Q1, else earliest existing same-year quarter, else latest prior-year period so a new year carries forward; editable after) | ✅ Done |
+| KPI Q1-as-default inheritance (new Q2/Q3/Q4 review auto-inherits period template + staff's baseline-quarter KPIs; template baseline = same-year Q1, else earliest existing same-year quarter, else latest prior-year period; the staff member's own custom KPIs + Values overrides are copied from their most recent EARLIER review, so Q3→Q4 and Q4→next year's Q1; editable after) | ✅ Done |
 | Multi-year KPI support (year filter with current-year default; year-aware quarter↔period; create/set up future-year reviews) | ✅ Done |
 | KPI Action Points — AI draft auto-generated when HR marks a review Complete (status → `completed`, once per transition; skipped if HR already approved/edited); HR approves before staff see it. Opening a completed review with no draft/approved text drafts it then (backfill + retry). Manual "draft with AI" still works once published | ✅ Done |
 | KPI quarter + year performance summary (Q1–Q4 + year score, % and /10 via rating guide) | ✅ Done |
