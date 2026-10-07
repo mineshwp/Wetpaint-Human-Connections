@@ -131,7 +131,7 @@ function slotLabel(slot: Slot): string {
   return slot[0] === "m" ? `Onboarding · Month ${slot[1]}` : QUARTER_LABELS[Number(slot[1]) as Quarter]
 }
 function slotShort(slot: Slot): string {
-  return slot[0] === "m" ? `M${slot[1]}` : `Q${slot[1]}`
+  return slot[0] === "m" ? `Month ${slot[1]}` : `Q${slot[1]}`
 }
 /** "Onboarding KPI · Month 1" for month reviews, otherwise the period as-is. */
 function periodLabel(period: string): string {
