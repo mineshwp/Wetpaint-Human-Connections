@@ -265,6 +265,18 @@ function InviteeStatusBadge({ status }: { status: string }) {
   )
 }
 
+function ScoringProgressBadge({ done, total }: { done: number; total: number }) {
+  const [label, cls, Icon]: [string, string, React.ElementType] =
+    done === 0 ? ["Not scored yet", "bg-amber-50 text-amber-700 border-amber-200", Clock]
+    : done < total ? [`In progress · ${done}/${total}`, "bg-blue-50 text-blue-700 border-blue-200", Clock]
+    : ["Scored", "bg-emerald-50 text-emerald-700 border-emerald-200", CheckCircle2]
+  return (
+    <span className={cn("inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold", cls)}>
+      <Icon size={10} /> {label}
+    </span>
+  )
+}
+
 function Avatar({ name, size = "md", photoUrl }: { name: string; size?: "sm" | "md" | "lg"; photoUrl?: string | null }) {
   const sizeCls = size === "sm" ? "w-6 h-6 text-[10px]" : size === "lg" ? "w-11 h-11 text-sm" : "w-8 h-8 text-xs"
   if (photoUrl) {
@@ -2070,6 +2082,19 @@ function ReviewCards({ list, mode, scores, reviewTemplates, finalComments, curre
         .map(review => {
         const myInv = mode === "score" ? review.kpi_review_invitees.find(i => i.invitee_id === currentEmployeeId) : undefined
         const published = review.status === "active" || review.status === "completed"
+        // How much of MY assigned scoring is done (reviewer's own rows only).
+        const myProgress = (() => {
+          if (!myInv) return null
+          const mine = new Set((myInv.kpi_review_invitee_sections ?? []).map(x => x.section_id))
+          const itemIds = (reviewTemplates[review.id] ?? [])
+            .filter(sec => mine.has(sec.id))
+            .flatMap(sec => (sec.kpi_template_items ?? []).map(it => it.id))
+          const scored = new Set((scores[review.id] ?? [])
+            .filter(x => x.scorer_id === currentEmployeeId && x.score != null).map(x => x.item_id))
+          // No sections assigned (e.g. silently-added reviewer): judge by whether they've scored anything.
+          if (itemIds.length === 0) return { done: scored.size, total: scored.size || 1 }
+          return { done: itemIds.filter(id => scored.has(id)).length, total: itemIds.length }
+        })()
         const inviteeActive = !!myInv && (myInv.status === "accepted" || myInv.status === "completed")
         const showBody = mode === "score" ? inviteeActive : (published || mode === "mine" || mode === "team")
         // Only a reviewer on a draft (or HR) gets editable rows; null = view only.
@@ -2096,7 +2121,9 @@ function ReviewCards({ list, mode, scores, reviewTemplates, finalComments, curre
                 </p>
               </div>
               <div className="flex items-center gap-2 shrink-0">
-                {myInv && <InviteeStatusBadge status={myInv.status} />}
+                {myInv && (myInv.status === "pending" || myInv.status === "declined" || !myProgress
+                  ? <InviteeStatusBadge status={myInv.status} />
+                  : <ScoringProgressBadge done={myProgress.done} total={myProgress.total} />)}
                 {myInv?.status === "pending" && (
                   <>
                     <Button size="sm" className="h-7 text-xs gap-1"
