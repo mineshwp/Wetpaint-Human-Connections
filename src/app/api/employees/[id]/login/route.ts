@@ -1,3 +1,4 @@
+import { withAudit } from "@/lib/activity-log"
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
@@ -62,7 +63,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 }
 
 // Create a login, or reset the password (and restore access) for an existing one.
-export async function POST(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+async function handlePOST(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const viewOnly = await blockWhileImpersonating()
   if (viewOnly) return viewOnly
   const auth = await authorize()
@@ -138,7 +139,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
 }
 
 // Disable the login (the account and its history stay; POST restores it).
-export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+async function handleDELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const viewOnly = await blockWhileImpersonating()
   if (viewOnly) return viewOnly
   const auth = await authorize()
@@ -164,3 +165,6 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
 
   return NextResponse.json({ login: await loadStatus(id) })
 }
+
+export const POST = withAudit(handlePOST, {"section": "Portal login", "action": {"POST": "Created / reset portal login", "DELETE": "Disabled portal login"}, "target": "employee"})
+export const DELETE = withAudit(handleDELETE, {"section": "Portal login", "action": {"POST": "Created / reset portal login", "DELETE": "Disabled portal login"}, "target": "employee"})

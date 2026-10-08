@@ -1,3 +1,4 @@
+import { withAudit } from "@/lib/activity-log"
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { getUserRole } from "@/lib/auth"
@@ -20,7 +21,7 @@ async function loadItem(
 // Edit a KPI for THIS review only.
 //  - global item  → store/merge a per-review override (leaves the global row intact)
 //  - custom item  → edit the item directly (it already belongs to this review)
-export async function PUT(
+async function handlePUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string; itemId: string }> }
 ) {
@@ -106,7 +107,7 @@ export async function PUT(
 //   global item → override.hidden = true ; custom item → soft-delete
 // action=reset: revert this KPI to the global template
 //   global item → delete the override ; custom item → soft-delete (it has no global default)
-export async function DELETE(
+async function handleDELETE(
   req: NextRequest,
   { params }: { params: Promise<{ id: string; itemId: string }> }
 ) {
@@ -206,3 +207,6 @@ export async function DELETE(
 
   return NextResponse.json({ error: "Item belongs to another review" }, { status: 400 })
 }
+
+export const PUT = withAudit(handlePUT, {"section": "KPI · Items", "action": {"PUT": "Edited a KPI", "DELETE": "Removed a KPI"}, "target": "review"})
+export const DELETE = withAudit(handleDELETE, {"section": "KPI · Items", "action": {"PUT": "Edited a KPI", "DELETE": "Removed a KPI"}, "target": "review"})

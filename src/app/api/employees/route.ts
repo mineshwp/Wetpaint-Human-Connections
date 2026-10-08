@@ -1,3 +1,4 @@
+import { withAudit } from "@/lib/activity-log"
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
@@ -65,7 +66,7 @@ export async function GET(req: Request) {
   return NextResponse.json({ employees })
 }
 
-export async function POST(req: Request) {
+async function handlePOST(req: Request) {
   const viewOnly = await blockWhileImpersonating()
   if (viewOnly) return viewOnly
   const supabase = await createClient()
@@ -133,3 +134,5 @@ export async function POST(req: Request) {
 
   return NextResponse.json({ id: data.id }, { status: 201 })
 }
+
+export const POST = withAudit(handlePOST, {"section": "Employee profile", "action": "Created employee"})

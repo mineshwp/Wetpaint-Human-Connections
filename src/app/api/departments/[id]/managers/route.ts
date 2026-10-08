@@ -1,3 +1,4 @@
+import { withAudit } from "@/lib/activity-log"
 import { NextResponse } from "next/server"
 import { requireHR } from "@/lib/hr-api"
 import { createAdminClient } from "@/lib/supabase/admin"
@@ -8,7 +9,7 @@ import { demoteDepartmentManagers, loadDepartmentsData } from "@/lib/departments
 // A manager gets "Manager — whole department" access and is placed in the
 // department (moved from their old one if needed). Anyone taken off the list
 // goes back to "direct reports" (if people report to them) or Staff.
-export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
+async function handlePUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const ctx = await requireHR({ write: true })
   if (ctx.error) return ctx.error
   const { id } = await params
@@ -48,3 +49,5 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
 
   return NextResponse.json(await loadDepartmentsData())
 }
+
+export const PUT = withAudit(handlePUT, {"section": "Settings · Departments", "action": "Changed department managers"})

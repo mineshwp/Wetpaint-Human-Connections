@@ -1,9 +1,10 @@
+import { withAudit } from "@/lib/activity-log"
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { getUserRole } from "@/lib/auth"
 import { blockWhileImpersonating } from "@/lib/impersonation"
 
-export async function PATCH(
+async function handlePATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -37,7 +38,7 @@ export async function PATCH(
 }
 
 // Soft-delete an item (HR only). Kept inactive so historical scores survive.
-export async function DELETE(
+async function handleDELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -63,3 +64,6 @@ export async function DELETE(
 
   return NextResponse.json({ success: true })
 }
+
+export const PATCH = withAudit(handlePATCH, {"section": "KPI · Template", "action": {"PATCH": "Edited a template KPI", "DELETE": "Removed a template KPI"}})
+export const DELETE = withAudit(handleDELETE, {"section": "KPI · Template", "action": {"PATCH": "Edited a template KPI", "DELETE": "Removed a template KPI"}})

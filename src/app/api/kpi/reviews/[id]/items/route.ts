@@ -1,3 +1,4 @@
+import { withAudit } from "@/lib/activity-log"
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { getUserRole } from "@/lib/auth"
@@ -8,7 +9,7 @@ import { blockWhileImpersonating } from "@/lib/impersonation"
 // individualized criterion under a shared value/section, push it into the
 // employee's other reviews for the same year too, so it stays consistent
 // across quarters.
-export async function POST(
+async function handlePOST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -73,3 +74,5 @@ export async function POST(
 
   return NextResponse.json(data, { status: 201 })
 }
+
+export const POST = withAudit(handlePOST, {"section": "KPI · Items", "action": "Added a KPI", "target": "review"})

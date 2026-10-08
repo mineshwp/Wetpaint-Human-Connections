@@ -1,3 +1,4 @@
+import { withAudit } from "@/lib/activity-log"
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { getUserRole, getEmployeeIdForUser } from "@/lib/auth"
@@ -26,7 +27,7 @@ export async function GET(
   return NextResponse.json(data ?? [])
 }
 
-export async function PUT(
+async function handlePUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -127,3 +128,5 @@ export async function PUT(
 
   return NextResponse.json(data)
 }
+
+export const PUT = withAudit(handlePUT, {"section": "KPI · Scores", "action": "Saved a score / comment", "target": "review"})

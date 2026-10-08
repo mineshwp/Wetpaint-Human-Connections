@@ -1,3 +1,4 @@
+import { withAudit } from "@/lib/activity-log"
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
@@ -25,7 +26,7 @@ export async function GET() {
   }
 }
 
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
   const viewOnly = await blockWhileImpersonating()
   if (viewOnly) return viewOnly
   try {
@@ -158,3 +159,5 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: message }, { status: 500 })
   }
 }
+
+export const POST = withAudit(handlePOST, {"section": "Settings · Administrators", "action": "Added administrator"})

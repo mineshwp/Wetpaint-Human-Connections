@@ -1,3 +1,4 @@
+import { withAudit } from "@/lib/activity-log"
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { getUserRole, getEmployeeIdForUser } from "@/lib/auth"
@@ -29,7 +30,7 @@ export async function GET(
 //  - HR: author_id = a reviewer's employee id (recorded on their behalf) or
 //    null for the HR/Admin comment.
 //  - Reviewer: their own employee id only (must be an accepted invitee).
-export async function PUT(
+async function handlePUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -102,3 +103,5 @@ export async function PUT(
   }
   return NextResponse.json(data)
 }
+
+export const PUT = withAudit(handlePUT, {"section": "KPI · Final comments", "action": "Saved a final comment", "target": "review"})

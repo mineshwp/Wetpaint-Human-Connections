@@ -1,10 +1,11 @@
+import { withAudit } from "@/lib/activity-log"
 import { NextResponse } from "next/server"
 import { requireHR } from "@/lib/hr-api"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { DOCUMENTS_BUCKET } from "@/lib/documents"
 
 // Delete a document and its file (HR only).
-export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+async function handleDELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const ctx = await requireHR({ write: true })
   if (ctx.error) return ctx.error
   const { id } = await params
@@ -23,3 +24,5 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   }
   return NextResponse.json({ success: true })
 }
+
+export const DELETE = withAudit(handleDELETE, {"section": "Documents", "action": "Deleted a document"})

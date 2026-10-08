@@ -1,3 +1,4 @@
+import { withAudit } from "@/lib/activity-log"
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
@@ -8,7 +9,7 @@ import { blockWhileImpersonating } from "@/lib/impersonation"
 
 // Reset/set a temporary password for an admin so HR can hand it over.
 // Onboarding is HR-set-password (no email invites). Returns the new password once.
-export async function POST(
+async function handlePOST(
   _req: NextRequest,
   { params }: { params: Promise<{ userId: string }> }
 ) {
@@ -56,7 +57,7 @@ export async function POST(
   }
 }
 
-export async function DELETE(
+async function handleDELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ userId: string }> }
 ) {
@@ -109,3 +110,6 @@ export async function DELETE(
 
   return NextResponse.json({ success: true })
 }
+
+export const POST = withAudit(handlePOST, {"section": "Settings · Administrators", "action": {"POST": "Reset administrator password", "DELETE": "Removed administrator"}})
+export const DELETE = withAudit(handleDELETE, {"section": "Settings · Administrators", "action": {"POST": "Reset administrator password", "DELETE": "Removed administrator"}})

@@ -1,3 +1,4 @@
+import { withAudit } from "@/lib/activity-log"
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { getUserRole } from "@/lib/auth"
@@ -25,7 +26,7 @@ export async function GET() {
 
 // Bulk-upsert the rating guide rows (HR only). Body: { rows: [{ score, label,
 // annual_increase, birthday_bonus }] }. Scores must be 1-10.
-export async function PUT(req: Request) {
+async function handlePUT(req: Request) {
   const viewOnly = await blockWhileImpersonating()
   if (viewOnly) return viewOnly
   const supabase = await createClient()
@@ -63,3 +64,5 @@ export async function PUT(req: Request) {
 
   return NextResponse.json(data ?? [])
 }
+
+export const PUT = withAudit(handlePUT, {"section": "KPI · Rating guide", "action": "Updated rating guide"})

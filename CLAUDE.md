@@ -97,6 +97,7 @@ Rules:
 /kpi                            → Tabs: All Reviews (HR) · My KPI (own published reviews + quarter summary) · My Team (managers: published reviews of their team) · Reviews to Score (reviews you're invited to; shown only if any)
 /kpi/report                     → Quarterly HR report (HR only, printable)
 /employees/training             → Training tracker: expired / expiring / all (HR only)
+/logs                           → Activity log: sign-ins + changes, filter by staff member/type/section/date (HR only)
 ```
 
 All routes under `/employees` and `/kpi` require authentication (handled by middleware).
@@ -420,6 +421,7 @@ Always return proper HTTP status codes: 400, 401, 403, 404, 500.
 | AI settings (encrypted key, model, prompt + try-it, spend cap, usage log) + HR approval/editing of action points | ✅ Done |
 | Access on the person (not the login) + editable "Who can see what" (filters, bulk Reports to / access, team view) | ✅ Done |
 | KPI page tabs split by purpose: My KPI / My Team / Reviews to Score | ✅ Done |
+| Activity log (HR-only `/logs`, sidebar under Staff Directory): `activity_log` table (migration `20261008_01`, service role only). Every mutating API route is wrapped in `withAudit(handler, {section, action, target, fields})` from `src/lib/activity-log.ts` — logs successful writes (who, section, action, on whom; profile edits record field NAMES only, never values). Sign-ins are logged by `POST /api/auth/touch` via `logLoginIfNew` (deduped on `last_sign_in_at`). **New write routes must be wrapped in `withAudit`.** `GET /api/logs` (HR only) | ✅ Done |
 | Onboarding KPIs: staff with status `onboarding` are reviewed in `Month 1/2/3` (no quarters or year score); once `active` they start Q1–Q4 and the Month reviews stay on record, labelled "Onboarding KPI". Period rules in `src/lib/kpi/onboarding.ts` (enforced in the reviews POST/PATCH); `/kpi` has an Onboarding / Permanent staff filter; Month templates are cloned from the current quarter's template (Month 2/3 from Month 1) | ✅ Built |
 
 Update this table as features are completed.

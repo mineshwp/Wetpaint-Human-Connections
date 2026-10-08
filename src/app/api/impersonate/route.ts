@@ -1,3 +1,4 @@
+import { withAudit } from "@/lib/activity-log"
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { getRealUserRole } from "@/lib/auth"
@@ -50,7 +51,7 @@ export async function GET() {
   return NextResponse.json(people)
 }
 
-export async function POST(req: Request) {
+async function handlePOST(req: Request) {
   const auth = await requireRealHR()
   if ("error" in auth) return auth.error
 
@@ -64,7 +65,7 @@ export async function POST(req: Request) {
   return NextResponse.json({ ok: true, employeeName: result.employeeName })
 }
 
-export async function DELETE() {
+async function handleDELETE() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -72,3 +73,6 @@ export async function DELETE() {
   await clearViewAs()
   return NextResponse.json({ ok: true })
 }
+
+export const POST = withAudit(handlePOST, {"section": "View as", "action": {"POST": "Started viewing as someone", "DELETE": "Stopped viewing as someone"}})
+export const DELETE = withAudit(handleDELETE, {"section": "View as", "action": {"POST": "Started viewing as someone", "DELETE": "Stopped viewing as someone"}})

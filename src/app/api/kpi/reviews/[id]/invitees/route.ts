@@ -1,10 +1,11 @@
+import { withAudit } from "@/lib/activity-log"
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { getUserRole } from "@/lib/auth"
 import { sendKpiScoringInviteEmail } from "@/lib/email"
 import { blockWhileImpersonating } from "@/lib/impersonation"
 
-export async function POST(
+async function handlePOST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -94,7 +95,7 @@ export async function POST(
 }
 
 // Replace a reviewer's assigned sections (which sections they may score).
-export async function PATCH(
+async function handlePATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -139,7 +140,7 @@ export async function PATCH(
   return NextResponse.json({ success: true })
 }
 
-export async function DELETE(
+async function handleDELETE(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -167,3 +168,7 @@ export async function DELETE(
 
   return NextResponse.json({ success: true })
 }
+
+export const POST = withAudit(handlePOST, {"section": "KPI · Reviewers", "action": {"POST": "Added reviewers", "PATCH": "Changed a reviewer's sections", "DELETE": "Removed a reviewer"}, "target": "review"})
+export const PATCH = withAudit(handlePATCH, {"section": "KPI · Reviewers", "action": {"POST": "Added reviewers", "PATCH": "Changed a reviewer's sections", "DELETE": "Removed a reviewer"}, "target": "review"})
+export const DELETE = withAudit(handleDELETE, {"section": "KPI · Reviewers", "action": {"POST": "Added reviewers", "PATCH": "Changed a reviewer's sections", "DELETE": "Removed a reviewer"}, "target": "review"})

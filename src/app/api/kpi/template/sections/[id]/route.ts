@@ -1,9 +1,10 @@
+import { withAudit } from "@/lib/activity-log"
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { getUserRole } from "@/lib/auth"
 import { blockWhileImpersonating } from "@/lib/impersonation"
 
-export async function POST(
+async function handlePOST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -43,7 +44,7 @@ export async function POST(
 }
 
 // Update a section — rename, reorder (position), or toggle active (HR only).
-export async function PATCH(
+async function handlePATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -84,7 +85,7 @@ export async function PATCH(
 }
 
 // Soft-delete a section and its items (HR only). Scores stay intact for history.
-export async function DELETE(
+async function handleDELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -115,3 +116,7 @@ export async function DELETE(
 
   return NextResponse.json({ success: true })
 }
+
+export const POST = withAudit(handlePOST, {"section": "KPI · Template", "action": {"POST": "Added a template KPI", "PATCH": "Edited a template section", "DELETE": "Removed a template section"}})
+export const PATCH = withAudit(handlePATCH, {"section": "KPI · Template", "action": {"POST": "Added a template KPI", "PATCH": "Edited a template section", "DELETE": "Removed a template section"}})
+export const DELETE = withAudit(handleDELETE, {"section": "KPI · Template", "action": {"POST": "Added a template KPI", "PATCH": "Edited a template section", "DELETE": "Removed a template section"}})

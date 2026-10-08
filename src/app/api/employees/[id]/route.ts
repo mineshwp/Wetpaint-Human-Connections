@@ -1,3 +1,4 @@
+import { withAudit } from "@/lib/activity-log"
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
@@ -47,7 +48,7 @@ export async function GET(
   return NextResponse.json({ employee })
 }
 
-export async function PATCH(
+async function handlePATCH(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -173,3 +174,5 @@ export async function PATCH(
 
   return NextResponse.json({ success: true })
 }
+
+export const PATCH = withAudit(handlePATCH, {"section": "Employee profile", "action": "Edited profile", "target": "employee", "fields": true})

@@ -1,3 +1,4 @@
+import { withAudit } from "@/lib/activity-log"
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
@@ -33,7 +34,7 @@ async function clearExisting(admin: ReturnType<typeof createAdminClient>, id: st
   }
 }
 
-export async function POST(
+async function handlePOST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -78,7 +79,7 @@ export async function POST(
   return NextResponse.json({ profilePhotoUrl: url })
 }
 
-export async function DELETE(
+async function handleDELETE(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -98,3 +99,6 @@ export async function DELETE(
 
   return NextResponse.json({ success: true })
 }
+
+export const POST = withAudit(handlePOST, {"section": "Profile photo", "action": {"POST": "Uploaded profile photo", "DELETE": "Removed profile photo"}, "target": "employee"})
+export const DELETE = withAudit(handleDELETE, {"section": "Profile photo", "action": {"POST": "Uploaded profile photo", "DELETE": "Removed profile photo"}, "target": "employee"})

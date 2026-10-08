@@ -1,3 +1,4 @@
+import { withAudit } from "@/lib/activity-log"
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { getUserRole } from "@/lib/auth"
@@ -16,7 +17,7 @@ interface SrcItem {
 // from one of their reviews into this review's matching section (HR only).
 // Sections are matched by title. Scores and comments are NEVER copied. Items
 // whose title already exists in the target section are skipped.
-export async function POST(
+async function handlePOST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -125,3 +126,5 @@ export async function POST(
 
   return NextResponse.json({ copied: toInsert.length }, { status: 201 })
 }
+
+export const POST = withAudit(handlePOST, {"section": "KPI · Items", "action": "Copied KPIs from another review", "target": "review"})

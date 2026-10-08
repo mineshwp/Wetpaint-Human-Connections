@@ -1,3 +1,4 @@
+import { withAudit } from "@/lib/activity-log"
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { requireHR } from "@/lib/hr-api"
@@ -76,7 +77,7 @@ const EFFORTS: ReasoningEffort[] = ["none", "low", "medium", "high"]
 
 // Body: any of { actionPointsEnabled, includeNames, model, reasoningEffort,
 // maxOutputTokens, monthlyBudgetUsd, actionPointsPrompt (null = default) }
-export async function PUT(req: NextRequest) {
+async function handlePUT(req: NextRequest) {
   const ctx = await requireHR({ write: true })
   if (ctx.error) return ctx.error
   const body = await req.json().catch(() => null)
@@ -120,3 +121,5 @@ export async function PUT(req: NextRequest) {
   }
   return NextResponse.json({ success: true })
 }
+
+export const PUT = withAudit(handlePUT, {"section": "Settings · AI", "action": "Updated AI settings"})

@@ -3,14 +3,15 @@
 import Link from "next/link"
 import Image from "next/image"
 import { usePathname } from "next/navigation"
-import { Users, User, BarChart3, X, LayoutGrid, Settings, Contact } from "lucide-react"
+import { Users, User, BarChart3, X, LayoutGrid, Settings, Contact, ScrollText } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 const ALL_NAV_ITEMS = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutGrid, staffOnly: true },
-  { href: "/employees", label: "Employees", icon: Users, staffOnly: false },
-  { href: "/kpi", label: "KPI Reviews", icon: BarChart3, staffOnly: false },
-  { href: "/directory", label: "Staff Directory", icon: Contact, staffOnly: false },
+  { href: "/dashboard", label: "Dashboard", icon: LayoutGrid, staffOnly: true, hrOnly: false },
+  { href: "/employees", label: "Employees", icon: Users, staffOnly: false, hrOnly: false },
+  { href: "/kpi", label: "KPI Reviews", icon: BarChart3, staffOnly: false, hrOnly: false },
+  { href: "/directory", label: "Staff Directory", icon: Contact, staffOnly: false, hrOnly: false },
+  { href: "/logs", label: "Logs", icon: ScrollText, staffOnly: false, hrOnly: true },
 ]
 
 interface SidebarProps {
@@ -32,7 +33,7 @@ interface SidebarProps {
 export function Sidebar({ isOpen, onClose, roleBadge, isHR, ownProfileHref, keepEmployeesLink }: SidebarProps) {
   const pathname = usePathname()
 
-  const navItems = ALL_NAV_ITEMS.filter((item) => !item.staffOnly).flatMap((item) => {
+  const navItems = ALL_NAV_ITEMS.filter((item) => !item.staffOnly && (!item.hrOnly || isHR)).flatMap((item) => {
     if (item.href !== "/employees" || !ownProfileHref) return [item]
     const myProfile = { ...item, href: ownProfileHref, label: "My Profile", icon: User }
     return keepEmployeesLink ? [item, myProfile] : [myProfile]

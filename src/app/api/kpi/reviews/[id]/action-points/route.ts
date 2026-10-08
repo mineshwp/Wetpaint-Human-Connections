@@ -1,3 +1,4 @@
+import { withAudit } from "@/lib/activity-log"
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { getUserRole, getEmployeeIdForUser } from "@/lib/auth"
@@ -61,7 +62,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
 // Save HR's text. Body: { content: string, approve?: boolean }
 // approve → staff can see it; otherwise it stays a draft.
-export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+async function handlePUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const ctx = await hrContext(true)
   if (ctx.error) return ctx.error
   const { supabase, employeeId } = ctx
@@ -103,7 +104,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 // Body { auto: true }: the automatic draft for a completed review that has
 // none yet (sent when HR opens it) — skipped when AI action points are off,
 // the review isn't completed, or HR already has a draft/approved text.
-export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+async function handlePOST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const ctx = await hrContext(true)
   if (ctx.error) return ctx.error
   const { supabase, employeeId } = ctx
@@ -128,7 +129,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 }
 
 // Take approved action points off staff view; the text goes back to a draft.
-export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+async function handleDELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const ctx = await hrContext(true)
   if (ctx.error) return ctx.error
   const { supabase, employeeId } = ctx
@@ -147,3 +148,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   if (error) return NextResponse.json({ error: "Failed to unpublish" }, { status: 500 })
   return NextResponse.json(await state(supabase, id))
 }
+
+export const PUT = withAudit(handlePUT, {"section": "KPI · Action points", "action": {"PUT": "Saved / approved action points", "POST": "Drafted action points with AI", "DELETE": "Hid action points from staff"}, "target": "review"})
+export const POST = withAudit(handlePOST, {"section": "KPI · Action points", "action": {"PUT": "Saved / approved action points", "POST": "Drafted action points with AI", "DELETE": "Hid action points from staff"}, "target": "review"})
+export const DELETE = withAudit(handleDELETE, {"section": "KPI · Action points", "action": {"PUT": "Saved / approved action points", "POST": "Drafted action points with AI", "DELETE": "Hid action points from staff"}, "target": "review"})

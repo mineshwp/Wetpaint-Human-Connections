@@ -1,3 +1,4 @@
+import { withAudit } from "@/lib/activity-log"
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { getUserRole, getEmployeeIdForUser, getTeamScope, applyTeamScope } from "@/lib/auth"
@@ -119,7 +120,7 @@ export async function GET() {
   return NextResponse.json(data ?? [])
 }
 
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
   const viewOnly = await blockWhileImpersonating()
   if (viewOnly) return viewOnly
   const supabase = await createClient()
@@ -159,3 +160,5 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({ ...data, inherited }, { status: 201 })
 }
+
+export const POST = withAudit(handlePOST, {"section": "KPI · Review", "action": "Created review"})

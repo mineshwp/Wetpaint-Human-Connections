@@ -1,3 +1,4 @@
+import { withAudit } from "@/lib/activity-log"
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { getUserRole, getEmployeeIdForUser } from "@/lib/auth"
@@ -28,7 +29,7 @@ async function getTrainingAndCheckAccess(
   return { allowed: true, role, myEmployeeId }
 }
 
-export async function PATCH(
+async function handlePATCH(
   req: Request,
   { params }: { params: Promise<{ id: string; trainingId: string }> }
 ) {
@@ -74,7 +75,7 @@ export async function PATCH(
   return NextResponse.json(data)
 }
 
-export async function DELETE(
+async function handleDELETE(
   _req: Request,
   { params }: { params: Promise<{ id: string; trainingId: string }> }
 ) {
@@ -100,3 +101,6 @@ export async function DELETE(
 
   return NextResponse.json({ success: true })
 }
+
+export const PATCH = withAudit(handlePATCH, {"section": "Training", "action": {"PATCH": "Edited training record", "DELETE": "Deleted training record"}, "target": "employee"})
+export const DELETE = withAudit(handleDELETE, {"section": "Training", "action": {"PATCH": "Edited training record", "DELETE": "Deleted training record"}, "target": "employee"})

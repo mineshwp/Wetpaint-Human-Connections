@@ -1,3 +1,4 @@
+import { withAudit } from "@/lib/activity-log"
 import { NextRequest, NextResponse } from "next/server"
 import { requireHR } from "@/lib/hr-api"
 import { loadAccessData } from "@/lib/access-overview"
@@ -15,7 +16,7 @@ export async function GET() {
   return NextResponse.json(await loadAccessData())
 }
 
-export async function PATCH(req: NextRequest) {
+async function handlePATCH(req: NextRequest) {
   const ctx = await requireHR({ write: true })
   if (ctx.error) return ctx.error
 
@@ -66,3 +67,5 @@ export async function PATCH(req: NextRequest) {
   }
   return NextResponse.json(await loadAccessData())
 }
+
+export const PATCH = withAudit(handlePATCH, {"section": "Settings · Who can see what", "action": "Changed reporting line / access"})

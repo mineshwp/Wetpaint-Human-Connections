@@ -1,3 +1,4 @@
+import { withAudit } from "@/lib/activity-log"
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { getUserRole, getEmployeeIdForUser, canAccessEmployee } from "@/lib/auth"
@@ -31,7 +32,7 @@ export async function GET(
   return NextResponse.json(data ?? [])
 }
 
-export async function POST(
+async function handlePOST(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -98,3 +99,5 @@ export async function POST(
 
   return NextResponse.json(data, { status: 201 })
 }
+
+export const POST = withAudit(handlePOST, {"section": "Training", "action": "Added training record", "target": "employee"})

@@ -1,3 +1,4 @@
+import { withAudit } from "@/lib/activity-log"
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { getUserRole } from "@/lib/auth"
@@ -18,7 +19,7 @@ function addMonths(iso: string, months: number): string {
 }
 
 // Renew a fixed-term contract: extend the end date by the contract's term.
-export async function POST(
+async function handlePOST(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -60,3 +61,5 @@ export async function POST(
 
   return NextResponse.json({ contractEndDate: newEnd })
 }
+
+export const POST = withAudit(handlePOST, {"section": "Employment", "action": "Renewed contract", "target": "employee"})

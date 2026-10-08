@@ -1,3 +1,4 @@
+import { withAudit } from "@/lib/activity-log"
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { getUserRole } from "@/lib/auth"
@@ -7,7 +8,7 @@ import { blockWhileImpersonating } from "@/lib/impersonation"
 // titles/types + global KPI titles/descriptions. Reviews, scores and per-review
 // custom items are never copied. Used to spin up a new quarter's template from
 // an existing one. Fails if the destination period already has any sections.
-export async function POST(req: Request) {
+async function handlePOST(req: Request) {
   const viewOnly = await blockWhileImpersonating()
   if (viewOnly) return viewOnly
   const supabase = await createClient()
@@ -91,3 +92,5 @@ export async function POST(req: Request) {
 
   return NextResponse.json({ success: true, period: toPeriod, sections: sourceSections.length }, { status: 201 })
 }
+
+export const POST = withAudit(handlePOST, {"section": "KPI · Template", "action": "Copied a period's template"})

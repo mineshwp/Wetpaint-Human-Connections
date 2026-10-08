@@ -1,3 +1,4 @@
+import { withAudit } from "@/lib/activity-log"
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { getUserRole } from "@/lib/auth"
@@ -6,7 +7,7 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { demoteDepartmentManagers } from "@/lib/departments"
 
 // Update a department's name and/or colour (HR only).
-export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
+async function handlePATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const viewOnly = await blockWhileImpersonating()
   if (viewOnly) return viewOnly
   const { id } = await params
@@ -49,7 +50,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 // pass ?reassignTo=<departmentId> to move them, or ?force=true to leave them
 // unassigned (the FK sets department_id to null). Without either, we refuse and
 // report the employee count so the UI can prompt.
-export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
+async function handleDELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const viewOnly = await blockWhileImpersonating()
   if (viewOnly) return viewOnly
   const { id } = await params
@@ -121,3 +122,6 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
 
   return NextResponse.json({ ok: true, reassigned: reassignTo ? employeeCount : 0, unassigned: !reassignTo && force ? employeeCount : 0 })
 }
+
+export const PATCH = withAudit(handlePATCH, {"section": "Settings · Departments", "action": {"PATCH": "Edited department", "DELETE": "Deleted department"}})
+export const DELETE = withAudit(handleDELETE, {"section": "Settings · Departments", "action": {"PATCH": "Edited department", "DELETE": "Deleted department"}})

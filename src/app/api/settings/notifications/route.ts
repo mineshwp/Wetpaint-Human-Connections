@@ -1,3 +1,4 @@
+import { withAudit } from "@/lib/activity-log"
 import { NextRequest, NextResponse } from "next/server"
 import { requireHR } from "@/lib/hr-api"
 import {
@@ -26,7 +27,7 @@ export async function GET() {
   return NextResponse.json(await current())
 }
 
-export async function PUT(req: NextRequest) {
+async function handlePUT(req: NextRequest) {
   const ctx = await requireHR({ write: true })
   if (ctx.error) return ctx.error
 
@@ -57,3 +58,5 @@ export async function PUT(req: NextRequest) {
   }
   return NextResponse.json(await current())
 }
+
+export const PUT = withAudit(handlePUT, {"section": "Settings · Notifications", "action": "Updated notification recipients"})

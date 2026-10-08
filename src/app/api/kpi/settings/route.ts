@@ -1,3 +1,4 @@
+import { withAudit } from "@/lib/activity-log"
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { getUserRole } from "@/lib/auth"
@@ -16,7 +17,7 @@ export async function GET() {
 }
 
 // Upsert a setting (HR only), e.g. { key: "current_period", value: "Q3 2026" }.
-export async function PUT(req: Request) {
+async function handlePUT(req: Request) {
   const viewOnly = await blockWhileImpersonating()
   if (viewOnly) return viewOnly
   const supabase = await createClient()
@@ -42,3 +43,5 @@ export async function PUT(req: Request) {
 
   return NextResponse.json({ key, value })
 }
+
+export const PUT = withAudit(handlePUT, {"section": "KPI · Settings", "action": "Updated KPI settings"})

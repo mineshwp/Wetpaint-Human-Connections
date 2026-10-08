@@ -1,3 +1,4 @@
+import { withAudit } from "@/lib/activity-log"
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { getUserRole } from "@/lib/auth"
@@ -43,7 +44,7 @@ export async function GET(req: Request) {
 }
 
 // Create a department (HR only).
-export async function POST(req: Request) {
+async function handlePOST(req: Request) {
   const viewOnly = await blockWhileImpersonating()
   if (viewOnly) return viewOnly
   const supabase = await createClient()
@@ -71,3 +72,5 @@ export async function POST(req: Request) {
 
   return NextResponse.json({ department: data }, { status: 201 })
 }
+
+export const POST = withAudit(handlePOST, {"section": "Settings · Departments", "action": "Added department"})

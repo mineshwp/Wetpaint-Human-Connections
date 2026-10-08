@@ -1,3 +1,4 @@
+import { withAudit } from "@/lib/activity-log"
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { getUserRole, getEmployeeIdForUser } from "@/lib/auth"
@@ -56,7 +57,7 @@ export async function GET(
 
 // Step 2 of an upload (HR only): record a file already uploaded to the signed
 // URL from ./upload-url. Body: { path, name, category, size?, mime?, hidden_from_employee? }
-export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+async function handlePOST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const ctx = await requireHR({ write: true })
   if (ctx.error) return ctx.error
   const { id } = await params
@@ -99,3 +100,5 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   }
   return NextResponse.json({ document: data }, { status: 201 })
 }
+
+export const POST = withAudit(handlePOST, {"section": "Documents", "action": "Uploaded a document", "target": "employee"})
