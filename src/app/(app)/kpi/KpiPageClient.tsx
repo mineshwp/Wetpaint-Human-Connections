@@ -315,8 +315,7 @@ function ScorerRow({ name, role, scoreObj, canEdit, item, onSave }: {
 
   async function handleSave() {
     setSaving(true)
-    await onSave(val === "" ? null : Number(val), comm)
-    setSaving(false)
+    try { await onSave(val === "" ? null : Number(val), comm) } finally { setSaving(false) }
     setEditing(false)
   }
 
@@ -1066,6 +1065,14 @@ function CreateReviewModal({ employees, currentPeriod, selectedYear, preselected
 
 // ─── Final Comments ─────────────────────────────────────────────────────────────
 
+/** Plain-language reason a save failed (network, signed out, or the server's message). */
+async function saveErrorReason(res: Response | null): Promise<string> {
+  if (!res) return "can't reach the server, check your connection and try again."
+  if (res.status === 401) return "your session has expired, please refresh the page and sign in again."
+  const data = await res.json().catch(() => null)
+  return (typeof data?.error === "string" && data.error ? data.error : `error ${res.status}`) + (res.status >= 500 ? " — please try again." : "")
+}
+
 function FinalCommentRow({ name, role, comment, canEdit, onSave }: {
   name: string; role: string; comment: string; canEdit: boolean
   onSave: (text: string) => Promise<void>
@@ -1105,7 +1112,7 @@ function FinalCommentRow({ name, role, comment, canEdit, onSave }: {
           />
           {dirty && (
             <div className="mt-1.5 flex gap-2">
-              <Button size="sm" disabled={saving} onClick={async () => { setSaving(true); await onSave(val); setSaving(false) }} className="h-7 text-xs gap-1">
+              <Button size="sm" disabled={saving} onClick={async () => { setSaving(true); try { await onSave(val) } finally { setSaving(false) } }} className="h-7 text-xs gap-1">
                 {saving ? <Loader2 size={10} className="animate-spin" /> : <Check size={10} />} Save
               </Button>
               <Button size="sm" variant="ghost" onClick={() => setVal(comment)} className="h-7 text-xs">Cancel</Button>
@@ -1134,8 +1141,11 @@ function FinalComments({ invitees, comments, scores, isHR, currentEmployeeId, on
   const scoredIds = new Set(
     scores.filter(s => s.scorer_id != null && s.score != null).map(s => s.scorer_id as string)
   )
+  // The viewer's own row (when they are an active reviewer) always shows, so
+  // they can write their closing remarks before or after scoring.
   const rows = invitees
-    .filter(i => scoredIds.has(i.invitee_id) || (byAuthor.get(i.invitee_id)?.comment ?? "") !== "")
+    .filter(i => scoredIds.has(i.invitee_id) || (byAuthor.get(i.invitee_id)?.comment ?? "") !== ""
+      || (i.invitee_id === currentEmployeeId && (i.status === "accepted" || i.status === "completed")))
     .map(i => ({ key: i.invitee_id, authorId: i.invitee_id, name: `${i.invitee.first_name} ${i.invitee.last_name}`, role: "Reviewer" }))
 
   // Reviewers (non-HR view) see their own editable row plus any comment already left.
@@ -2875,7 +2885,7 @@ export function KpiPageClient({ isHR, currentEmployeeId, isManager = false }: { 
 
   function showToast(msg: string) {
     setToast(msg)
-    setTimeout(() => setToast(null), 4000)
+    setTimeout(() => setToast(null), 6000)
   }
 
   const loadAll = useCallback(async (opts?: { silent?: boolean }) => {
@@ -2943,15 +2953,15 @@ export function KpiPageClient({ isHR, currentEmployeeId, isManager = false }: { 
     const res = await fetch(`/api/kpi/reviews/${reviewId}/scores`, {
       method: "PUT", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ item_id: itemId, score, comments, scorer_id: scorerId }),
-    })
-    if (res.ok) {
+    }).catch(() => null)
+    if (res?.ok) {
       const updated: Score = await res.json()
       setScores(prev => {
         const list = (prev[reviewId] ?? []).filter(s => !(s.item_id === itemId && s.scorer_id === updated.scorer_id))
         return { ...prev, [reviewId]: [...list, updated] }
       })
     } else {
-      showToast("Failed to save score — please try again")
+      showToast(`Score not saved — ${await saveErrorReason(res)}`)
     }
   }
 
@@ -2959,15 +2969,15 @@ export function KpiPageClient({ isHR, currentEmployeeId, isManager = false }: { 
     const res = await fetch(`/api/kpi/reviews/${reviewId}/final-comments`, {
       method: "PUT", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ author_id: authorId, comment }),
-    })
-    if (res.ok) {
+    }).catch(() => null)
+    if (res?.ok) {
       const updated: FinalComment = await res.json()
       setFinalComments(prev => {
         const list = (prev[reviewId] ?? []).filter(c => (c.author_id ?? "hr") !== (updated.author_id ?? "hr"))
         return { ...prev, [reviewId]: [...list, updated] }
       })
       showToast("Final comment saved")
-    } else showToast("Failed to save comment")
+    } else showToast(`Comment not saved — ${await saveErrorReason(res)}`)
   }
 
   async function handleAddInvitee(reviewId: string, inviteeIds: string[], sendEmail: boolean, sectionIds: string[]) {
