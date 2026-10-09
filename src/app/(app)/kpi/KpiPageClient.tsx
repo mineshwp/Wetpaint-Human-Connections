@@ -10,6 +10,7 @@ import {
   Sparkles, ListChecks, Lock,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { reportError } from "@/lib/report-error"
 import { cn } from "@/lib/utils"
 import { ActionPointsEditor } from "./ActionPointsEditor"
 import { isMonthPeriod, monthNumber } from "@/lib/kpi/onboarding"
@@ -305,7 +306,7 @@ function Avatar({ name, size = "md", photoUrl }: { name: string; size?: "sm" | "
 
 function ScorerRow({ name, role, scoreObj, canEdit, item, onSave }: {
   name: string; role: string; scoreObj: Score | undefined; canEdit: boolean
-  item: TemplateItem; onSave: (score: number | null, comments: string) => Promise<void>
+  item: TemplateItem; onSave: (score: number | null, comments: string) => Promise<boolean>
 }) {
   const [editing, setEditing] = useState(false)
   const [val, setVal]         = useState(scoreObj?.score?.toString() ?? "")
@@ -315,8 +316,10 @@ function ScorerRow({ name, role, scoreObj, canEdit, item, onSave }: {
 
   async function handleSave() {
     setSaving(true)
-    try { await onSave(val === "" ? null : Number(val), comm) } finally { setSaving(false) }
-    setEditing(false)
+    let ok = false
+    try { ok = await onSave(val === "" ? null : Number(val), comm) } finally { setSaving(false) }
+    // On failure stay in edit mode so what was typed isn't lost.
+    if (ok) setEditing(false)
   }
 
   return (
@@ -395,7 +398,7 @@ function ScorerRow({ name, role, scoreObj, canEdit, item, onSave }: {
 function KpiCard({ item, sectionName, scores, invitees, isHR, currentEmployeeId, onScoreChange, onEditItem, onDeleteItem, onResetItem }: {
   item: TemplateItem; sectionName: string
   scores: Score[]; invitees: ReviewInvitee[]; isHR: boolean; currentEmployeeId: string | null
-  onScoreChange: (itemId: string, score: number | null, comments: string, scorerId: string | null) => Promise<void>
+  onScoreChange: (itemId: string, score: number | null, comments: string, scorerId: string | null) => Promise<boolean>
   onEditItem?: (itemId: string, data: { title: string; description: string; min_score: number; max_score: number }) => Promise<void>
   onDeleteItem?: (itemId: string, title: string) => void
   onResetItem?: (itemId: string) => void
@@ -616,7 +619,7 @@ function KpiCard({ item, sectionName, scores, invitees, isHR, currentEmployeeId,
 function SectionAccordion({ section, scores, invitees, isHR, currentEmployeeId, onScoreChange, onAddItem, onEditItem, onDeleteItem, onResetItem, onCopyItems, copySources, defaultOpen }: {
   section: TemplateSection; scores: Score[]; invitees: ReviewInvitee[]
   isHR: boolean; currentEmployeeId: string | null
-  onScoreChange: (itemId: string, score: number | null, comments: string, scorerId: string | null) => Promise<void>
+  onScoreChange: (itemId: string, score: number | null, comments: string, scorerId: string | null) => Promise<boolean>
   onAddItem?: (sectionId: string, data: { title: string; description: string; min_score: number; max_score: number }) => Promise<void>
   onEditItem?: (itemId: string, data: { title: string; description: string; min_score: number; max_score: number }) => Promise<void>
   onDeleteItem?: (itemId: string, title: string) => void
@@ -1285,7 +1288,7 @@ function ActionPoints({ isHR, isOwnReview, actionPoints, generatedAt }: {
 function QuarterPanel({ review, template, scores, finalComments, allEmployees, currentEmployeeId, isHR, onScoreChange, onSaveFinalComment, onAddInvitee, onRemoveInvitee, onSetSections, onStatusChange, onDelete, onAddItem, onEditItem, onRemoveItem, onResetItem, onCopyItems, otherReviews, onUpdateReviewDetails }: {
   review: Review; template: TemplateSection[]; scores: Score[]; finalComments: FinalComment[]
   allEmployees: Employee[]; currentEmployeeId: string | null; isHR: boolean
-  onScoreChange: (reviewId: string, itemId: string, score: number | null, comments: string, scorerId: string | null) => Promise<void>
+  onScoreChange: (reviewId: string, itemId: string, score: number | null, comments: string, scorerId: string | null) => Promise<boolean>
   onSaveFinalComment: (reviewId: string, authorId: string | null, comment: string) => Promise<void>
   onAddInvitee: (reviewId: string, ids: string[], sendEmail: boolean, sectionIds: string[]) => Promise<void>
   onSetSections: (reviewId: string, reviewInviteeId: string, sectionIds: string[]) => Promise<void>
@@ -1626,7 +1629,7 @@ function EmployeeReviewDetail({ employee, reviews, scores, reviewTemplates, fina
   finalComments: Record<string, FinalComment[]>
   allEmployees: Employee[]
   currentEmployeeId: string | null
-  onScoreChange: (reviewId: string, itemId: string, score: number | null, comments: string, scorerId: string | null) => Promise<void>
+  onScoreChange: (reviewId: string, itemId: string, score: number | null, comments: string, scorerId: string | null) => Promise<boolean>
   onSaveFinalComment: (reviewId: string, authorId: string | null, comment: string) => Promise<void>
   onAddInvitee: (reviewId: string, ids: string[], sendEmail: boolean, sectionIds: string[]) => Promise<void>
   onSetSections: (reviewId: string, reviewInviteeId: string, sectionIds: string[]) => Promise<void>
@@ -1792,7 +1795,7 @@ function HRAdminView({ reviewTemplates, reviews, scores, finalComments, allEmplo
   finalComments: Record<string, FinalComment[]>
   allEmployees: Employee[]
   currentEmployeeId: string | null
-  onScoreChange: (reviewId: string, itemId: string, score: number | null, comments: string, scorerId: string | null) => Promise<void>
+  onScoreChange: (reviewId: string, itemId: string, score: number | null, comments: string, scorerId: string | null) => Promise<boolean>
   onSaveFinalComment: (reviewId: string, authorId: string | null, comment: string) => Promise<void>
   onAddInvitee: (reviewId: string, ids: string[], sendEmail: boolean, sectionIds: string[]) => Promise<void>
   onSetSections: (reviewId: string, reviewInviteeId: string, sectionIds: string[]) => Promise<void>
@@ -2071,7 +2074,7 @@ function ReviewCards({ list, mode, scores, reviewTemplates, finalComments, curre
   finalComments: Record<string, FinalComment[]>
   currentEmployeeId: string | null
   isHR: boolean
-  onScoreChange: (reviewId: string, itemId: string, score: number | null, comments: string, scorerId: string | null) => Promise<void>
+  onScoreChange: (reviewId: string, itemId: string, score: number | null, comments: string, scorerId: string | null) => Promise<boolean>
   onSaveFinalComment: (reviewId: string, authorId: string | null, comment: string) => Promise<void>
   loadAll: (opts?: { silent?: boolean }) => Promise<void>
   showToast: (msg: string) => void
@@ -2234,7 +2237,7 @@ type SharedViewProps = {
   finalComments: Record<string, FinalComment[]>
   currentEmployeeId: string | null
   isHR: boolean
-  onScoreChange: (reviewId: string, itemId: string, score: number | null, comments: string, scorerId: string | null) => Promise<void>
+  onScoreChange: (reviewId: string, itemId: string, score: number | null, comments: string, scorerId: string | null) => Promise<boolean>
   onSaveFinalComment: (reviewId: string, authorId: string | null, comment: string) => Promise<void>
   loadAll: (opts?: { silent?: boolean }) => Promise<void>
   showToast: (msg: string) => void
@@ -2960,9 +2963,12 @@ export function KpiPageClient({ isHR, currentEmployeeId, isManager = false }: { 
         const list = (prev[reviewId] ?? []).filter(s => !(s.item_id === itemId && s.scorer_id === updated.scorer_id))
         return { ...prev, [reviewId]: [...list, updated] }
       })
-    } else {
-      showToast(`Score not saved — ${await saveErrorReason(res)}`)
+      return true
     }
+    const reason = await saveErrorReason(res)
+    showToast(`Score not saved — ${reason}`)
+    reportError({ message: reason, route: `/api/kpi/reviews/${reviewId}/scores`, method: "PUT", status: res?.status ?? 0, section: "KPI · Scores", detail: "client" })
+    return false
   }
 
   async function handleSaveFinalComment(reviewId: string, authorId: string | null, comment: string) {
@@ -2977,7 +2983,11 @@ export function KpiPageClient({ isHR, currentEmployeeId, isManager = false }: { 
         return { ...prev, [reviewId]: [...list, updated] }
       })
       showToast("Final comment saved")
-    } else showToast(`Comment not saved — ${await saveErrorReason(res)}`)
+    } else {
+      const reason = await saveErrorReason(res)
+      showToast(`Comment not saved — ${reason}`)
+      reportError({ message: reason, route: `/api/kpi/reviews/${reviewId}/final-comments`, method: "PUT", status: res?.status ?? 0, section: "KPI · Final comments", detail: "client" })
+    }
   }
 
   async function handleAddInvitee(reviewId: string, inviteeIds: string[], sendEmail: boolean, sectionIds: string[]) {

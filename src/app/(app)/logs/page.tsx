@@ -2,7 +2,7 @@ import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { getUserRole } from "@/lib/auth"
 import { PageHeader } from "@/components/layout/PageHeader"
-import { LogsClient } from "./LogsClient"
+import { LogsTabs } from "./LogsTabs"
 
 export const metadata = { title: "Logs — Human Connections" }
 
@@ -25,8 +25,8 @@ export default async function LogsPage() {
 
   return (
     <div className="space-y-6 max-w-6xl">
-      <PageHeader title="Logs" subtitle="Who signed in, and what they changed. Newest first; times are South African time." />
-      <LogsClient staff={staff} />
+      <PageHeader title="Logs" subtitle="Who signed in and what they changed, plus the errors people ran into. Newest first; times are South African time." />
+      <LogsTabs staff={staff} />
     </div>
   )
 }

@@ -424,6 +424,8 @@ Always return proper HTTP status codes: 400, 401, 403, 404, 500.
 | Activity log (HR-only `/logs`, sidebar under Staff Directory): `activity_log` table (migration `20261008_01`, service role only). Every mutating API route is wrapped in `withAudit(handler, {section, action, target, fields})` from `src/lib/activity-log.ts` — logs successful writes (who, section, action, on whom; profile edits record field NAMES only, never values). Sign-ins are logged by `POST /api/auth/touch` via `logLoginIfNew` (deduped on `last_sign_in_at`). **New write routes must be wrapped in `withAudit`.** `GET /api/logs` (HR only) | ✅ Done |
 | Onboarding KPIs: staff with status `onboarding` are reviewed in `Month 1/2/3` (no quarters or year score); once `active` they start Q1–Q4 and the Month reviews stay on record, labelled "Onboarding KPI". Period rules in `src/lib/kpi/onboarding.ts` (enforced in the reviews POST/PATCH); `/kpi` has an Onboarding / Permanent staff filter; Month templates are cloned from the current quarter's template (Month 2/3 from Month 1) | ✅ Built |
 
+| Error log (`/logs` → Errors tab): `error_log` table (migration `20261009_01`, service role only). `withAudit` also records every failed write (4xx/5xx or thrown exception: who, route, status, error text — never request bodies); the browser reports save failures it saw (network, expired session) via `reportError` → `POST /api/errors/report`. `GET /api/logs/errors` (HR only). KPI score rows now stay in edit mode when a save fails | ✅ Done |
+
 Update this table as features are completed.
 
 ---

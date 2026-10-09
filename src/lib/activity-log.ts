@@ -1,3 +1,4 @@
+import { NextResponse } from "next/server"
 import type { User } from "@supabase/supabase-js"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
@@ -18,7 +19,7 @@ export interface AuditMeta {
 
 type Admin = ReturnType<typeof createAdminClient>
 
-async function actorFor(admin: Admin, userId: string) {
+export async function actorFor(admin: Admin, userId: string) {
   const { data: au } = await admin.from("app_users").select("employee_id").eq("id", userId).maybeSingle()
   if (!au?.employee_id) return { employeeId: null as string | null, name: null as string | null }
   const { data: e } = await admin.from("employees").select("first_name, last_name").eq("id", au.employee_id).maybeSingle()
@@ -28,7 +29,7 @@ async function actorFor(admin: Admin, userId: string) {
 const fullName = (e?: { first_name?: string | null; last_name?: string | null } | null) =>
   e ? `${e.first_name ?? ""} ${e.last_name ?? ""}`.trim() : null
 
-async function resolveTarget(admin: Admin, kind: AuditMeta["target"], id: string | undefined) {
+export async function resolveTarget(admin: Admin, kind: AuditMeta["target"], id: string | undefined) {
   const none = { employeeId: null as string | null, name: null as string | null, detail: null as string | null }
   if (!kind || !id) return none
   if (kind === "employee") {
@@ -50,6 +51,46 @@ async function resolveTarget(admin: Admin, kind: AuditMeta["target"], id: string
 }
 
 /**
+ * Record a failed write (4xx/5xx or an exception) in the error log. The message
+ * is the error text only — never the request body. Best-effort, never throws.
+ */
+async function logApiError(
+  req: Request,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  ctx: any,
+  meta: AuditMeta,
+  status: number,
+  message: string,
+) {
+  try {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    const admin = createAdminClient()
+    const [actor, params] = await Promise.all([
+      user ? actorFor(admin, user.id) : Promise.resolve({ employeeId: null, name: null }),
+      Promise.resolve(ctx?.params),
+    ])
+    const target = await resolveTarget(admin, meta.target, (params as { id?: string } | undefined)?.id)
+    await admin.from("error_log").insert({
+      source: "api",
+      user_id: user?.id ?? null,
+      actor_employee_id: actor.employeeId,
+      actor_name: actor.name ?? user?.email ?? null,
+      method: req.method,
+      route: new URL(req.url).pathname,
+      status,
+      message: message.slice(0, 500),
+      section: meta.section,
+      target_name: target.name,
+      detail: target.detail,
+      user_agent: req.headers.get("user-agent")?.slice(0, 300) ?? null,
+    })
+  } catch (err) {
+    console.error("[error-log] api error not logged", err)
+  }
+}
+
+/**
  * Wrap a Route Handler so each successful (status < 400) call is written to the
  * activity log. The handler's behaviour and response are untouched.
  */
@@ -67,7 +108,24 @@ export function withAudit<H extends (req: any, ctx: any) => Promise<Response | u
       } catch {}
     }
 
-    const res = await handler(req, ctx)
+    let res: Response | undefined
+    try {
+      res = await handler(req, ctx)
+    } catch (err) {
+      // An uncaught exception: record it, then answer like Next would (500).
+      await logApiError(req, ctx, meta, 500, err instanceof Error ? err.message : String(err))
+      console.error("[withAudit] unhandled error", err)
+      return NextResponse.json({ error: "Something went wrong on the server" }, { status: 500 })
+    }
+
+    if (res && res.status >= 400) {
+      let message = `HTTP ${res.status}`
+      try {
+        const body = await res.clone().json()
+        if (typeof body?.error === "string" && body.error) message = body.error
+      } catch {}
+      await logApiError(req, ctx, meta, res.status, message)
+    }
 
     if (res && res.status < 400) {
       try {
