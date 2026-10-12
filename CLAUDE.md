@@ -426,6 +426,8 @@ Always return proper HTTP status codes: 400, 401, 403, 404, 500.
 
 | Error log (`/logs` → Errors tab): `error_log` table (migration `20261009_01`, service role only). `withAudit` also records every failed write (4xx/5xx or thrown exception: who, route, status, error text — never request bodies); the browser reports save failures it saw (network, expired session) via `reportError` → `POST /api/errors/report`. `GET /api/logs/errors` (HR only). KPI score rows now stay in edit mode when a save fails | ✅ Done |
 
+| KPI card Save button + last-saved time (each KPI card header: Save icon saves every row being edited; shows latest `kpi_scores.updated_at` for that KPI, "Not saved yet" if none; always clickable and confirms "All changes saved"). **There is no auto-save** — scores/comments save only via Save (per row or card header), as before | ✅ Done |
+
 Update this table as features are completed.
 
 ---
