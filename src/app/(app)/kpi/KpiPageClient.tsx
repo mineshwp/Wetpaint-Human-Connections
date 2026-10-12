@@ -7,7 +7,7 @@ import {
   Users, UserPlus, Send, Clock, CheckCircle2, XCircle,
   Loader2, BarChart3, FileText, Target, Heart, Building2,
   Search, Pencil, SlidersHorizontal, ArrowUp, ArrowDown, RotateCcw, Copy,
-  Sparkles, ListChecks, Lock,
+  Sparkles, ListChecks, Lock, Save,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { reportError } from "@/lib/report-error"
@@ -43,6 +43,7 @@ interface Review {
 interface Score {
   id: string; review_id: string; item_id: string
   scorer_id: string | null; score: number | null; comments: string | null
+  updated_at?: string | null
 }
 interface FinalComment {
   id: string; review_id: string; author_id: string | null; comment: string | null
@@ -304,9 +305,13 @@ function Avatar({ name, size = "md", photoUrl }: { name: string; size?: "sm" | "
 
 // ─── Scorer Row ─────────────────────────────────────────────────────────────────
 
-function ScorerRow({ name, role, scoreObj, canEdit, item, onSave }: {
+type RowSaver = { editing: boolean; save: () => Promise<boolean> }
+
+function ScorerRow({ name, role, scoreObj, canEdit, item, onSave, rowKey, registry, onEditingChange }: {
   name: string; role: string; scoreObj: Score | undefined; canEdit: boolean
   item: TemplateItem; onSave: (score: number | null, comments: string) => Promise<boolean>
+  rowKey: string; registry: React.MutableRefObject<Map<string, RowSaver>>
+  onEditingChange: () => void
 }) {
   const [editing, setEditing] = useState(false)
   const [val, setVal]         = useState(scoreObj?.score?.toString() ?? "")
@@ -320,7 +325,17 @@ function ScorerRow({ name, role, scoreObj, canEdit, item, onSave }: {
     try { ok = await onSave(val === "" ? null : Number(val), comm) } finally { setSaving(false) }
     // On failure stay in edit mode so what was typed isn't lost.
     if (ok) setEditing(false)
+    return ok
   }
+
+  // Let the card's header Save button save this row too while it is being edited.
+  registry.current.set(rowKey, { editing, save: handleSave })
+  useEffect(() => {
+    onEditingChange()
+    const map = registry.current
+    return () => { map.delete(rowKey) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editing])
 
   return (
     <div className="border-b border-border last:border-b-0">
@@ -409,9 +424,26 @@ function KpiCard({ item, sectionName, scores, invitees, isHR, currentEmployeeId,
   const [editMin, setEditMin]       = useState(item.min_score)
   const [editMax, setEditMax]       = useState(item.max_score)
   const [editSaving, setEditSaving] = useState(false)
+  const rowSavers = useRef<Map<string, RowSaver>>(new Map())
+  const [, setTick] = useState(0)
+  const [headerSaving, setHeaderSaving] = useState(false)
 
   const scoreMap = new Map<string, Score>()
   for (const s of scores) scoreMap.set(`${s.item_id}::${s.scorer_id ?? "hr"}`, s)
+
+  const lastSaved = scores
+    .filter(s => s.item_id === item.id && s.updated_at)
+    .map(s => s.updated_at as string)
+    .sort()
+    .pop() ?? null
+  const anyEditing = Array.from(rowSavers.current.values()).some(r => r.editing)
+
+  async function saveAllRows() {
+    setHeaderSaving(true)
+    try {
+      for (const r of Array.from(rowSavers.current.values())) if (r.editing) await r.save()
+    } finally { setHeaderSaving(false) }
+  }
 
   // Only reviewers assigned to this item's section can score it. There is no
   // generic "HR / Admin" scorer — HR scores under their own name as a named
@@ -488,6 +520,25 @@ function KpiCard({ item, sectionName, scores, invitees, isHR, currentEmployeeId,
           )}
         </div>
         <div className="flex items-center gap-2 shrink-0">
+          {scorerRows.some(r => r.canEdit) && !editMode && (
+            <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+              <span className="whitespace-nowrap">
+                {lastSaved
+                  ? `Saved ${new Date(lastSaved).toLocaleString("en-ZA", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}`
+                  : "Not saved yet"}
+              </span>
+              <button
+                type="button"
+                title={anyEditing ? "Save changes" : "Nothing to save"}
+                aria-label="Save changes"
+                disabled={!anyEditing || headerSaving}
+                onClick={saveAllRows}
+                className="w-7 h-7 rounded-lg border border-border flex items-center justify-center text-muted-foreground hover:text-primary hover:border-primary/60 transition-colors disabled:opacity-40 disabled:pointer-events-none"
+              >
+                {headerSaving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
+              </button>
+            </div>
+          )}
           {isHR && !editMode && (
             <button
               type="button"
@@ -590,6 +641,7 @@ function KpiCard({ item, sectionName, scores, invitees, isHR, currentEmployeeId,
                     key={row.key} name={row.name} role={row.role}
                     scoreObj={row.scoreObj} canEdit={row.canEdit} item={item}
                     onSave={(score, comm) => onScoreChange(item.id, score, comm, row.scorerId)}
+                    rowKey={row.key} registry={rowSavers} onEditingChange={() => setTick(t => t + 1)}
                   />
                 ))
             }
