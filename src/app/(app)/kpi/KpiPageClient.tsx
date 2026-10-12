@@ -427,6 +427,7 @@ function KpiCard({ item, sectionName, scores, invitees, isHR, currentEmployeeId,
   const rowSavers = useRef<Map<string, RowSaver>>(new Map())
   const [, setTick] = useState(0)
   const [headerSaving, setHeaderSaving] = useState(false)
+  const [justSaved, setJustSaved] = useState(false)
 
   const scoreMap = new Map<string, Score>()
   for (const s of scores) scoreMap.set(`${s.item_id}::${s.scorer_id ?? "hr"}`, s)
@@ -440,9 +441,12 @@ function KpiCard({ item, sectionName, scores, invitees, isHR, currentEmployeeId,
 
   async function saveAllRows() {
     setHeaderSaving(true)
+    let ok = true
     try {
-      for (const r of Array.from(rowSavers.current.values())) if (r.editing) await r.save()
+      for (const r of Array.from(rowSavers.current.values())) if (r.editing) ok = (await r.save()) && ok
     } finally { setHeaderSaving(false) }
+    // Confirm to the user that everything is saved (failures show their own toast).
+    if (ok) { setJustSaved(true); setTimeout(() => setJustSaved(false), 2500) }
   }
 
   // Only reviewers assigned to this item's section can score it. There is no
@@ -520,22 +524,22 @@ function KpiCard({ item, sectionName, scores, invitees, isHR, currentEmployeeId,
           )}
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          {scorerRows.some(r => r.canEdit) && !editMode && (
+          {(isHR || scorerRows.some(r => r.canEdit)) && !editMode && (
             <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-              <span className="whitespace-nowrap">
-                {lastSaved
+              <span className={cn("whitespace-nowrap", justSaved && "text-emerald-600 font-medium")}>
+                {justSaved ? "All changes saved" : lastSaved
                   ? `Saved ${new Date(lastSaved).toLocaleString("en-ZA", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}`
                   : "Not saved yet"}
               </span>
               <button
                 type="button"
-                title={anyEditing ? "Save changes" : "Nothing to save"}
+                title={anyEditing ? "Save changes" : "Confirm everything is saved"}
                 aria-label="Save changes"
-                disabled={!anyEditing || headerSaving}
+                disabled={headerSaving}
                 onClick={saveAllRows}
-                className="w-7 h-7 rounded-lg border border-border flex items-center justify-center text-muted-foreground hover:text-primary hover:border-primary/60 transition-colors disabled:opacity-40 disabled:pointer-events-none"
+                className="w-7 h-7 rounded-lg border border-border flex items-center justify-center text-muted-foreground hover:text-primary hover:border-primary/60 transition-colors disabled:opacity-60"
               >
-                {headerSaving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
+                {headerSaving ? <Loader2 size={12} className="animate-spin" /> : justSaved ? <Check size={12} className="text-emerald-600" /> : <Save size={12} />}
               </button>
             </div>
           )}
