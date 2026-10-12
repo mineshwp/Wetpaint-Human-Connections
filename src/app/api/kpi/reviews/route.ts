@@ -38,6 +38,15 @@ export async function GET() {
       deptEmployeeIds = (team ?? []).map((e) => e.id as string).filter((id) => id !== myEmployeeId)
     }
 
+    // Reviews I'm invited to. Resolved first so the main query returns EVERY
+    // invitee on those reviews — filtering the embed itself (.eq on
+    // kpi_review_invitees.invitee_id) would hide the other reviewers.
+    const { data: myInvites } = await supabase
+      .from("kpi_review_invitees")
+      .select("review_id")
+      .eq("invitee_id", myEmployeeId)
+    const assignedIds = (myInvites ?? []).map((i) => i.review_id as string)
+
     const [ownedResult, assignedResult, deptResult] = await Promise.all([
       supabase
         .from("kpi_reviews")
@@ -47,12 +56,14 @@ export async function GET() {
         .in("status", ["active", "completed"])
         .eq("is_archived", false)
         .order("created_at", { ascending: false }),
-      supabase
-        .from("kpi_reviews")
-        .select(selectClause)
-        .eq("kpi_review_invitees.invitee_id", myEmployeeId)
-        .eq("is_archived", false)
-        .order("created_at", { ascending: false }),
+      assignedIds.length > 0
+        ? supabase
+            .from("kpi_reviews")
+            .select(selectClause)
+            .in("id", assignedIds)
+            .eq("is_archived", false)
+            .order("created_at", { ascending: false })
+        : Promise.resolve({ data: [], error: null }),
       deptEmployeeIds.length > 0
         ? supabase
             .from("kpi_reviews")

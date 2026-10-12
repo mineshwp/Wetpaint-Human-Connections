@@ -428,6 +428,8 @@ Always return proper HTTP status codes: 400, 401, 403, 404, 500.
 
 | KPI card Save button + last-saved time (each KPI card header: Save icon saves every row being edited; shows latest `kpi_scores.updated_at` for that KPI, "Not saved yet" if none; always clickable and confirms "All changes saved"). **There is no auto-save** — scores/comments save only via Save (per row or card header), as before | ✅ Done |
 
+| Reviewers see each other: an invited reviewer sees every reviewer's scores, comments and final comments (and HR's) on reviews they're invited to; edit only their own while draft, view-only once published. Fix: `GET /api/kpi/reviews` no longer filters the invitee embed (it returned only the viewer's own invitee row, hiding the others) | ✅ Done |
+
 Update this table as features are completed.
 
 ---
