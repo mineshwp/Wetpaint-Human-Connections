@@ -1212,6 +1212,9 @@ function FinalComments({ invitees, comments, scores, isHR, currentEmployeeId, on
   const visible = isHR ? rows : rows.filter(r => r.authorId === currentEmployeeId || (byAuthor.get(r.authorId)?.comment ?? "") !== "")
   const withComment = visible.filter(r => (byAuthor.get(r.authorId)?.comment ?? "") !== "").length
 
+  // Nothing to show to staff / read-only viewers until a reviewer has written something.
+  if (!isHR && visible.length === 0) return null
+
   return <FinalCommentsAccordion visible={visible} byAuthor={byAuthor} withComment={withComment} isHR={isHR} currentEmployeeId={currentEmployeeId} onSave={onSave} />
 }
 
