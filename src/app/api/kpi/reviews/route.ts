@@ -150,9 +150,9 @@ async function handlePOST(req: NextRequest) {
   if (!isValidReviewPeriod(period)) {
     return NextResponse.json({ error: "period must look like \"Q1 2026\" or \"Month 1\"" }, { status: 400 })
   }
-  const { data: emp } = await supabase.from("employees").select("status").eq("id", employee_id).maybeSingle()
+  const { data: emp } = await supabase.from("employees").select("status, show_onboarding_kpi").eq("id", employee_id).maybeSingle()
   if (!emp) return NextResponse.json({ error: "Employee not found" }, { status: 404 })
-  if (!periodMatchesStatus(period, emp.status)) {
+  if (!periodMatchesStatus(period, emp.status, !!emp.show_onboarding_kpi)) {
     return NextResponse.json({ error: PERIOD_STATUS_ERROR }, { status: 400 })
   }
 

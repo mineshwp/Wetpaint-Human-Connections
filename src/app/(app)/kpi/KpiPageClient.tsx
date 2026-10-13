@@ -52,6 +52,8 @@ interface Employee {
   id: string; first_name: string; last_name: string; job_title: string; email?: string
   profile_photo_url?: string | null
   status?: string
+  start_date?: string | null
+  show_onboarding_kpi?: boolean
   department?: { name: string } | null
 }
 
@@ -190,15 +192,26 @@ const SUMMARY_COLS: Record<number, string> = {
 // rating (with the rating-guide band label when available).
 // publishedOnly (staff/manager views): only quarters that have a review are
 // shown, so unpublished quarters never appear at all.
-function QuarterScoresSummary({ reviews, scores, reviewTemplates, ratingScale, year, publishedOnly = false }: {
+/** True when the quarter ended before the person started (they had no KPI then). */
+function quarterBeforeStart(q: Quarter, year: number, startDate: string | null | undefined): boolean {
+  if (!startDate) return false
+  const start = new Date(startDate)
+  if (isNaN(start.getTime())) return false
+  return new Date(year, q * 3, 0, 23, 59, 59) < start   // last day of the quarter
+}
+
+function QuarterScoresSummary({ startDate, reviews, scores, reviewTemplates, ratingScale, year, publishedOnly = false }: {
   reviews: Review[]
   scores: Record<string, Score[]>
   reviewTemplates: Record<string, TemplateSection[]>
   ratingScale: RatingRow[]
   year: number
   publishedOnly?: boolean
+  startDate?: string | null
 }) {
-  const allQuarters = QUARTERS.map((q) => {
+  const allQuarters = QUARTERS.filter(q =>
+    !quarterBeforeStart(q, year, startDate) || reviews.some(r => periodToYear(r.period) === year && periodToQuarter(r.period) === q)
+  ).map((q) => {
     const review = reviews.find((r) => periodToYear(r.period) === year && periodToQuarter(r.period) === q)
     if (!review) return { q, review: null as Review | null, pct: null as number | null, hasScores: false }
     const { pct, hasScores } = computeReviewScore(
@@ -1090,7 +1103,7 @@ function CreateReviewModal({ employees, currentPeriod, selectedYear, preselected
           </div>
           <div>
             <label className="text-xs font-semibold text-muted-foreground block mb-1.5">Period</label>
-            {employeeOnboarding ? (
+            {employeeOnboarding || (employees.find(e => e.id === employeeId)?.show_onboarding_kpi && isMonthPeriod(period)) ? (
               <select value={period} onChange={e => setPeriod(e.target.value)}
                 className="w-full rounded-xl border border-border bg-card px-3 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary">
                 {MONTH_SLOTS.map(sl => <option key={sl} value={slotPeriod(sl, selectedYear)}>{slotPeriod(sl, selectedYear)}</option>)}
@@ -1549,8 +1562,10 @@ function QuarterPanel({ review, template, scores, finalComments, allEmployees, c
 
 // ─── Staff Row (compact — opens the single-person detail view) ────────────────────
 
-function StaffRow({ employee, reviews, scores, reviewTemplates, onOpen, publishedOnly = false }: {
+function StaffRow({ employee, reviews, scores, reviewTemplates, onOpen, publishedOnly = false, onToggleOnboardingKpi, year }: {
   employee: Employee
+  year?: number
+  onToggleOnboardingKpi?: (employeeId: string, show: boolean) => void
   publishedOnly?: boolean
   reviews: Review[]
   scores: Record<string, Score[]>
@@ -1590,6 +1605,7 @@ function StaffRow({ employee, reviews, scores, reviewTemplates, onOpen, publishe
 
   const name = `${employee.first_name} ${employee.last_name}`
   const deptName = (employee as { department?: { name: string } | null }).department?.name ?? ""
+  const showMonths = !!employee.show_onboarding_kpi
 
   // A filled review chip: label, score and status. Per item the score is the
   // AVERAGE of all submitted scores (same math as the detail view).
@@ -1626,6 +1642,20 @@ function StaffRow({ employee, reviews, scores, reviewTemplates, onOpen, publishe
             show Month 1–3 (no quarters or year); permanent staff show Q1–Q4 plus
             any onboarding KPI they already have on record. */}
         <div className="flex items-center gap-1.5 flex-wrap justify-end" onClick={e => e.stopPropagation()}>
+          {!onboarding && onToggleOnboardingKpi && (
+            <label
+              className="inline-flex items-center gap-1.5 mr-1 text-[11px] font-medium text-muted-foreground cursor-pointer select-none"
+              title="Show the 3-month (Month 1–3) KPI for this person. Existing 3-month KPIs are never deleted."
+            >
+              <input
+                type="checkbox"
+                checked={showMonths}
+                onChange={e => onToggleOnboardingKpi(employee.id, e.target.checked)}
+                className="h-3.5 w-3.5 accent-sky-600"
+              />
+              3-month KPI
+            </label>
+          )}
           {onboarding && (
             <span className="inline-flex items-center rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-sky-700">
               Onboarding
@@ -1633,14 +1663,25 @@ function StaffRow({ employee, reviews, scores, reviewTemplates, onOpen, publishe
           )}
           {!onboarding && MONTHS.map(m => {
             const review = reviewByMonth[m]
-            if (!review) return null
-            return reviewChip(`m${m}`, `Onboarding M${m}`, review)
+            if (review) return reviewChip(`m${m}`, `Onboarding M${m}`, review)
+            if (!showMonths || publishedOnly) return null
+            return (
+              <button
+                key={`m${m}`}
+                type="button"
+                onClick={() => onOpen(employee.id, `m${m}`)}
+                className="inline-flex items-center rounded-full border border-dashed border-sky-300 px-2.5 py-0.5 text-[11px] font-medium text-sky-700 hover:border-sky-500 transition-all"
+              >
+                Onboarding M{m}
+              </button>
+            )
           })}
           {(onboarding ? MONTHS : QUARTERS).map(n => {
             const slot = (onboarding ? `m${n}` : `q${n}`) as Slot
             const review = onboarding ? reviewByMonth[n as Month] : reviewByQuarter[n as Quarter]
             if (review) return reviewChip(slot, slotShort(slot), review)
             if (publishedOnly) return null
+            if (!onboarding && year && quarterBeforeStart(n as Quarter, year, employee.start_date)) return null
             return (
               <button
                 key={slot}
@@ -1722,8 +1763,11 @@ function EmployeeReviewDetail({ employee, reviews, scores, reviewTemplates, fina
       return slots.filter(sl => reviewBySlot[sl] || sl === nextEmpty)
     }
     if (onboarding) return pick(MONTH_SLOTS)
-    return [...pick(QUARTER_SLOTS), ...MONTH_SLOTS.filter(sl => reviewBySlot[sl])]
-  }, [reviewBySlot, onboarding])
+    const months = employee.show_onboarding_kpi ? pick(MONTH_SLOTS) : MONTH_SLOTS.filter(sl => reviewBySlot[sl])
+    // Quarters before they started have no KPI unless HR already added one.
+    const quarters = QUARTER_SLOTS.filter(sl => reviewBySlot[sl] || !quarterBeforeStart(Number(sl[1]) as Quarter, selectedYear, employee.start_date))
+    return [...pick(quarters), ...months]
+  }, [reviewBySlot, onboarding, employee.show_onboarding_kpi, employee.start_date, selectedYear])
 
   const name = `${employee.first_name} ${employee.last_name}`
   const deptName = (employee as { department?: { name: string } | null }).department?.name ?? ""
@@ -1772,7 +1816,7 @@ function EmployeeReviewDetail({ employee, reviews, scores, reviewTemplates, fina
 
       {/* Quarters and the year score only show once they are permanent */}
       {!onboarding && (
-        <QuarterScoresSummary reviews={reviews} scores={scores} reviewTemplates={reviewTemplates} ratingScale={ratingScale} year={selectedYear} />
+        <QuarterScoresSummary reviews={reviews} scores={scores} reviewTemplates={reviewTemplates} ratingScale={ratingScale} year={selectedYear} startDate={employee.start_date} />
       )}
 
       {/* Review tab bar */}
@@ -1844,7 +1888,8 @@ function EmployeeReviewDetail({ employee, reviews, scores, reviewTemplates, fina
 
 // ─── HR Admin View ──────────────────────────────────────────────────────────────
 
-function HRAdminView({ reviewTemplates, reviews, scores, finalComments, allEmployees, currentEmployeeId, onScoreChange, onSaveFinalComment, onAddInvitee, onRemoveInvitee, onSetSections, onStatusChange, onDelete, onAddItem, onEditItem, onRemoveItem, onResetItem, onCopyItems, onUpdateReviewDetails, onShowCreate, onManageTemplate, onShowRatingGuide, ratingScale, selectedYear, setSelectedYear, availableYears }: {
+function HRAdminView({ onToggleOnboardingKpi, reviewTemplates, reviews, scores, finalComments, allEmployees, currentEmployeeId, onScoreChange, onSaveFinalComment, onAddInvitee, onRemoveInvitee, onSetSections, onStatusChange, onDelete, onAddItem, onEditItem, onRemoveItem, onResetItem, onCopyItems, onUpdateReviewDetails, onShowCreate, onManageTemplate, onShowRatingGuide, ratingScale, selectedYear, setSelectedYear, availableYears }: {
+  onToggleOnboardingKpi: (employeeId: string, show: boolean) => void
   reviewTemplates: Record<string, TemplateSection[]>
   reviews: Review[]
   scores: Record<string, Score[]>
@@ -2105,6 +2150,8 @@ function HRAdminView({ reviewTemplates, reviews, scores, finalComments, allEmplo
               scores={scores}
               reviewTemplates={reviewTemplates}
               onOpen={(id, slot) => { setSelectedId(id); setSelectedSlot(slot) }}
+              onToggleOnboardingKpi={onToggleOnboardingKpi}
+              year={selectedYear}
             />
           ))}
         </div>
@@ -3077,6 +3124,23 @@ export function KpiPageClient({ isHR, currentEmployeeId, isManager = false }: { 
     else showToast("Failed to remove invitee")
   }
 
+  async function handleToggleOnboardingKpi(employeeId: string, show: boolean) {
+    const setFlag = (v: boolean) =>
+      setAllEmployees(prev => prev.map(e => e.id === employeeId ? { ...e, show_onboarding_kpi: v } : e))
+    setFlag(show)
+    try {
+      const res = await fetch(`/api/kpi/employees/${employeeId}/onboarding-kpi`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ show_onboarding_kpi: show }),
+      })
+      if (!res.ok) throw new Error()
+    } catch {
+      setFlag(!show)
+      showToast("Couldn't change the 3-month KPI setting. Please try again.")
+    }
+  }
+
   async function handleStatusChange(reviewId: string, status: string) {
     const prev = reviews.find(r => r.id === reviewId)?.status
     setReviews(rs => rs.map(r => r.id === reviewId ? { ...r, status: status as Review["status"] } : r))
@@ -3265,6 +3329,7 @@ export function KpiPageClient({ isHR, currentEmployeeId, isManager = false }: { 
         <>
           {tab === "reviews" && isHR && (
             <HRAdminView
+              onToggleOnboardingKpi={handleToggleOnboardingKpi}
               reviewTemplates={reviewTemplates}
               reviews={reviews}
               scores={scores}

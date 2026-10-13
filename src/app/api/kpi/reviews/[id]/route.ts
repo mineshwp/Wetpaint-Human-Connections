@@ -63,7 +63,7 @@ async function handlePATCH(
 
   const { data: before } = await supabase
     .from("kpi_reviews")
-    .select("status, period, employee:employees!kpi_reviews_employee_id_fkey(status)")
+    .select("status, period, employee:employees!kpi_reviews_employee_id_fkey(status, show_onboarding_kpi)")
     .eq("id", id)
     .maybeSingle()
   if (!before) return NextResponse.json({ error: "Not found" }, { status: 404 })
@@ -71,12 +71,13 @@ async function handlePATCH(
   // Month periods belong to onboarding staff; a permanent person's onboarding
   // reviews keep their Month period, but can't be moved to a quarter (or back).
   if (allowed.period !== undefined && allowed.period !== before.period) {
-    const empStatus = (before.employee as { status?: string } | null)?.status
+    const empRow = before.employee as { status?: string; show_onboarding_kpi?: boolean } | null
+    const empStatus = empRow?.status
     const isOnboardingReview = isMonthPeriod(String(allowed.period))
     if (empStatus === "onboarding" && !isOnboardingReview) {
       return NextResponse.json({ error: PERIOD_STATUS_ERROR }, { status: 400 })
     }
-    if (empStatus !== "onboarding" && isOnboardingReview) {
+    if (empStatus !== "onboarding" && isOnboardingReview && !empRow?.show_onboarding_kpi) {
       return NextResponse.json({ error: "Month 1–3 reviews are only for staff who are onboarding." }, { status: 400 })
     }
   }

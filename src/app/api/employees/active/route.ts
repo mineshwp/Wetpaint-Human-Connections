@@ -12,7 +12,7 @@ export async function GET() {
 
   const { data, error } = await supabase
     .from("employees")
-    .select("id, first_name, last_name, job_title, email, profile_photo_url, status, department:departments(name)")
+    .select("id, first_name, last_name, job_title, email, profile_photo_url, status, start_date, show_onboarding_kpi, department:departments(name)")
     .in("status", ["active", "onboarding"])
     .order("last_name")
 

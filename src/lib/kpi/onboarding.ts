@@ -23,8 +23,9 @@ export function isValidReviewPeriod(period: string | null | undefined): boolean 
   return isQuarterPeriod(period) || isMonthPeriod(period)
 }
 
-/** Month periods are only for onboarding staff; quarters only for permanent staff. */
-export function periodMatchesStatus(period: string, employeeStatus: string | null | undefined): boolean {
+/** Month periods are for onboarding staff (or permanent staff HR switched the 3-month KPI on for); quarters only for permanent staff. */
+export function periodMatchesStatus(period: string, employeeStatus: string | null | undefined, showOnboardingKpi = false): boolean {
+  if (employeeStatus !== "onboarding" && showOnboardingKpi && isMonthPeriod(period)) return true
   return isMonthPeriod(period) === (employeeStatus === "onboarding")
 }
 
