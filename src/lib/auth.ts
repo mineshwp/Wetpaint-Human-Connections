@@ -14,12 +14,11 @@ export async function getRealUserRole(
   supabase: SupabaseClient,
   userId: string
 ): Promise<UserRole | null> {
-  const { data, error } = await supabase
+  const { data } = await supabase
     .from("app_users")
     .select("active_role, employee_id")
     .eq("id", userId)
     .single()
-  if (!data) console.log("[auth-diag] app_users lookup returned no row", error?.message ?? null)
   const stored = (data?.active_role as UserRole) ?? null
   if (stored === "hr" || stored === "applicant" || !stored) return stored
   return resolveRole(stored, data?.employee_id ? await getAccessLevel(data.employee_id) : null)

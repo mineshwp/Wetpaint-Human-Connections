@@ -23,10 +23,7 @@ export default async function AppLayout({
     data: { user },
   } = await supabase.auth.getUser()
 
-  if (!user) {
-    console.log("[auth-diag] layout: no user -> /login")
-    redirect("/login")
-  }
+  if (!user) redirect("/login")
 
   // Mark genuine acceptance: the first time a user actually loads the app, stamp
   // accepted_at (drives the "Pending" badge in Settings). A URL scanner like
