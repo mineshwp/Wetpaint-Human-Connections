@@ -24,9 +24,18 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  const { data: { user } } = await supabase.auth.getUser()
+  const { data: { user }, error: userError } = await supabase.auth.getUser()
 
   const { pathname } = request.nextUrl
+  // TEMP diagnostics: why was someone sent to /login? (no personal data logged)
+  const diag = () => JSON.stringify({
+    path: pathname,
+    rsc: request.headers.has('rsc'),
+    prefetch: request.headers.has('next-router-prefetch'),
+    authCookies: request.cookies.getAll().filter((c) => c.name.startsWith('sb-')).length,
+    lastActiveAgeS: request.cookies.get(ACTIVITY_COOKIE)?.value ? Math.round((Date.now() - Number(request.cookies.get(ACTIVITY_COOKIE)?.value)) / 1000) : null,
+    userError: userError?.message ?? null,
+  })
 
   const publicPaths = ['/login', '/auth/callback', '/api/auth/signout-domain-error', '/api/auth/forgot-password', '/api/cron/keepalive']
   const isPublic = publicPaths.some((p) => pathname.startsWith(p))
@@ -40,6 +49,7 @@ export async function middleware(request: NextRequest) {
   } else if (user && !isPublic) {
     const last = Number(request.cookies.get(ACTIVITY_COOKIE)?.value)
     if (last && Date.now() - last > IDLE_LIMIT_MS) {
+      console.log('[auth-diag] idle sign-out', diag())
       await supabase.auth.signOut()
       const isApi = pathname.startsWith('/api/')
       const res = isApi
@@ -58,6 +68,7 @@ export async function middleware(request: NextRequest) {
   }
 
   if (!user && !isPublic) {
+    console.log('[auth-diag] no user -> /login', diag())
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     return NextResponse.redirect(url)

@@ -51,6 +51,7 @@ export default async function EmployeesPage() {
   const role = await getUserRole(supabase, user.id)
 
   if (!role || role === "applicant") {
+    console.log("[auth-diag] employees page: no usable role ->", role)
     redirect("/login")
   }
 
