@@ -1,3 +1,4 @@
+import { sanitizeRichText } from "@/lib/rich-text"
 import { withAudit } from "@/lib/activity-log"
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
@@ -47,7 +48,7 @@ async function handlePUT(
   ])
 
   const body = await req.json()
-  const comment: string = typeof body.comment === "string" ? body.comment : ""
+  const comment: string = typeof body.comment === "string" ? sanitizeRichText(body.comment) : ""
   let authorId: string | null = body.author_id ?? null
 
   if (role === "hr") {

@@ -1,3 +1,4 @@
+import { sanitizeRichText } from "@/lib/rich-text"
 import { withAudit } from "@/lib/activity-log"
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
@@ -111,7 +112,7 @@ async function handlePUT(
     item_id,
     scorer_id: scorerId,
     score: score ?? null,
-    comments: comments ?? null,
+    comments: typeof comments === "string" ? sanitizeRichText(comments) : null,
     updated_at: new Date().toISOString(),
   }
 

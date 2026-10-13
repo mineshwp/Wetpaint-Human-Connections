@@ -1,3 +1,4 @@
+import { sanitizeRichText } from "@/lib/rich-text"
 import { withAudit } from "@/lib/activity-log"
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
@@ -34,7 +35,7 @@ async function handlePOST(
 
   const { data, error } = await supabase
     .from("kpi_template_items")
-    .insert({ section_id: sectionId, title, description: description ?? null, min_score, max_score, position })
+    .insert({ section_id: sectionId, title, description: typeof description === "string" ? sanitizeRichText(description) : null, min_score, max_score, position })
     .select()
     .single()
 

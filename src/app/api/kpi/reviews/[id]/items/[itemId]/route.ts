@@ -1,3 +1,4 @@
+import { sanitizeRichText } from "@/lib/rich-text"
 import { withAudit } from "@/lib/activity-log"
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
@@ -38,7 +39,7 @@ async function handlePUT(
   const body = await req.json()
   const fields: Record<string, unknown> = {}
   if (typeof body.title === "string") fields.title = body.title.trim()
-  if (body.description !== undefined) fields.description = body.description || null
+  if (body.description !== undefined) fields.description = (typeof body.description === "string" ? sanitizeRichText(body.description) : body.description) || null
   if (body.min_score !== undefined) fields.min_score = body.min_score
   if (body.max_score !== undefined) fields.max_score = body.max_score
 

@@ -1,3 +1,4 @@
+import { sanitizeRichText } from "@/lib/rich-text"
 import { withAudit } from "@/lib/activity-log"
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
@@ -45,7 +46,7 @@ async function handlePOST(
       section_id,
       review_id: reviewId,
       title,
-      description: body.description ?? null,
+      description: typeof body.description === "string" ? sanitizeRichText(body.description) : null,
       min_score: body.min_score ?? 0,
       max_score: body.max_score ?? 10,
       position,

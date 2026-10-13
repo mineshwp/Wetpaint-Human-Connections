@@ -1,3 +1,4 @@
+import { sanitizeRichText } from "@/lib/rich-text"
 import { withAudit } from "@/lib/activity-log"
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
@@ -21,7 +22,7 @@ async function handlePATCH(
   const body = await req.json()
   const allowed: Record<string, unknown> = {}
   if (body.title !== undefined) allowed.title = body.title
-  if (body.description !== undefined) allowed.description = body.description
+  if (body.description !== undefined) allowed.description = typeof body.description === "string" ? sanitizeRichText(body.description) : body.description
   if (body.max_score !== undefined) allowed.max_score = body.max_score
   if (body.min_score !== undefined) allowed.min_score = body.min_score
 

@@ -14,6 +14,8 @@ import { reportError } from "@/lib/report-error"
 import { cn } from "@/lib/utils"
 import { ActionPointsEditor } from "./ActionPointsEditor"
 import { isMonthPeriod, monthNumber } from "@/lib/kpi/onboarding"
+import { RichText, RichTextEditor } from "@/components/ui/rich-text"
+import { isRichEmpty } from "@/lib/rich-text"
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -329,6 +331,7 @@ function ScorerRow({ name, role, scoreObj, canEdit, item, onSave, rowKey, regist
   const [editing, setEditing] = useState(false)
   const [val, setVal]         = useState(scoreObj?.score?.toString() ?? "")
   const [comm, setComm]       = useState(scoreObj?.comments ?? "")
+  const [editKey, setEditKey]   = useState(0)   // bump to reset the editor on Cancel
   const [saving, setSaving]   = useState(false)
   const hasScore = scoreObj?.score !== null && scoreObj?.score !== undefined
 
@@ -384,18 +387,19 @@ function ScorerRow({ name, role, scoreObj, canEdit, item, onSave, rowKey, regist
           </div>
         )}
         {canEdit && editing ? (
-          <textarea
-            rows={2} value={comm} onChange={e => setComm(e.target.value)}
+          <RichTextEditor
+            key={editKey} value={comm} onChange={setComm}
             placeholder="Add a comment or evidence…"
-            className="w-full border border-border rounded-lg px-2 py-1.5 text-xs resize-none focus:outline-none focus:ring-1 focus:ring-primary bg-card"
+            minHeight="3.5rem"
+            className="text-xs"
           />
         ) : (
           <div
             onClick={canEdit ? () => setEditing(true) : undefined}
             className={cn("text-xs leading-relaxed pt-0.5", canEdit && "cursor-pointer")}
           >
-            {scoreObj?.comments
-              ? <span className="text-foreground">{scoreObj.comments}</span>
+            {!isRichEmpty(scoreObj?.comments)
+              ? <RichText value={scoreObj?.comments} className="text-foreground" />
               : <span className="text-muted-foreground italic">{canEdit ? "Click to add…" : "—"}</span>
             }
           </div>
@@ -410,7 +414,7 @@ function ScorerRow({ name, role, scoreObj, canEdit, item, onSave, rowKey, regist
             {saving ? <Loader2 size={10} className="animate-spin" /> : <Check size={10} />} Save
           </Button>
           <Button size="sm" variant="ghost"
-            onClick={() => { setEditing(false); setVal(scoreObj?.score?.toString() ?? ""); setComm(scoreObj?.comments ?? "") }}
+            onClick={() => { setEditing(false); setVal(scoreObj?.score?.toString() ?? ""); setComm(scoreObj?.comments ?? ""); setEditKey(k => k + 1) }}
             className="h-7 text-xs px-3"
           >
             Cancel
@@ -581,14 +585,9 @@ function KpiCard({ item, sectionName, scores, invitees, isHR, currentEmployeeId,
           <div>
             <h4 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Description</h4>
             {editMode ? (
-              <textarea
-                rows={5}
-                value={editDesc}
-                onChange={e => setEditDesc(e.target.value)}
-                className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-primary"
-              />
-            ) : item.description ? (
-              <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-line">{item.description}</p>
+              <RichTextEditor value={editDesc} onChange={setEditDesc} minHeight="8rem" />
+            ) : !isRichEmpty(item.description) ? (
+              <RichText value={item.description} className="text-sm text-muted-foreground" />
             ) : (
               <p className="text-sm text-muted-foreground italic">No description provided.</p>
             )}
@@ -821,8 +820,7 @@ function SectionAccordion({ section, scores, invitees, isHR, currentEmployeeId, 
               </div>
               <div>
                 <label className="text-xs font-medium text-muted-foreground block mb-1">Description</label>
-                <textarea rows={2} value={newDesc} onChange={e => setNewDesc(e.target.value)} placeholder="What does this KPI measure?"
-                  className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-primary" />
+                <RichTextEditor value={newDesc} onChange={setNewDesc} placeholder="What does this KPI measure?" />
               </div>
               <div>
                 <label className="text-xs font-medium text-muted-foreground block mb-1">Max Score</label>
@@ -1151,21 +1149,12 @@ function FinalCommentRow({ name, role, comment, canEdit, onSave }: {
 }) {
   const [val, setVal] = useState(comment)
   const [saving, setSaving] = useState(false)
+  const [editKey, setEditKey] = useState(0)   // bump to reload the editor from saved text
   // Re-sync the field when the saved comment changes (e.g. after reload) —
   // React's "adjust state during render" pattern, no effect needed.
   const [syncedComment, setSyncedComment] = useState(comment)
-  if (comment !== syncedComment) { setSyncedComment(comment); setVal(comment) }
+  if (comment !== syncedComment) { setSyncedComment(comment); setVal(comment); setEditKey(k => k + 1) }
   const dirty = val !== comment
-
-  // Grow the textarea to fit its content so the whole comment is readable
-  // without an inner scrollbar.
-  const taRef = useRef<HTMLTextAreaElement>(null)
-  useEffect(() => {
-    const el = taRef.current
-    if (!el) return
-    el.style.height = "auto"
-    el.style.height = `${el.scrollHeight}px`
-  }, [val])
 
   return (
     <div className="px-5 py-3">
@@ -1176,25 +1165,24 @@ function FinalCommentRow({ name, role, comment, canEdit, onSave }: {
       </div>
       {canEdit ? (
         <>
-          <textarea
-            ref={taRef} rows={2} value={val} onChange={e => setVal(e.target.value)}
+          <RichTextEditor
+            key={editKey} value={val} onChange={setVal}
             placeholder="Add a final comment…"
-            style={{ minHeight: "3.5rem" }}
-            className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm resize-none overflow-hidden focus:outline-none focus:ring-1 focus:ring-primary"
+            minHeight="3.5rem"
           />
           {dirty && (
             <div className="mt-1.5 flex gap-2">
               <Button size="sm" disabled={saving} onClick={async () => { setSaving(true); try { await onSave(val) } finally { setSaving(false) } }} className="h-7 text-xs gap-1">
                 {saving ? <Loader2 size={10} className="animate-spin" /> : <Check size={10} />} Save
               </Button>
-              <Button size="sm" variant="ghost" onClick={() => setVal(comment)} className="h-7 text-xs">Cancel</Button>
+              <Button size="sm" variant="ghost" onClick={() => { setVal(comment); setEditKey(k => k + 1) }} className="h-7 text-xs">Cancel</Button>
             </div>
           )}
         </>
       ) : (
-        <p className="text-sm text-muted-foreground whitespace-pre-line">
-          {comment ? comment : <span className="italic">No final comment</span>}
-        </p>
+        !isRichEmpty(comment)
+          ? <RichText value={comment} className="text-sm text-muted-foreground" />
+          : <p className="text-sm text-muted-foreground italic">No final comment</p>
       )}
     </div>
   )
@@ -2476,7 +2464,7 @@ function GlobalItemsEditor({ section, onAdd, onEdit, onDelete }: {
       {items.map(it => editId === it.id ? (
         <div key={it.id} className="rounded-md border border-primary/30 bg-primary/5 p-2 space-y-2">
           <input value={t} onChange={e => setT(e.target.value)} className="w-full rounded border border-border bg-card px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary" />
-          <textarea rows={2} value={d} onChange={e => setD(e.target.value)} placeholder="Description" className="w-full rounded border border-border bg-card px-2 py-1 text-xs resize-none focus:outline-none focus:ring-1 focus:ring-primary" />
+          <RichTextEditor value={d} onChange={setD} placeholder="Description" className="text-xs" />
           <div className="flex gap-2 items-center flex-wrap">
             <label className="text-[10px] text-muted-foreground">Min <input type="number" value={mn} onChange={e => setMn(Number(e.target.value))} className="ml-1 w-14 rounded border border-border bg-card px-1 py-0.5 text-xs" /></label>
             <label className="text-[10px] text-muted-foreground">Max <input type="number" value={mx} onChange={e => setMx(Number(e.target.value))} className="ml-1 w-14 rounded border border-border bg-card px-1 py-0.5 text-xs" /></label>
@@ -2495,7 +2483,7 @@ function GlobalItemsEditor({ section, onAdd, onEdit, onDelete }: {
       {showAdd ? (
         <div className="rounded-md border border-primary/30 bg-primary/5 p-2 space-y-2">
           <input autoFocus value={nt} onChange={e => setNt(e.target.value)} placeholder="KPI name" className="w-full rounded border border-border bg-card px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary" />
-          <textarea rows={2} value={nd} onChange={e => setNd(e.target.value)} placeholder="Description" className="w-full rounded border border-border bg-card px-2 py-1 text-xs resize-none focus:outline-none focus:ring-1 focus:ring-primary" />
+          <RichTextEditor key={nd === "" ? "empty" : "filled"} value={nd} onChange={setNd} placeholder="Description" className="text-xs" />
           <div className="flex gap-2 items-center">
             <label className="text-[10px] text-muted-foreground">Max <input type="number" value={nmx} onChange={e => setNmx(Number(e.target.value))} className="ml-1 w-14 rounded border border-border bg-card px-1 py-0.5 text-xs" /></label>
             <Button size="sm" onClick={saveAdd} disabled={busy || !nt.trim()} className="h-6 text-[11px] ml-auto">Add KPI</Button>

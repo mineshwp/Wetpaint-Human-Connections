@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server"
 import { generateText, loadAiSettings, type GenerateResult } from "@/lib/ai/openai"
 import { DEFAULT_ACTION_POINTS_PROMPT } from "@/lib/ai/prompts"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { richToPlain } from "@/lib/rich-text"
 
 type DB = Awaited<ReturnType<typeof createClient>>
 
@@ -38,7 +39,7 @@ async function buildContext(supabase: DB, reviewId: string, includeNames: boolea
   const commentsByItem = new Map<string, string[]>()
   for (const s of scores ?? []) {
     if (s.score != null) { const a = scoreVals.get(s.item_id) ?? []; a.push(s.score); scoreVals.set(s.item_id, a) }
-    if (s.comments && s.comments.trim()) { const a = commentsByItem.get(s.item_id) ?? []; a.push(s.comments.trim()); commentsByItem.set(s.item_id, a) }
+    if (s.comments && s.comments.trim()) { const a = commentsByItem.get(s.item_id) ?? []; a.push(richToPlain(s.comments)); commentsByItem.set(s.item_id, a) }
   }
 
   const lines: string[] = []
@@ -55,7 +56,7 @@ async function buildContext(supabase: DB, reviewId: string, includeNames: boolea
       for (const c of cmts) lines.push(`    comment: ${c}`)
     }
   }
-  const finalComments = (finals ?? []).map((f) => f.comment).filter(Boolean)
+  const finalComments = (finals ?? []).map((f) => richToPlain(f.comment)).filter(Boolean)
   if (finalComments.length) {
     lines.push(`\n## Closing comments`)
     for (const c of finalComments) lines.push(`- ${c}`)
