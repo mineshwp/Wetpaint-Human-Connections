@@ -37,7 +37,7 @@ interface ReviewInvitee {
 interface Review {
   id: string; employee_id: string; period: string; title: string
   deadline: string | null; status: "draft" | "active" | "completed"
-  employee: { id: string; first_name: string; last_name: string; job_title: string; department: { name: string } | null }
+  employee: { id: string; first_name: string; last_name: string; job_title: string; status?: string; department: { name: string } | null }
   kpi_review_invitees: ReviewInvitee[]
   action_points?: string | null
   action_points_generated_at?: string | null
@@ -2347,8 +2347,8 @@ function MyKpiView(props: SharedViewProps) {
     r.employee_id === currentEmployeeId && inYearOrOnboarding(r.period, selectedYear))
   return (
     <div className="space-y-4">
-      {/* Intro for permanent staff only (not people still on Month 1–3 onboarding KPIs). */}
-      {mine.some(r => !isMonthPeriod(r.period)) && (
+      {/* Intro for permanent staff only: not anyone still onboarding (status or Month 1–3 only). */}
+      {mine.some(r => !isMonthPeriod(r.period)) && !mine.some(r => r.employee?.status === "onboarding") && (
         <div className="rounded-2xl border border-border bg-card px-6 py-5 text-sm leading-relaxed text-foreground shadow-sm">
           Dear Tribe member, as part of a successful year in your role, we have setup specific KPI&apos;s for you to achieve over the next 5 month period - providing you with clear insight into the areas you are succeeding in and the areas that need more work. In order to receive a higher than inflation increase on your annual salary increase. A % scoring for both is given to set the R based amount for the annual cycle.
         </div>
