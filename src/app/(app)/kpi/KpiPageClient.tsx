@@ -104,6 +104,13 @@ function formatShortDate(iso: string): string {
   return new Date(iso).toLocaleDateString("en-ZA", { day: "numeric", month: "short", year: "numeric" })
 }
 
+// ISO timestamp → "YYYY-MM-DD" for <input type="date"> (local date)
+function toDateInput(iso?: string | null): string {
+  if (!iso) return ""
+  const d = new Date(iso)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
+}
+
 // Quarter helpers
 const QUARTERS = [1, 2, 3, 4] as const
 type Quarter = typeof QUARTERS[number]
@@ -249,6 +256,7 @@ function QuarterScoresSummary({ startDate, reviews, scores, reviewTemplates, rat
             <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Q{q}</span>
             <span className="text-[10px] text-muted-foreground">
               {review ? (STATUS_DISPLAY[review.status]?.label ?? "") : "Not set up"}
+              {review && review.status !== "draft" && review.status_changed_at && ` · ${formatShortDate(review.status_changed_at)}`}
             </span>
             {pct !== null ? (
               <span className="text-lg font-bold text-foreground leading-tight">{fmtScore(pct)}<span className="text-xs font-medium text-muted-foreground">%</span></span>
@@ -1367,7 +1375,7 @@ function QuarterPanel({ review, template, scores, finalComments, allEmployees, c
   onResetItem?: (reviewId: string, itemId: string) => void
   onCopyItems?: (reviewId: string, fromReviewId: string, sectionId: string) => Promise<void>
   otherReviews?: { id: string; period: string; sections: { title: string; count: number }[] }[]
-  onUpdateReviewDetails?: (reviewId: string, data: { title: string; period: string; deadline: string | null }) => Promise<void>
+  onUpdateReviewDetails?: (reviewId: string, data: { title: string; period: string; deadline: string | null; status_changed_at?: string | null }) => Promise<void>
 }) {
   const invitees       = review.kpi_review_invitees ?? []
   // `template` is this review's merged template (global + overrides − hidden + custom).
@@ -1377,6 +1385,7 @@ function QuarterPanel({ review, template, scores, finalComments, allEmployees, c
   const [detailTitle, setDetailTitle]   = useState(review.title)
   const [detailPeriod, setDetailPeriod] = useState(review.period)
   const [detailDeadline, setDetailDeadline] = useState(review.deadline ?? "")
+  const [detailStatusDate, setDetailStatusDate] = useState(toDateInput(review.status_changed_at))
   const [savingDetails, setSavingDetails]   = useState(false)
 
   async function handleSaveDetails() {
@@ -1386,6 +1395,9 @@ function QuarterPanel({ review, template, scores, finalComments, allEmployees, c
       title: detailTitle.trim(),
       period: detailPeriod.trim(),
       deadline: detailDeadline || null,
+      // Noon UTC so the date doesn't shift across timezones
+      ...(review.status !== "draft" && detailStatusDate !== toDateInput(review.status_changed_at)
+        ? { status_changed_at: detailStatusDate ? `${detailStatusDate}T12:00:00Z` : null } : {}),
     })
     setSavingDetails(false)
     setEditDetails(false)
@@ -1446,7 +1458,7 @@ function QuarterPanel({ review, template, scores, finalComments, allEmployees, c
                   type="button"
                   onClick={() => {
                     setDetailTitle(review.title); setDetailPeriod(review.period)
-                    setDetailDeadline(review.deadline ?? ""); setEditDetails(v => !v)
+                    setDetailDeadline(review.deadline ?? ""); setDetailStatusDate(toDateInput(review.status_changed_at)); setEditDetails(v => !v)
                   }}
                   className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors px-2 py-1.5 rounded-lg border border-border hover:border-primary/60"
                 >
@@ -1493,6 +1505,13 @@ function QuarterPanel({ review, template, scores, finalComments, allEmployees, c
               <input type="date" value={detailDeadline} onChange={e => setDetailDeadline(e.target.value)}
                 className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary" />
             </div>
+            {review.status !== "draft" && (
+              <div>
+                <label className="text-xs font-medium text-muted-foreground block mb-1">{review.status === "completed" ? "Completed" : "Published"} date</label>
+                <input type="date" value={detailStatusDate} onChange={e => setDetailStatusDate(e.target.value)}
+                  className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary" />
+              </div>
+            )}
           </div>
           <div className="flex gap-2">
             <Button size="sm" onClick={handleSaveDetails} disabled={!detailTitle.trim() || !detailPeriod.trim() || savingDetails} className="h-7 text-xs gap-1">
@@ -1735,7 +1754,7 @@ function EmployeeReviewDetail({ employee, reviews, scores, reviewTemplates, fina
   onRemoveItem?: (reviewId: string, itemId: string, title: string) => void
   onResetItem?: (reviewId: string, itemId: string) => void
   onCopyItems?: (reviewId: string, fromReviewId: string, sectionId: string) => Promise<void>
-  onUpdateReviewDetails?: (reviewId: string, data: { title: string; period: string; deadline: string | null }) => Promise<void>
+  onUpdateReviewDetails?: (reviewId: string, data: { title: string; period: string; deadline: string | null; status_changed_at?: string | null }) => Promise<void>
   onCreateReview: (employeeId: string, slot: Slot) => void
   onBack: () => void
   initialSlot?: Slot
@@ -1906,7 +1925,7 @@ function HRAdminView({ onToggleOnboardingKpi, reviewTemplates, reviews, scores, 
   onRemoveItem?: (reviewId: string, itemId: string, title: string) => void
   onResetItem?: (reviewId: string, itemId: string) => void
   onCopyItems?: (reviewId: string, fromReviewId: string, sectionId: string) => Promise<void>
-  onUpdateReviewDetails?: (reviewId: string, data: { title: string; period: string; deadline: string | null }) => Promise<void>
+  onUpdateReviewDetails?: (reviewId: string, data: { title: string; period: string; deadline: string | null; status_changed_at?: string | null }) => Promise<void>
   onShowCreate: (employeeId?: string, slot?: Slot) => void
   onManageTemplate: () => void
   onShowRatingGuide: () => void
@@ -3237,7 +3256,7 @@ export function KpiPageClient({ isHR, currentEmployeeId, isManager = false }: { 
     }
   }
 
-  async function handleUpdateReviewDetails(reviewId: string, data: { title: string; period: string; deadline: string | null }) {
+  async function handleUpdateReviewDetails(reviewId: string, data: { title: string; period: string; deadline: string | null; status_changed_at?: string | null }) {
     const res = await fetch(`/api/kpi/reviews/${reviewId}`, {
       method: "PATCH", headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),

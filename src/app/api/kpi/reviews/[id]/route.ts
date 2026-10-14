@@ -54,6 +54,13 @@ async function handlePATCH(
   if (body.title !== undefined) allowed.title = body.title
   if (body.deadline !== undefined) allowed.deadline = body.deadline
   if (body.period !== undefined) allowed.period = body.period
+  if (body.status_changed_at !== undefined) {
+    // HR correcting the published/completed date (the DB trigger stamps it on status changes)
+    if (body.status_changed_at !== null && Number.isNaN(Date.parse(String(body.status_changed_at)))) {
+      return NextResponse.json({ error: "Invalid date" }, { status: 400 })
+    }
+    allowed.status_changed_at = body.status_changed_at
+  }
   if (allowed.status !== undefined && !["draft", "active", "completed"].includes(String(allowed.status))) {
     return NextResponse.json({ error: "Invalid status" }, { status: 400 })
   }
