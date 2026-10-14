@@ -37,6 +37,7 @@ interface ReviewInvitee {
 interface Review {
   id: string; employee_id: string; period: string; title: string
   deadline: string | null; status: "draft" | "active" | "completed"
+  status_changed_at?: string | null
   employee: { id: string; first_name: string; last_name: string; job_title: string; status?: string; department: { name: string } | null }
   kpi_review_invitees: ReviewInvitee[]
   action_points?: string | null
@@ -96,6 +97,11 @@ const STATUS_DISPLAY: Record<string, { label: string; chipCls: string }> = {
   draft:     { label: "Pending", chipCls: "bg-amber-50 text-amber-700 border-amber-200" },
   active:    { label: "Published", chipCls: "bg-emerald-50 text-emerald-700 border-emerald-200" },
   completed: { label: "Completed", chipCls: "bg-emerald-50 text-emerald-700 border-emerald-200" },
+}
+
+// "14 Oct 2026" — when a review was published / completed
+function formatShortDate(iso: string): string {
+  return new Date(iso).toLocaleDateString("en-ZA", { day: "numeric", month: "short", year: "numeric" })
 }
 
 // Quarter helpers
@@ -1833,6 +1839,7 @@ function EmployeeReviewDetail({ employee, reviews, scores, reviewTemplates, fina
                   STATUS_DISPLAY[rv.status]?.chipCls ?? ""
                 )}>
                   {STATUS_DISPLAY[rv.status]?.label}
+                  {rv.status !== "draft" && rv.status_changed_at && ` · ${formatShortDate(rv.status_changed_at)}`}
                 </span>
               )}
             </button>
