@@ -6,12 +6,14 @@ import { listAdmins } from "@/lib/admins"
 // list is empty it falls back to every HR admin, so nothing is dropped.
 //   passwordReset → "password reset requested" emails
 //   staffChanges  → the daily profile-change and weekly new-training digests
+//   feedback      → "Report an Issue" / "Share an Idea" submissions
 
-export type NotifyKind = "passwordReset" | "staffChanges"
+export type NotifyKind = "passwordReset" | "staffChanges" | "feedback"
 
 const KEYS: Record<NotifyKind, string> = {
   passwordReset: "password_reset_notify_emails",
   staffChanges: "staff_changes_notify_emails",
+  feedback: "feedback_notify_emails",
 }
 export const MAX_NOTIFY_EMAILS = 5
 

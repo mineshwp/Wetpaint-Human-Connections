@@ -1,11 +1,13 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { IdleLogout } from "./IdleLogout"
 import Link from "next/link"
 import { Menu, Eye, Users, KeyRound } from "lucide-react"
 import { Sidebar } from "./Sidebar"
 import { ViewAsPicker } from "./ViewAsPicker"
+import { FeedbackDialog } from "@/components/feedback/FeedbackDialog"
+import type { FeedbackKind } from "@/lib/feedback"
 
 interface ImpersonationContext {
   employeeId: string
@@ -65,6 +67,17 @@ export function AppShell({
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const [pickerOpen, setPickerOpen] = useState(false)
+  const [feedbackKind, setFeedbackKind] = useState<FeedbackKind | null>(null)
+
+  // Lets other pages (e.g. the Help page) open the same dialog without prop drilling.
+  useEffect(() => {
+    const open = (e: Event) => {
+      const kind = (e as CustomEvent<FeedbackKind>).detail
+      if (kind === "problem" || kind === "idea") setFeedbackKind(kind)
+    }
+    window.addEventListener("hc:open-feedback", open)
+    return () => window.removeEventListener("hc:open-feedback", open)
+  }, [])
 
   const openPicker = () => {
     setUserMenuOpen(false)
@@ -81,7 +94,9 @@ export function AppShell({
         isHR={sidebarIsHR}
         ownProfileHref={sidebarOwnProfileHref}
         keepEmployeesLink={sidebarKeepEmployeesLink}
+        onFeedback={setFeedbackKind}
       />
+      <FeedbackDialog kind={feedbackKind} onClose={() => setFeedbackKind(null)} />
 
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Topbar */}

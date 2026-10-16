@@ -66,7 +66,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       {tab === "admins" && <AdminsPanel initialAdmins={await listAdmins()} currentUserId={user.id} />}
       {tab === "departments" && <DepartmentsPanel initial={await loadDepartmentsData()} />}
       {tab === "access" && <AccessOverview initial={await loadAccessData()} />}
-      {tab === "notifications" && <NotificationsPanel initial={{ passwordReset: await getRecipients("passwordReset"), staffChanges: await getRecipients("staffChanges") }} />}
+      {tab === "notifications" && <NotificationsPanel initial={{ passwordReset: await getRecipients("passwordReset"), staffChanges: await getRecipients("staffChanges"), feedback: await getRecipients("feedback") }} />}
       {tab === "ai" && <AiSettingsPanel />}
     </div>
   )

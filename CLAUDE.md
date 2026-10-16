@@ -430,6 +430,8 @@ Always return proper HTTP status codes: 400, 401, 403, 404, 500.
 
 | Reviewers see each other: an invited reviewer sees every reviewer's scores, comments and final comments (and HR's) on reviews they're invited to; edit only their own while draft, view-only once published. Fix: `GET /api/kpi/reviews` no longer filters the invitee embed (it returned only the viewer's own invitee row, hiding the others) | ✅ Done |
 
+| Help centre + feedback (16 Oct 2026): `/help` (staff/managers/reviewers) and `/help/admin` (HR only; sidebar "Admin Help" above Settings) = searchable "How do I…" articles, FAQs and a topic menu, text in `src/content/help/{staff,admin}.ts` (types in `types.ts`). **Review both files and refresh `/public/help` screenshots every 3 months or when a feature ships, then bump `HELP_LAST_REVIEWED`.** Sidebar "Report an Issue" / "Share an Idea" open a dialog (paste/upload images, ideas also take reference links) → `POST /api/feedback` (+ `/upload-url`; any signed-in user; blocked in View as) → `feedback_items` table + private `feedback-attachments` bucket (migration `20261016_01`, applied; service role only). HR reviews on `/feedback` (status, internal note, delete; `GET/PATCH/DELETE`) and is emailed via Settings → Notifications "Problem reports and ideas go to" (`feedback_notify_emails`; empty = all HR admins) | ✅ Done — screenshots pending |
+
 Update this table as features are completed.
 
 ---

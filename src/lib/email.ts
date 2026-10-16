@@ -184,6 +184,50 @@ export async function sendPasswordResetRequestEmail(opts: {
   }
 }
 
+/** Tells HR that someone reported a problem or shared an idea (details are on /feedback). */
+export async function sendFeedbackEmail(opts: {
+  to: string[]
+  kind: "problem" | "idea"
+  title: string
+  description: string
+  submitterName: string
+  attachments: number
+  url: string
+}): Promise<boolean> {
+  if (!resend) {
+    console.warn("[email] RESEND_API_KEY not set — skipping feedback email")
+    return false
+  }
+  if (opts.to.length === 0) return false
+  const isProblem = opts.kind === "problem"
+  const preview = opts.description.length > 400 ? `${opts.description.slice(0, 400)}…` : opts.description
+  try {
+    await resend.emails.send({
+      from: FROM,
+      to: opts.to,
+      subject: `${isProblem ? "Problem reported" : "New idea"}: ${opts.title}`.slice(0, 150),
+      html: `
+        <div style="font-family:sans-serif;max-width:520px;margin:0 auto;padding:32px 24px">
+          <p style="font-size:15px;color:#333;line-height:1.6">
+            <strong>${esc(opts.submitterName)}</strong> ${isProblem ? "reported a problem" : "shared an idea"} on Human Connections.
+          </p>
+          <p style="font-size:16px;color:#111;font-weight:600;margin:16px 0 4px">${esc(opts.title)}</p>
+          <p style="font-size:14px;color:#444;line-height:1.6;white-space:pre-wrap;margin:0">${esc(preview)}</p>
+          ${opts.attachments > 0 ? `<p style="font-size:13px;color:#888">${opts.attachments} image${opts.attachments === 1 ? "" : "s"} attached</p>` : ""}
+          <p style="margin:24px 0">
+            <a href="${opts.url}" style="background:#111;color:#fff;text-decoration:none;padding:10px 20px;border-radius:8px;font-size:14px">Open in Feedback</a>
+          </p>
+          <p style="margin-top:32px;font-size:13px;color:#888">— Wetpaint Human Connections</p>
+        </div>
+      `,
+    })
+    return true
+  } catch (e) {
+    console.error("[email] feedback notification failed:", e)
+    return false
+  }
+}
+
 /** Digest of staff self-service changes for HR: profile edits (daily) or new training (weekly). */
 export async function sendHrDigestEmail(opts: {
   to: string

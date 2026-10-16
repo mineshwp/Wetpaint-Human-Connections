@@ -6,19 +6,21 @@ import {
 } from "@/lib/notification-settings"
 
 // Settings → Notifications (HR only): who is emailed for password reset
-// requests and for the staff-changes digests. An empty list = all HR admins.
+// requests, the staff-changes digests and problem reports / ideas. An empty list = all HR admins.
 
 const FIELDS: { field: string; kind: NotifyKind }[] = [
   { field: "passwordResetEmails", kind: "passwordReset" },
   { field: "staffChangesEmails", kind: "staffChanges" },
+  { field: "feedbackEmails", kind: "feedback" },
 ]
 
 async function current() {
-  const [passwordResetEmails, staffChangesEmails] = await Promise.all([
+  const [passwordResetEmails, staffChangesEmails, feedbackEmails] = await Promise.all([
     getRecipients("passwordReset"),
     getRecipients("staffChanges"),
+    getRecipients("feedback"),
   ])
-  return { passwordResetEmails, staffChangesEmails }
+  return { passwordResetEmails, staffChangesEmails, feedbackEmails }
 }
 
 export async function GET() {

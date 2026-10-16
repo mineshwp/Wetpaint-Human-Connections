@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
 interface Props {
-  initial: { passwordReset: string[]; staffChanges: string[] }
+  initial: { passwordReset: string[]; staffChanges: string[]; feedback: string[] }
 }
 
 const inputClass = cn(
@@ -18,6 +18,7 @@ const inputClass = cn(
 export function NotificationsPanel({ initial }: Props) {
   const [passwordReset, setPasswordReset] = useState(initial.passwordReset.join(", "))
   const [staffChanges, setStaffChanges] = useState(initial.staffChanges.join(", "))
+  const [feedback, setFeedback] = useState(initial.feedback.join(", "))
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
 
@@ -29,7 +30,7 @@ export function NotificationsPanel({ initial }: Props) {
       const res = await fetch("/api/settings/notifications", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ passwordResetEmails: passwordReset, staffChangesEmails: staffChanges }),
+        body: JSON.stringify({ passwordResetEmails: passwordReset, staffChangesEmails: staffChanges, feedbackEmails: feedback }),
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) {
@@ -38,6 +39,7 @@ export function NotificationsPanel({ initial }: Props) {
       }
       setPasswordReset(((json.passwordResetEmails as string[]) ?? []).join(", "))
       setStaffChanges(((json.staffChangesEmails as string[]) ?? []).join(", "))
+      setFeedback(((json.feedbackEmails as string[]) ?? []).join(", "))
       setMessage({ type: "success", text: "Saved." })
     } catch (err) {
       setMessage({ type: "error", text: err instanceof Error ? err.message : "Network error — please try again." })
@@ -86,6 +88,16 @@ export function NotificationsPanel({ initial }: Props) {
           <p className="text-xs text-muted-foreground">
             A daily email when staff change their own profile details (which fields, not the values) and a weekly
             email (Mondays) listing courses staff added.
+          </p>
+        </div>
+
+        <div className="space-y-1.5">
+          <label htmlFor="feedback-emails" className="text-xs font-semibold text-foreground">Problem reports and ideas go to</label>
+          <input id="feedback-emails" type="text" value={feedback} onChange={(e) => setFeedback(e.target.value)}
+            placeholder="ujala@wetpaint.co.za" disabled={saving} className={inputClass} />
+          <p className="text-xs text-muted-foreground">
+            Emailed when someone uses &ldquo;Report an Issue&rdquo; or &ldquo;Share an Idea&rdquo;. Everything also
+            lands in the Feedback page, whoever is emailed.
           </p>
         </div>
 
