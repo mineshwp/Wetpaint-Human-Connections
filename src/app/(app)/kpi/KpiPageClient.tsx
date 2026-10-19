@@ -2186,7 +2186,7 @@ type CardMode = "mine" | "team" | "score"
 //  - "team":  a published review of someone the manager can see — read-only
 //  - "score": a review the viewer was invited to score — accept/decline, score
 //             while draft, view-only once HR publishes (HR can still edit)
-function ReviewCards({ list, mode, scores, reviewTemplates, finalComments, currentEmployeeId, isHR, onScoreChange, onSaveFinalComment, loadAll, showToast }: {
+function ReviewCards({ list, mode, scores, reviewTemplates, finalComments, currentEmployeeId, isHR, onScoreChange, onSaveFinalComment, loadAll, showToast, onShowRatingGuide }: {
   list: Review[]
   mode: CardMode
   scores: Record<string, Score[]>
@@ -2198,6 +2198,7 @@ function ReviewCards({ list, mode, scores, reviewTemplates, finalComments, curre
   onSaveFinalComment: (reviewId: string, authorId: string | null, comment: string) => Promise<void>
   loadAll: (opts?: { silent?: boolean }) => Promise<void>
   showToast: (msg: string) => void
+  onShowRatingGuide: () => void
 }) {
   // Each quarter starts collapsed to its header (title, status, score); click to open.
   const [openIds, setOpenIds] = useState<Set<string>>(new Set())
@@ -2304,6 +2305,11 @@ function ReviewCards({ list, mode, scores, reviewTemplates, finalComments, curre
             </div>
             {isOpen && (
               <div className="px-5 py-5 space-y-3">
+                <div className="flex justify-end">
+                  <Button size="sm" variant="outline" onClick={onShowRatingGuide} className="gap-1.5 h-8 text-xs">
+                    <BarChart3 size={13} /> Rating Guide
+                  </Button>
+                </div>
                 {published && !editorId && (
                   <p className="text-xs text-muted-foreground flex items-center gap-1.5">
                     <Lock size={12} /> Published by HR — view only.
@@ -2363,6 +2369,7 @@ type SharedViewProps = {
   showToast: (msg: string) => void
   ratingScale: RatingRow[]
   selectedYear: number
+  onShowRatingGuide: () => void
 }
 
 // My KPI — the viewer's own published reviews, with their quarter summary.
@@ -3414,6 +3421,7 @@ export function KpiPageClient({ isHR, currentEmployeeId, isManager = false }: { 
                   reviews, scores, reviewTemplates, finalComments, currentEmployeeId, isHR,
                   onScoreChange: handleScoreChange, onSaveFinalComment: handleSaveFinalComment,
                   loadAll, showToast, ratingScale, selectedYear,
+                  onShowRatingGuide: () => setShowRatingGuide(true),
                 }
                 if (tab === "mykpi") return <MyKpiView {...shared} />
                 if (tab === "team") return <MyTeamView {...shared} />

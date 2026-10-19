@@ -398,6 +398,7 @@ Always return proper HTTP status codes: 400, 401, 403, 404, 500.
 | Leave tab removed (future phase) | ✅ Done |
 | KPI per-period templates (select/edit a period's template; new period copies from another) | ✅ Done |
 | KPI rating guide (global 1–10 rubric; HR edits, all view) | ✅ Done |
+| Rating Guide button inside every opened review on My KPI / My Team / Reviews to Score (19 Oct 2026, director request; was only in the tab header) | ✅ Done — not yet deployed |
 | Alphabetical A–Z / Z–A sort on Employees + KPI lists | ✅ Done |
 | KPI Q1-as-default inheritance (new Q2/Q3/Q4 review auto-inherits period template + staff's baseline-quarter KPIs; template baseline = same-year Q1, else earliest existing same-year quarter, else latest prior-year period; the staff member's own custom KPIs + Values overrides are copied from their most recent EARLIER review, so Q3→Q4 and Q4→next year's Q1; editable after) | ✅ Done |
 | Multi-year KPI support (year filter with current-year default; year-aware quarter↔period; create/set up future-year reviews) | ✅ Done |
