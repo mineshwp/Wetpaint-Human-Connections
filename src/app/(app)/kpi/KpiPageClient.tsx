@@ -1643,24 +1643,21 @@ function StaffRow({ employee, reviews, scores, reviewTemplates, onOpen, publishe
   return (
     <div className="border-b border-border last:border-b-0">
       <div
-        className="flex items-center gap-3 px-4 py-3 hover:bg-muted/20 transition-colors cursor-pointer"
+        className="flex flex-col gap-2.5 px-4 py-3 hover:bg-muted/20 transition-colors cursor-pointer"
         onClick={() => onOpen(employee.id)}
       >
-        <Avatar name={name} size="md" photoUrl={employee.profile_photo_url} />
-        <div className="flex-1 min-w-0">
-          <div className="font-semibold text-sm text-foreground">{name}</div>
-          <div className="text-xs text-muted-foreground mt-0.5">
-            {employee.job_title}{deptName ? ` · ${deptName}` : ""}
+        <div className="flex items-center gap-3">
+          <Avatar name={name} size="md" photoUrl={employee.profile_photo_url} />
+          <div className="flex-1 min-w-0">
+            <div className="font-semibold text-sm text-foreground">{name}</div>
+            <div className="text-xs text-muted-foreground mt-0.5">
+              {employee.job_title}{deptName ? ` · ${deptName}` : ""}
+            </div>
           </div>
-        </div>
-
-        {/* Review chips — click one to open that review directly. Onboarding staff
-            show Month 1–3 (no quarters or year); permanent staff show Q1–Q4 plus
-            any onboarding KPI they already have on record. */}
-        <div className="flex items-center gap-1.5 flex-wrap justify-end" onClick={e => e.stopPropagation()}>
+          <div className="flex items-center gap-2 shrink-0" onClick={e => e.stopPropagation()}>
           {!onboarding && onToggleOnboardingKpi && (
             <label
-              className="inline-flex items-center gap-1.5 mr-1 text-[11px] font-medium text-muted-foreground cursor-pointer select-none"
+              className="inline-flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground cursor-pointer select-none"
               title="Show the 3-month (Month 1–3) KPI for this person. Existing 3-month KPIs are never deleted."
             >
               <input
@@ -1677,6 +1674,16 @@ function StaffRow({ employee, reviews, scores, reviewTemplates, onOpen, publishe
               Onboarding
             </span>
           )}
+          </div>
+          <div className="w-7 h-7 rounded-full border border-border flex items-center justify-center text-muted-foreground shrink-0">
+            <ChevronRight size={14} />
+          </div>
+        </div>
+
+        {/* Review chips — click one to open that review directly. Onboarding staff
+            show Month 1–3 (no quarters or year); permanent staff show Q1–Q4 plus
+            any onboarding KPI they already have on record. */}
+        <div className="flex items-center gap-1.5 flex-wrap pl-[52px]" onClick={e => e.stopPropagation()}>
           {!onboarding && MONTHS.map(m => {
             const review = reviewByMonth[m]
             if (review) return reviewChip(`m${m}`, `Onboarding M${m}`, review)
@@ -1722,10 +1729,6 @@ function StaffRow({ employee, reviews, scores, reviewTemplates, onOpen, publishe
               Year · {yearPct !== null ? `${fmtScore(yearPct)}/100` : "—"}
             </span>
           )}
-        </div>
-
-        <div className="w-7 h-7 rounded-full border border-border flex items-center justify-center text-muted-foreground shrink-0 ml-1">
-          <ChevronRight size={14} />
         </div>
       </div>
     </div>
