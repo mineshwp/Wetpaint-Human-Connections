@@ -4,6 +4,7 @@ import { readImpersonationCookies } from "@/lib/impersonation"
 import { getRealUserRole } from "@/lib/auth"
 import { AppShell } from "@/components/layout/AppShell"
 import { signOut } from "./actions"
+import { countUnreadFeedback } from "@/lib/feedback-server"
 import type { UserRole } from "@/lib/types"
 
 const ROLE_LABELS: Record<UserRole, string> = {
@@ -65,6 +66,9 @@ export default async function AppLayout({
     }
   }
 
+  // Badges follow the signed-in person, not the "viewed as" one.
+  const unreadFeedback = employeeId ? await countUnreadFeedback(employeeId) : 0
+
   const roleBadge = role ? ROLE_LABELS[role] : "User"
   const sidebarRoleBadge = effectiveRole ? ROLE_LABELS[effectiveRole] : "User"
 
@@ -83,6 +87,7 @@ export default async function AppLayout({
       }
       sidebarKeepEmployeesLink={effectiveRole === "manager"}
       ownEmployeeId={employeeId}
+      unreadFeedback={unreadFeedback}
       impersonating={impersonating}
       signOutAction={signOut}
     >

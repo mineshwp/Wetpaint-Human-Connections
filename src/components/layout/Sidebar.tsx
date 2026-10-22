@@ -3,7 +3,7 @@
 import Link from "next/link"
 import Image from "next/image"
 import { usePathname } from "next/navigation"
-import { Users, User, BarChart3, X, LayoutGrid, Settings, Contact, ScrollText, Inbox, Bug, Lightbulb, CircleHelp, BookOpenCheck } from "lucide-react"
+import { Users, User, BarChart3, X, LayoutGrid, Settings, Contact, ScrollText, Inbox, Bug, Lightbulb, CircleHelp, BookOpenCheck, MessagesSquare } from "lucide-react"
 import type { FeedbackKind } from "@/lib/feedback"
 import { cn } from "@/lib/utils"
 
@@ -30,11 +30,22 @@ interface SidebarProps {
   keepEmployeesLink?: boolean
   /** Opens the "Report an Issue" / "Share an Idea" dialog (rendered by AppShell). */
   onFeedback: (kind: FeedbackKind) => void
+  /** Red count bubbles by link, e.g. unread replies on "My Feedback". */
+  badges?: Record<string, number>
+}
+
+function Badge({ count }: { count: number | undefined }) {
+  if (!count) return null
+  return (
+    <span className="ml-auto shrink-0 rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-bold leading-none text-primary-foreground group-aria-[current=page]:bg-white group-aria-[current=page]:text-primary">
+      {count > 9 ? "9+" : count}
+    </span>
+  )
 }
 
 // Driven purely by the effective role, so an HR "view as" session renders the
 // exact same navigation the viewed person gets.
-export function Sidebar({ isOpen, onClose, roleBadge, isHR, ownProfileHref, keepEmployeesLink, onFeedback }: SidebarProps) {
+export function Sidebar({ isOpen, onClose, roleBadge, isHR, ownProfileHref, keepEmployeesLink, onFeedback, badges = {} }: SidebarProps) {
   const pathname = usePathname()
 
   const navItems = ALL_NAV_ITEMS.filter((item) => !item.staffOnly && (!item.hrOnly || isHR)).flatMap((item) => {
@@ -106,7 +117,7 @@ export function Sidebar({ isOpen, onClose, roleBadge, isHR, ownProfileHref, keep
                     href={item.href}
                     onClick={onClose}
                     className={cn(
-                      "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors",
+                      "group flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors",
                       active
                         ? "bg-primary text-primary-foreground"
                         : "text-foreground/80 hover:bg-muted hover:text-foreground"
@@ -115,6 +126,7 @@ export function Sidebar({ isOpen, onClose, roleBadge, isHR, ownProfileHref, keep
                   >
                     <Icon className="h-4 w-4 shrink-0" />
                     <span className="truncate">{item.label}</span>
+                    <Badge count={badges[item.href]} />
                   </Link>
                 </li>
               )
@@ -139,6 +151,7 @@ export function Sidebar({ isOpen, onClose, roleBadge, isHR, ownProfileHref, keep
             </button>
           ))}
           {[
+            { href: "/my-feedback", label: "My Feedback", icon: MessagesSquare, show: true, exact: true },
             { href: "/help", label: "Help", icon: CircleHelp, show: true, exact: true },
             { href: "/help/admin", label: "Admin Help", icon: BookOpenCheck, show: !!isHR, exact: true },
             { href: "/settings", label: "Settings", icon: Settings, show: !!isHR, exact: false },
@@ -150,13 +163,14 @@ export function Sidebar({ isOpen, onClose, roleBadge, isHR, ownProfileHref, keep
                 href={href}
                 onClick={onClose}
                 className={cn(
-                  "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors",
+                  "group flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors",
                   active ? "bg-primary text-primary-foreground" : "text-foreground/80 hover:bg-muted hover:text-foreground"
                 )}
                 aria-current={active ? "page" : undefined}
               >
                 <Icon className="h-4 w-4 shrink-0" />
                 <span className="truncate">{label}</span>
+                <Badge count={badges[href]} />
               </Link>
             )
           })}

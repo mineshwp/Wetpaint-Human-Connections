@@ -228,6 +228,104 @@ export async function sendFeedbackEmail(opts: {
   }
 }
 
+/** A reply in a problem-report / idea conversation, or HR changing its status, emailed to the other side. */
+export async function sendFeedbackReplyEmail(opts: {
+  to: string[]
+  /** Who the email is for: the person who sent it ("person") or HR ("hr"). */
+  audience: "person" | "hr"
+  itemTitle: string
+  kind: "problem" | "idea"
+  /** The reply text, or null when only the status changed. */
+  message: string | null
+  statusLabel: string | null
+  fromName: string
+  url: string
+}): Promise<boolean> {
+  if (!resend) {
+    console.warn("[email] RESEND_API_KEY not set — skipping feedback reply email")
+    return false
+  }
+  if (opts.to.length === 0) return false
+  const what = opts.kind === "problem" ? "problem report" : "idea"
+  const intro = opts.audience === "person"
+    ? opts.message
+      ? `<strong>${esc(opts.fromName)}</strong> replied to your ${what}.`
+      : `HR updated your ${what}.`
+    : `<strong>${esc(opts.fromName)}</strong> replied on their ${what}.`
+  try {
+    await resend.emails.send({
+      from: FROM,
+      to: opts.to,
+      subject: `${opts.audience === "person" ? "Update on your " + what : "Reply on a " + what}: ${opts.itemTitle}`.slice(0, 150),
+      html: `
+        <div style="font-family:sans-serif;max-width:520px;margin:0 auto;padding:32px 24px">
+          <p style="font-size:15px;color:#333;line-height:1.6">${intro}</p>
+          <p style="font-size:16px;color:#111;font-weight:600;margin:12px 0 4px">${esc(opts.itemTitle)}</p>
+          ${opts.statusLabel ? `<p style="font-size:14px;color:#333;margin:4px 0">Status: <strong>${esc(opts.statusLabel)}</strong></p>` : ""}
+          ${opts.message ? `<blockquote style="margin:12px 0;padding:8px 14px;border-left:3px solid #ddd;color:#444;font-size:14px;line-height:1.6;white-space:pre-wrap">${esc(opts.message)}</blockquote>` : ""}
+          <p style="margin:24px 0">
+            <a href="${opts.url}" style="background:#111;color:#fff;text-decoration:none;padding:10px 20px;border-radius:8px;font-size:14px">${opts.audience === "person" ? "Open My Feedback" : "Open in Feedback"}</a>
+          </p>
+          <p style="margin-top:32px;font-size:13px;color:#888">— Wetpaint Human Connections</p>
+        </div>
+      `,
+    })
+    return true
+  } catch (e) {
+    console.error("[email] feedback reply failed:", e)
+    return false
+  }
+}
+
+/**
+ * "What's New" announcement emailed to staff. Sent in batches of 100 (one
+ * separate email per person, so nobody sees anyone else's address).
+ * Returns how many were accepted by Resend.
+ */
+export async function sendAnnouncementEmail(opts: {
+  recipients: { email: string; name: string }[]
+  title: string
+  body: string
+  linkUrl: string | null
+  url: string
+}): Promise<number> {
+  if (!resend) {
+    console.warn("[email] RESEND_API_KEY not set — skipping announcement email")
+    return 0
+  }
+  const paragraphs = opts.body.split(/\n{2,}/).map((p) => `<p style="font-size:14px;color:#333;line-height:1.6;white-space:pre-wrap;margin:0 0 12px">${esc(p)}</p>`).join("")
+  let sent = 0
+  for (let i = 0; i < opts.recipients.length; i += 100) {
+    const chunk = opts.recipients.slice(i, i + 100)
+    try {
+      const { error } = await resend.batch.send(
+        chunk.map((r) => ({
+          from: FROM,
+          to: [r.email],
+          subject: `What's new: ${opts.title}`.slice(0, 150),
+          html: `
+            <div style="font-family:sans-serif;max-width:520px;margin:0 auto;padding:32px 24px">
+              <p style="font-size:15px;color:#111">Hi ${esc(r.name)},</p>
+              <p style="font-size:17px;color:#111;font-weight:600;margin:12px 0">${esc(opts.title)}</p>
+              ${paragraphs}
+              <p style="margin:24px 0">
+                <a href="${opts.url}" style="background:#111;color:#fff;text-decoration:none;padding:10px 20px;border-radius:8px;font-size:14px">See what's new</a>
+                ${opts.linkUrl ? `<a href="${esc(opts.linkUrl)}" style="margin-left:12px;font-size:14px;color:#111">Learn more</a>` : ""}
+              </p>
+              <p style="margin-top:32px;font-size:13px;color:#888">— Wetpaint Human Connections</p>
+            </div>
+          `,
+        }))
+      )
+      if (error) console.error("[email] announcement batch failed:", error)
+      else sent += chunk.length
+    } catch (e) {
+      console.error("[email] announcement batch failed:", e)
+    }
+  }
+  return sent
+}
+
 /** Digest of staff self-service changes for HR: profile edits (daily) or new training (weekly). */
 export async function sendHrDigestEmail(opts: {
   to: string

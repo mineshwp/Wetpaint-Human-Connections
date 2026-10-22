@@ -5,8 +5,9 @@ import { Bug, ChevronDown, ExternalLink, FileText, Inbox, Lightbulb, Loader2, Tr
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { reportError } from "@/lib/report-error"
-import { FEEDBACK_STATUSES, STATUS_LABELS, type FeedbackKind, type FeedbackStatus } from "@/lib/feedback"
-import type { FeedbackItemView } from "@/lib/feedback-server"
+import { FEEDBACK_STATUSES, STATUS_ACTIONS, STATUS_LABELS, type FeedbackKind, type FeedbackStatus } from "@/lib/feedback"
+import type { FeedbackItemView, FeedbackMessageView } from "@/lib/feedback-server"
+import { Thread } from "@/components/feedback/Thread"
 
 const STATUS_CLS: Record<FeedbackStatus, string> = {
   new: "bg-amber-50 text-amber-700 border-amber-200",
@@ -20,7 +21,7 @@ const fmt = new Intl.DateTimeFormat("en-ZA", { day: "numeric", month: "short", y
 export function FeedbackInbox({ initial }: { initial: FeedbackItemView[] }) {
   const [items, setItems] = useState(initial)
   const [kind, setKind] = useState<"all" | FeedbackKind>("all")
-  const [status, setStatus] = useState<"open" | "all" | FeedbackStatus>("open")
+  const [status, setStatus] = useState<"open" | "reply" | "all" | FeedbackStatus>("open")
   const [openId, setOpenId] = useState<string | null>(null)
 
   const counts = useMemo(() => ({
@@ -28,11 +29,12 @@ export function FeedbackInbox({ initial }: { initial: FeedbackItemView[] }) {
     problem: items.filter((i) => i.kind === "problem").length,
     idea: items.filter((i) => i.kind === "idea").length,
     fresh: items.filter((i) => i.status === "new").length,
+    awaiting: items.filter((i) => i.awaiting_hr).length,
   }), [items])
 
   const shown = items.filter((i) =>
     (kind === "all" || i.kind === kind) &&
-    (status === "all" || (status === "open" ? i.status === "new" || i.status === "in_progress" : i.status === status)))
+    (status === "all" || (status === "reply" ? i.awaiting_hr : status === "open" ? i.status === "new" || i.status === "in_progress" : i.status === status)))
 
   function patchLocal(id: string, p: Partial<FeedbackItemView>) {
     setItems((cur) => cur.map((i) => (i.id === id ? { ...i, ...p } : i)))
@@ -57,8 +59,9 @@ export function FeedbackInbox({ initial }: { initial: FeedbackItemView[] }) {
           <select value={status} onChange={(e) => setStatus(e.target.value as typeof status)}
             className="h-8 rounded-lg border border-border bg-white px-2 text-xs text-foreground">
             <option value="open">Needs attention ({counts.fresh} new)</option>
+            <option value="reply">Waiting for your reply ({counts.awaiting})</option>
             <option value="all">Everything</option>
-            {FEEDBACK_STATUSES.map((s) => <option key={s} value={s}>Only “{STATUS_LABELS.problem[s]} / {STATUS_LABELS.idea[s]}”</option>)}
+            {FEEDBACK_STATUSES.map((s) => <option key={s} value={s}>Only “{STATUS_LABELS.problem[s]}”</option>)}
           </select>
         </label>
       </div>
@@ -94,19 +97,25 @@ function ItemCard({ item, open, onToggle, onPatched, onDeleted }: {
   onPatched: (p: Partial<FeedbackItemView>) => void
   onDeleted: () => void
 }) {
+  const addMessage = (m: FeedbackMessageView) =>
+    onPatched({ messages: [...item.messages, m], ...(m.kind === "reply" && m.from_hr ? { awaiting_hr: false } : {}) })
   const [note, setNote] = useState(item.hr_note ?? "")
   const [busy, setBusy] = useState<"status" | "note" | "delete" | null>(null)
   const [error, setError] = useState<string | null>(null)
   const Icon = item.kind === "problem" ? Bug : Lightbulb
 
   async function save(body: { status?: FeedbackStatus; hr_note?: string }, what: "status" | "note") {
+    const before = item.messages
     setBusy(what)
     setError(null)
     try {
       const res = await fetch(`/api/feedback/${item.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error((json.error as string) ?? `Couldn't save (${res.status})`)
-      onPatched({ status: json.item.status, hr_note: json.item.hr_note, updated_at: json.item.updated_at })
+      onPatched({
+        status: json.item.status, hr_note: json.item.hr_note, updated_at: json.item.updated_at,
+        ...(json.message ? { messages: [...before, json.message as FeedbackMessageView] } : {}),
+      })
     } catch (e) {
       const message = e instanceof Error ? e.message : "Couldn't save"
       setError(message)
@@ -142,6 +151,9 @@ function ItemCard({ item, open, onToggle, onPatched, onDeleted }: {
             {item.attachments.length > 0 && ` · ${item.attachments.length} file${item.attachments.length === 1 ? "" : "s"}`}
           </span>
         </span>
+        {item.awaiting_hr && (
+          <span className="shrink-0 rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-[11px] font-semibold text-violet-700">Replied</span>
+        )}
         <span className={cn("shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-semibold", STATUS_CLS[item.status])}>
           {STATUS_LABELS[item.kind][item.status]}
         </span>
@@ -198,24 +210,34 @@ function ItemCard({ item, open, onToggle, onPatched, onDeleted }: {
             </div>
           )}
 
-          <div className="grid gap-3 rounded-lg bg-muted/30 p-3 sm:grid-cols-[200px_1fr]">
-            <label className="space-y-1 text-xs font-semibold text-foreground">
-              Status
-              <select value={item.status} disabled={busy !== null}
-                onChange={(e) => save({ status: e.target.value as FeedbackStatus }, "status")}
-                className="h-9 w-full rounded-lg border border-border bg-white px-2 text-sm font-normal text-foreground">
-                {FEEDBACK_STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABELS[item.kind][s]}</option>)}
-              </select>
-            </label>
-            <div className="space-y-1">
-              <label htmlFor={`note-${item.id}`} className="text-xs font-semibold text-foreground">Internal note <span className="font-normal text-muted-foreground">(only HR sees this)</span></label>
-              <textarea id={`note-${item.id}`} rows={2} value={note} onChange={(e) => setNote(e.target.value)} disabled={busy !== null}
-                className="w-full resize-y rounded-lg border border-border bg-white px-3 py-2 text-sm outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/20" />
-              <Button type="button" size="sm" variant="outline" disabled={busy !== null || note.trim() === (item.hr_note ?? "")}
-                onClick={() => save({ hr_note: note }, "note")} className="gap-1">
-                {busy === "note" && <Loader2 className="h-3 w-3 animate-spin" />} Save note
-              </Button>
+          <div className="space-y-2 rounded-lg bg-muted/30 p-3">
+            <p className="text-xs font-semibold text-foreground">
+              Status: <span className="font-normal">{STATUS_LABELS[item.kind][item.status]}</span>
+              <span className="font-normal text-muted-foreground"> · the person is emailed when you change it</span>
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {STATUS_ACTIONS.map((a) => (
+                <Button key={a.status} type="button" size="sm" variant={item.status === a.status ? "default" : "outline"}
+                  disabled={busy !== null || item.status === a.status} onClick={() => save({ status: a.status }, "status")} className="gap-1">
+                  {busy === "status" && item.status !== a.status && <Loader2 className="h-3 w-3 animate-spin" />} {a.label}
+                </Button>
+              ))}
+              {item.status !== "new" && (
+                <Button type="button" size="sm" variant="ghost" disabled={busy !== null} onClick={() => save({ status: "new" }, "status")}>Reopen</Button>
+              )}
             </div>
+          </div>
+
+          <Thread itemId={item.id} kind={item.kind} messages={item.messages} viewer="hr" onAdded={addMessage} />
+
+          <div className="space-y-1 rounded-lg bg-muted/30 p-3">
+            <label htmlFor={`note-${item.id}`} className="text-xs font-semibold text-foreground">Internal note <span className="font-normal text-muted-foreground">(only HR sees this, never the person)</span></label>
+            <textarea id={`note-${item.id}`} rows={2} value={note} onChange={(e) => setNote(e.target.value)} disabled={busy !== null}
+              className="w-full resize-y rounded-lg border border-border bg-white px-3 py-2 text-sm outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/20" />
+            <Button type="button" size="sm" variant="outline" disabled={busy !== null || note.trim() === (item.hr_note ?? "")}
+              onClick={() => save({ hr_note: note }, "note")} className="gap-1">
+              {busy === "note" && <Loader2 className="h-3 w-3 animate-spin" />} Save note
+            </Button>
           </div>
 
           {error && <p className="text-xs text-red-600" role="alert">{error}</p>}

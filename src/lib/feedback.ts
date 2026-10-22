@@ -23,11 +23,27 @@ export const FEEDBACK_KINDS: Record<FeedbackKind, { label: string; plural: strin
 
 export const FEEDBACK_STATUSES: FeedbackStatus[] = ["new", "in_progress", "done", "closed"]
 
-/** Status wording differs by kind: a problem gets fixed, an idea gets planned. */
-export const STATUS_LABELS: Record<FeedbackKind, Record<FeedbackStatus, string>> = {
-  problem: { new: "New", in_progress: "Being looked at", done: "Fixed", closed: "Closed" },
-  idea: { new: "New", in_progress: "Planned", done: "Done", closed: "Not planned" },
+/** Same wording for problems and ideas, so the person and HR read the same thing. */
+const LABELS: Record<FeedbackStatus, string> = {
+  new: "New",
+  in_progress: "Working on it",
+  done: "Actioned",
+  closed: "Not going to do",
 }
+export const STATUS_LABELS: Record<FeedbackKind, Record<FeedbackStatus, string>> = { problem: LABELS, idea: LABELS }
+
+/** One-click buttons on the HR Feedback page (a "Reopen" button shows once it isn't New). */
+export const STATUS_ACTIONS: { status: Exclude<FeedbackStatus, "new">; label: string }[] = [
+  { status: "in_progress", label: LABELS.in_progress },
+  { status: "done", label: LABELS.done },
+  { status: "closed", label: LABELS.closed },
+]
+
+export const MAX_MESSAGE = 2000
+/** Per person, per hour, for replies (each one emails the other side). */
+export const MAX_MESSAGES_PER_HOUR = 20
+export const MAX_ANNOUNCEMENT_TITLE = 120
+export const MAX_ANNOUNCEMENT_BODY = 3000
 
 export interface FeedbackAttachment {
   path: string

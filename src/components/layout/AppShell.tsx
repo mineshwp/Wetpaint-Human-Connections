@@ -29,6 +29,8 @@ interface AppShellProps {
   sidebarOwnProfileHref: string | null
   sidebarKeepEmployeesLink: boolean
   ownEmployeeId: string | null
+  /** HR replies / status changes on your problem reports and ideas that you haven't opened. */
+  unreadFeedback: number
   impersonating: ImpersonationContext | null
   signOutAction: () => Promise<void>
 }
@@ -61,6 +63,7 @@ export function AppShell({
   sidebarOwnProfileHref,
   sidebarKeepEmployeesLink,
   ownEmployeeId,
+  unreadFeedback,
   impersonating,
   signOutAction,
 }: AppShellProps) {
@@ -95,6 +98,7 @@ export function AppShell({
         ownProfileHref={sidebarOwnProfileHref}
         keepEmployeesLink={sidebarKeepEmployeesLink}
         onFeedback={setFeedbackKind}
+        badges={{ "/my-feedback": unreadFeedback }}
       />
       <FeedbackDialog kind={feedbackKind} onClose={() => setFeedbackKind(null)} />
 

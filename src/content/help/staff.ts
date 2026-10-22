@@ -87,6 +87,7 @@ export const staffGuide: HelpGuide = {
         "My Profile opens your own record. Managers also see Employees, which lists their team.",
         "KPI Reviews opens your KPIs (and your team's, if you are a manager).",
         "Staff Directory lists everyone at Wetpaint with their contact details.",
+        "At the bottom, Report an Issue and Share an Idea let you tell HR about a problem or an idea. My Feedback shows HR's replies, and Help opens this guide.",
         "Click your initials at the top right to open the user menu. This is where you Sign out.",
       ],
       tips: ["The small badge under the logo shows your role, for example Staff or Manager."],
@@ -586,6 +587,41 @@ export const staffGuide: HelpGuide = {
 
     // ───────────────────────── Feedback ─────────────────────────
     {
+      id: "feedback-replies",
+      category: "feedback",
+      title: "How do I see what HR said about my report or idea?",
+      summary: "Follow up on anything you sent, and read HR's replies.",
+      steps: [
+        "Click My Feedback in the left menu. A red number next to it means HR has replied or changed the status since you last looked.",
+        "Click one of your reports or ideas to open it. You'll see what you sent, the screenshots, and the conversation.",
+        "Look at the coloured tag on the right. It shows where things stand: New, Working on it, Actioned, or Not going to do.",
+        "To answer HR or add more detail, type in the box at the bottom and click Send reply.",
+      ],
+      tips: [
+        "You'll also get an email when HR replies or changes the status. The email has a button that opens My Feedback.",
+        "Only you and HR can see your report and the replies. Other staff can't.",
+      ],
+      keywords: ["reply", "answer", "response", "status", "follow up", "my feedback", "my reports", "my ideas", "what happened to my"],
+      screenshot: { src: "/help/staff-my-feedback.png", alt: "The My Feedback page with a conversation open", caption: "My Feedback: your reports and ideas, with HR's replies." },
+      related: ["report-problem", "suggest-idea", "feedback-statuses"],
+    },
+    {
+      id: "feedback-statuses",
+      category: "feedback",
+      title: "What do the status tags mean?",
+      summary: "Understand New, Working on it, Actioned and Not going to do.",
+      steps: [
+        "Open My Feedback in the left menu and look at the coloured tag on each item.",
+        "New means HR has received it but hasn't started yet.",
+        "Working on it means HR is looking into it or has planned it.",
+        "Actioned means it has been dealt with. For a problem, it's fixed. For an idea, it's been done.",
+        "Not going to do means HR has decided not to take it further. HR may have left you a reply to explain why.",
+      ],
+      tips: ["If you disagree or have more information, just reply on the item. HR will see it."],
+      keywords: ["status", "actioned", "working on it", "not going to do", "declined", "rejected", "closed", "done", "fixed", "planned"],
+      related: ["feedback-replies"],
+    },
+    {
       id: "report-problem",
       category: "feedback",
       title: "How do I report a problem?",
@@ -597,6 +633,7 @@ export const staffGuide: HelpGuide = {
         "Add screenshots. Press Ctrl+V (Cmd+V on a Mac) to paste one straight from your clipboard, drag files into the box, or click \"choose files\". You can attach up to 5 files of 10 MB each (images or PDF).",
         "Click Send report.",
         "Your report goes to HR, who will look into it. The app adds your name and the page you were on automatically.",
+        "To see HR's reply, click My Feedback in the left menu. You'll also get an email.",
       ],
       tips: [
         "A screenshot of the whole screen, including any red error message, helps a lot.",
@@ -605,7 +642,7 @@ export const staffGuide: HelpGuide = {
       ],
       keywords: ["bug", "error", "broken", "issue", "not working", "problem", "screenshot", "support", "complaint"],
       screenshot: { src: "/help/staff-report-issue.png", alt: "The Report an Issue form", caption: "The Report an Issue form." },
-      related: ["suggest-idea", "cant-save"],
+      related: ["feedback-replies", "suggest-idea", "cant-save"],
     },
     {
       id: "suggest-idea",
@@ -619,11 +656,12 @@ export const staffGuide: HelpGuide = {
         "If you have examples, add reference links (up to 5), for example a website that does it well. Click \"Add another link\" for more.",
         "Add pictures, such as a sketch or a screenshot of what you mean. Paste with Ctrl+V (Cmd+V on a Mac), drag files in, or click \"choose files\".",
         "Click Send idea.",
+        "To see HR's reply, click My Feedback in the left menu. You'll also get an email.",
       ],
       tips: ["No idea is too small. Ideas go to HR so they can think about what to build next."],
       keywords: ["suggestion", "feature request", "improve", "idea", "wish", "feedback", "new feature"],
       screenshot: { src: "/help/staff-share-idea.png", alt: "The Share an Idea form", caption: "The Share an Idea form." },
-      related: ["report-problem"],
+      related: ["feedback-replies", "report-problem"],
     },
 
     // ───────────────────────── Troubleshooting ─────────────────────────
@@ -853,8 +891,15 @@ export const staffGuide: HelpGuide = {
       id: "faq-feedback-where",
       category: "feedback",
       question: "Where do my reports and ideas go?",
-      answer: "To HR. Use Report an Issue for something broken and Share an Idea for something that would help. Both are in the left menu above Help.",
+      answer: "To HR. Use Report an Issue for something broken and Share an Idea for something that would help. Both are in the left menu above Help. HR's replies show up under My Feedback.",
       keywords: ["report", "idea", "suggestion", "support"],
+    },
+    {
+      id: "faq-feedback-reply",
+      category: "feedback",
+      question: "Will I hear back about my report or idea?",
+      answer: "Yes. HR can reply and mark it as Working on it, Actioned or Not going to do. You'll get an email and a red number next to My Feedback in the left menu.",
+      keywords: ["reply", "response", "hear back", "feedback", "notification"],
     },
   ],
 }

@@ -433,9 +433,19 @@ Always return proper HTTP status codes: 400, 401, 403, 404, 500.
 
 | Help centre + feedback (16 Oct 2026): `/help` (staff/managers/reviewers) and `/help/admin` (HR only; sidebar "Admin Help" above Settings) = searchable "How do I…" articles, FAQs and a topic menu, text in `src/content/help/{staff,admin}.ts` (types in `types.ts`). **Review both files and refresh `/public/help` screenshots every 3 months or when a feature ships, then bump `HELP_LAST_REVIEWED`.** Sidebar "Report an Issue" / "Share an Idea" open a dialog (paste/upload images, ideas also take reference links) → `POST /api/feedback` (+ `/upload-url`; any signed-in user; blocked in View as) → `feedback_items` table + private `feedback-attachments` bucket (migration `20261016_01`, applied; service role only). HR reviews on `/feedback` (status, internal note, delete; `GET/PATCH/DELETE`) and is emailed via Settings → Notifications "Problem reports and ideas go to" (`feedback_notify_emails`; empty = all HR admins) | ✅ Done — screenshots pending |
 
+| Feedback replies + What's New (17 Oct 2026; **What's New PARKED 22 Oct 2026** — menu item, banner, help articles and `/updates` + `/api/announcements` removed; code kept in `parked/whats-new/`, excluded from the build via `tsconfig.json`; restore by moving it back under `src/` and re-adding the sidebar/banner/help entries): HR can reply to a problem report/idea and set one-click statuses **Working on it / Actioned / Not going to do** (+ Reopen) on `/feedback`; each reply/status change emails the person and adds to the conversation (`feedback_messages`, migration `20261017_01`). The person follows up on `/my-feedback` (sidebar "My Feedback", red badge = unread HR activity; `feedback_items.last_hr_activity_at` / `submitter_read_at`) and can reply back (HR then sees a "Replied" tag and a "Waiting for your reply" filter; HR emailed via the feedback recipients list). `POST /api/feedback/[id]/messages`, `POST /api/feedback/[id]/read`, `GET /api/feedback/mine`. **What's New** (`/updates`, everyone): HR posts an announcement (`announcements`, `announcement_reads`) → banner under the top bar until opened + sidebar badge; optional "also email everyone" (batches of 100 via Resend, to active/onboarding staff with a login; confirm step; mind the Resend plan's daily limit). `GET/POST /api/announcements`, `DELETE /api/announcements/[id]`, `POST /api/announcements/read`. Read-receipt routes are deliberately not `withAudit`-wrapped. Help guides updated | ✅ Built — migration pending apply |
+
 Update this table as features are completed.
 
 ---
+
+## Parked features
+
+Built but switched off. Code lives in `parked/` (excluded in `tsconfig.json`, not built or deployed).
+
+| Feature | Parked | What's in `parked/` | Not removed |
+|---|---|---|---|
+| What's New (HR announcements, banner, optional email to all) | 22 Oct 2026 | `whats-new/` — `/updates` page, `/api/announcements` routes, `AnnouncementBanner`, `announcements-server.ts` | DB tables (`announcements`, `announcement_reads`, migration `20261017_01`), `sendAnnouncementEmail` in `src/lib/email.ts`, announcement limits in `src/lib/feedback.ts` |
 
 ## Reference Project
 
